@@ -371,19 +371,11 @@ fun insertLine(tree: JTree, parent: TreePath, childIndex: Int): Rectangle {
 private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: LiveSession?, showProject: Boolean) {
     // A session without a live process is greyed out, so the running ones stand out in a long list.
     append(item.title, if (live == null) SimpleTextAttributes.GRAYED_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
+    live?.status?.let { icon = it.icon }
     when (live?.status) {
-        SessionStatus.WORKING -> {
-            icon = AllIcons.Actions.Execute
-            append("  working", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
-        }
-        SessionStatus.NEEDS_INPUT -> {
-            icon = AllIcons.General.Warning
-            append("  needs input" + (live.waitingFor?.let { ": $it" } ?: ""), SimpleTextAttributes.ERROR_ATTRIBUTES)
-        }
-        SessionStatus.IDLE -> {
-            icon = AllIcons.Actions.Checked
-            append("  waiting for prompt", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
-        }
+        SessionStatus.WORKING -> append("  working", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+        SessionStatus.NEEDS_INPUT -> append("  needs input" + (live.waitingFor?.let { ": $it" } ?: ""), SimpleTextAttributes.ERROR_ATTRIBUTES)
+        SessionStatus.IDLE -> append("  waiting for prompt", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
         null -> {}
     }
     if (showProject) append("  ${item.cwd.fileName ?: item.cwd}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
