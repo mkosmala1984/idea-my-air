@@ -28,7 +28,8 @@ class LiveSessionRegistry(
         val procStart = checkNotNull(o["procStart"]) { "no procStart in $file" }.asString.toLong()
         if (!isSameProcess(pid, procStart)) return@mapNotNull null
         val status = when (val s = checkNotNull(o["status"]) { "no status in $file" }.asString) {
-            "busy" -> SessionStatus.WORKING
+            // `shell`: running a shell command; claude's own session list shows it as working, like `busy`.
+            "busy", "shell" -> SessionStatus.WORKING
             "waiting" -> SessionStatus.NEEDS_INPUT
             "idle" -> SessionStatus.IDLE
             else -> error("unknown session status '$s' in $file")
