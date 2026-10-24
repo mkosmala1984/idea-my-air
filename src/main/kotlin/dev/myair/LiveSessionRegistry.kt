@@ -7,8 +7,12 @@ import kotlin.io.path.readText
 
 enum class SessionStatus { WORKING, NEEDS_INPUT, IDLE }
 
-/** [waitingFor] says what a [SessionStatus.NEEDS_INPUT] session is blocked on, e.g. "dialog open". */
-data class LiveSession(val status: SessionStatus, val waitingFor: String?)
+/**
+ * [pid] is the `claude` process running the session; it keeps its pid when `/clear` or `/resume` switch it to another
+ * session. [entrypoint] is what started it, e.g. "cli" or "claude-desktop". [waitingFor] says what a
+ * [SessionStatus.NEEDS_INPUT] session is blocked on, e.g. "dialog open".
+ */
+data class LiveSession(val pid: Long, val entrypoint: String, val status: SessionStatus, val waitingFor: String?)
 
 /**
  * Reads `~/.claude/sessions/<pid>.json`, which every running `claude` process keeps up to date.
@@ -29,17 +33,11 @@ class LiveSessionRegistry(
             "idle" -> SessionStatus.IDLE
             else -> error("unknown session status '$s' in $file")
         }
-        o["sessionId"].asString to LiveSession(status, o["waitingFor"]?.asString)
+        val entrypoint = checkNotNull(o["entrypoint"]) { "no entrypoint in $file" }.asString
+        o["sessionId"].asString to LiveSession(pid, entrypoint, status, o["waitingFor"]?.asString)
     }.toMap()
 
     companion object {
-        /**
-         * True when a running session missing from the list ([listed]) appeared or changed status since the last poll.
-         * A fresh session has no transcript until its first prompt; that prompt flips it to busy, which triggers the rescan.
-         */
-        fun hasNewUnlisted(previous: Map<String, LiveSession>, current: Map<String, LiveSession>, listed: Set<String>): Boolean =
-            current.any { (id, live) -> id !in listed && previous[id] != live }
-
         /** Milliseconds between the Windows FILETIME epoch (1601-01-01) and the Unix epoch. */
         private const val FILETIME_EPOCH_OFFSET_MS = 11_644_473_600_000L
 

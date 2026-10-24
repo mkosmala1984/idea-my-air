@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
+import kotlin.io.path.appendText
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
@@ -23,7 +24,7 @@ class ClaudeSessionScannerTest {
         """{"parentUuid":null,"isSidechain":false,$extra"type":"user","message":{"role":"user","content":$content},$cwdLine,"sessionId":"s1"}"""
 
     private fun write(name: String, vararg lines: String): Path =
-        dir.resolve("E--dev-projects-rtm-cloud").createDirectories().resolve("$name.jsonl").apply { writeText(lines.joinToString("\n")) }
+        dir.resolve("E--dev-projects-rtm-cloud").createDirectories().resolve("$name.jsonl").apply { writeText(lines.joinToString("") { it + "\n" }) }
 
     private fun parse(file: Path) = ClaudeSessionScanner.parse(file, FileTime.fromMillis(0))
 
@@ -87,7 +88,7 @@ class ClaudeSessionScannerTest {
 
     @Test
     fun `filter matches every word against title or project path, ignoring case`() {
-        val s = ClaudeSession("s1", Path.of("E:\\dev\\projects\\rtm-cloud"), "Rebase na branch release", FileTime.fromMillis(0))
+        val s = ClaudeSession("s1", Path.of("E:\\dev\\projects\\rtm-cloud"), "Rebase na branch release", FileTime.fromMillis(0), emptyList())
         assertTrue(s.matches(""))
         assertTrue(s.matches("REBASE"))
         assertTrue(s.matches("rtm-cloud"))
@@ -97,17 +98,64 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
-    fun `scan lists top-level transcripts only, newest first, and rereads changed files`() {
+    fun `scan lists top-level transcripts only, newest first, and picks up appended lines`() {
         val a = write("a", user("\"A\""))
         val b = write("b", user("\"B\""))
-        dir.resolve("E--dev-projects-rtm-cloud/a/subagents").createDirectories().resolve("agent-x.jsonl").writeText(user("\"sub\""))
+        dir.resolve("E--dev-projects-rtm-cloud/a/subagents").createDirectories().resolve("agent-x.jsonl").writeText(user("\"sub\"") + "\n")
         Files.setLastModifiedTime(a, FileTime.fromMillis(1000))
         Files.setLastModifiedTime(b, FileTime.fromMillis(2000))
         val scanner = ClaudeSessionScanner(dir)
         assertEquals(listOf("B", "A"), scanner.scan().map { it.title })
 
-        a.writeText(user("\"A2\""))
+        a.appendText("""{"type":"custom-title","customTitle":"A2","sessionId":"a"}""" + "\n")
         Files.setLastModifiedTime(a, FileTime.fromMillis(3000))
         assertEquals(listOf("A2", "B"), scanner.scan().map { it.title })
+    }
+
+    private fun assistant(vararg toolUses: String) =
+        """{"parentUuid":"p","isSidechain":false,"message":{"role":"assistant","content":[${toolUses.joinToString(",")}]},"type":"assistant",$cwdLine,"sessionId":"s1"}"""
+
+    private fun toolUse(name: String, input: String) = """{"type":"tool_use","id":"t","name":"$name","input":$input}"""
+
+    @Test
+    fun `changed files come from edit tool calls, first touch first, each once, across incremental reads`() {
+        val file = write("s1",
+            user("\"prompt\""),
+            // Tool definitions in request metadata name the same tools and must not count.
+            """{"type":"api-request-shape","sessionId":"s1","tools":[{"name":"Edit","input":{}}]}""",
+            assistant(toolUse("Read", """{"file_path":"C:\\r.kt"}"""), toolUse("Edit", """{"file_path":"C:\\a.kt","old_string":"x"}""")),
+            assistant(toolUse("Write", """{"file_path":"C:\\b.kt","content":"y"}""")),
+        )
+        val first = ClaudeSessionScanner.read(file, ClaudeSessionScanner.Transcript.EMPTY)
+        assertEquals(listOf("C:\\a.kt", "C:\\b.kt"), first.changedFiles)
+
+        file.appendText(assistant(toolUse("MultiEdit", """{"file_path":"C:\\a.kt","edits":[]}"""), toolUse("NotebookEdit", """{"notebook_path":"C:\\n.ipynb"}""")) + "\n")
+        val next = ClaudeSessionScanner.read(file, first)
+        assertEquals(listOf("C:\\a.kt", "C:\\b.kt", "C:\\n.ipynb"), next.changedFiles)
+        assertEquals(listOf(Path.of("C:\\a.kt"), Path.of("C:\\b.kt"), Path.of("C:\\n.ipynb")), next.toSession(file, FileTime.fromMillis(0))!!.changedFiles)
+    }
+
+    @Test
+    fun `a line still being written is read only once it is complete`() {
+        val file = write("s1", user("\"prompt\""))
+        val first = ClaudeSessionScanner.read(file, ClaudeSessionScanner.Transcript.EMPTY)
+        file.appendText("""{"type":"custom-title","customTi""")
+        val partial = ClaudeSessionScanner.read(file, first)
+        assertEquals(first, partial)
+
+        file.appendText("""tle":"Done","sessionId":"s1"}""" + "\n")
+        val complete = ClaudeSessionScanner.read(file, partial)
+        assertEquals("Done", complete.customTitle)
+        assertEquals(Files.size(file), complete.offset)
+    }
+
+    @Test
+    fun `a transcript rewritten shorter is read from the start`() {
+        val file = write("s1", user("\"a much longer first prompt\""), """{"type":"ai-title","aiTitle":"Old","sessionId":"s1"}""")
+        val scanner = ClaudeSessionScanner(dir)
+        assertEquals("Old", scanner.scan().single().title)
+
+        file.writeText(user("\"short\"") + "\n")
+        assertEquals("short", scanner.scan().single().title)
     }
 }
