@@ -13,6 +13,7 @@
     <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"
                 factoryClass="dev.myair.SessionsToolWindowFactory"/>
     <fileEditorProvider implementation="dev.myair.ClaudeSessionEditorProvider"/>
+    <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>
     <editorTabTitleProvider implementation="dev.myair.ClaudeSessionTabTitleProvider"/>
     <postStartupActivity implementation="dev.myair.TabsSyncStartup"/>
   </extensions>
@@ -24,6 +25,11 @@
   <actions>
     <action id="dev.myair.NewClaudeSession" class="dev.myair.NewClaudeSessionAction" text="New Claude Session"
             description="Start claude in the project directory in an editor tab" icon="AllIcons.General.Add">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+    <action id="dev.myair.NewClaudeSessionInWorktree" class="dev.myair.NewClaudeSessionInWorktreeAction"
+            text="New Claude Session in Worktree..." icon="AllIcons.Vcs.Branch"
+            description="Create a worktree on a new branch off a chosen branch and start claude in it in an editor tab">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
     <action id="dev.myair.FocusClaudeSession" class="dev.myair.FocusClaudeSessionAction" text="Focus Claude Session..."
