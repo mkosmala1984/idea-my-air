@@ -1,0 +1,8 @@
+.gradle/
+.kotlin/
+.intellijPlatform/
+build/
+.idea/
+.claude/
+air-plugin/
+air-plugin-*.zip

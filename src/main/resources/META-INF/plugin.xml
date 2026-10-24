@@ -1,0 +1,22 @@
+<idea-plugin>
+  <id>dev.myair</id>
+  <name>My Air</name>
+  <vendor>mkosmala</vendor>
+  <description><![CDATA[Lists Claude Code sessions from ~/.claude/projects and resumes them in an editor tab.]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends>org.jetbrains.plugins.terminal</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"
+                factoryClass="dev.myair.SessionsToolWindowFactory"/>
+    <fileEditorProvider implementation="dev.myair.ClaudeSessionEditorProvider"/>
+  </extensions>
+
+  <actions>
+    <action id="dev.myair.NewClaudeSession" class="dev.myair.NewClaudeSessionAction" text="New Claude Session"
+            description="Start claude in the project directory in an editor tab" icon="AllIcons.General.Add">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+  </actions>
+</idea-plugin>
