@@ -62,6 +62,19 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
+    fun `the first three human prompts are kept, the same kind the title comes from`() {
+        val s = parse(write("s1",
+            user("\"one\""),
+            user("\"<system-reminder>x</system-reminder>\""),
+            user("\"two\""),
+            user("""[{"type":"tool_result","tool_use_id":"x","content":"out"}]"""),
+            user("\"three\""),
+            user("\"four\""),
+        ))!!
+        assertEquals(listOf("one", "two", "three"), s.prompts)
+    }
+
+    @Test
     fun `transcript without title or prompt is skipped`() {
         assertNull(parse(write("s1", """{"type":"mode","mode":"normal","sessionId":"s1"}""", user("\"<local-command-stdout/>\""))))
     }
@@ -88,7 +101,7 @@ class ClaudeSessionScannerTest {
 
     @Test
     fun `filter matches every word against title or project path, ignoring case`() {
-        val s = ClaudeSession("s1", Path.of("E:\\dev\\projects\\rtm-cloud"), "Rebase na branch release", FileTime.fromMillis(0), emptyList())
+        val s = ClaudeSession("s1", Path.of("E:\\dev\\projects\\rtm-cloud"), "Rebase na branch release", FileTime.fromMillis(0), emptyList(), emptyList())
         assertTrue(s.matches(""))
         assertTrue(s.matches("REBASE"))
         assertTrue(s.matches("rtm-cloud"))

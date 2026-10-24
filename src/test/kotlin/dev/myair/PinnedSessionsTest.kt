@@ -15,7 +15,7 @@ class PinnedSessionsTest {
     /** Newest first, as the scanner returns them. */
     private val sessions = (1..6).map { session("s$it", 100L - it) }
 
-    private fun session(id: String, time: Long) = ClaudeSession(id, Path.of("/p"), "title $id", FileTime.fromMillis(time), emptyList())
+    private fun session(id: String, time: Long) = ClaudeSession(id, Path.of("/p"), "title $id", FileTime.fromMillis(time), emptyList(), emptyList())
 
     private fun live(status: SessionStatus) = LiveSession(1, "cli", status, null)
 

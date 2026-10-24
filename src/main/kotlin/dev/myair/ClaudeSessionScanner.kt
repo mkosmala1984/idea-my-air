@@ -13,8 +13,10 @@ import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.nameWithoutExtension
 
-/** [changedFiles] are the files the agent wrote or edited, in the order it first touched them. */
-data class ClaudeSession(val id: String, val cwd: Path, val title: String, val lastModified: FileTime, val changedFiles: List<Path>) {
+/** [changedFiles] are the files the agent wrote or edited, in the order it first touched them; [prompts] the first human prompts. */
+data class ClaudeSession(
+    val id: String, val cwd: Path, val title: String, val lastModified: FileTime, val changedFiles: List<Path>, val prompts: List<String>,
+) {
     /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
     fun matches(query: String): Boolean =
         query.split(' ').filter { it.isNotEmpty() }.all { title.contains(it, true) || cwd.toString().contains(it, true) }
@@ -48,18 +50,18 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
 
     /** What a transcript says up to [offset], the byte after its last complete line. */
     data class Transcript(
-        val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val firstPrompt: String?,
+        val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val prompts: List<String>,
         val changedFiles: List<String>,
     ) {
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
         fun toSession(file: Path, lastModified: FileTime): ClaudeSession? {
-            val title = customTitle ?: aiTitle ?: firstPrompt?.lineSequence()?.first()?.take(80) ?: return null
+            val title = customTitle ?: aiTitle ?: prompts.firstOrNull()?.lineSequence()?.first()?.take(80) ?: return null
             val cwd = Path.of(checkNotNull(cwd) { "titled session without cwd: $file" })
-            return ClaudeSession(file.nameWithoutExtension, cwd, title, lastModified, changedFiles.map(Path::of))
+            return ClaudeSession(file.nameWithoutExtension, cwd, title, lastModified, changedFiles.map(Path::of), prompts)
         }
 
         companion object {
-            val EMPTY = Transcript(0, null, null, null, null, emptyList())
+            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList())
         }
     }
 
@@ -67,6 +69,9 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         private const val CUSTOM_TITLE = "{\"type\":\"custom-title\""
         private const val AI_TITLE = "{\"type\":\"ai-title\""
         private const val CWD = "\"cwd\":"
+
+        /** Human prompts kept per session: enough for an agent to judge what the session was about. */
+        const val PROMPTS = 3
         private const val ASSISTANT = "\"type\":\"assistant\""
         private const val NEWLINE = '\n'.code.toByte()
 
@@ -81,23 +86,23 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             var customTitle = from.customTitle
             var aiTitle = from.aiTitle
             var cwd = from.cwd
-            var firstPrompt = from.firstPrompt
+            val prompts = from.prompts.toMutableList()
             val changedFiles = LinkedHashSet(from.changedFiles)
             val offset = forEachCompleteLine(file, from.offset) { line ->
                 when {
                     line.startsWith(CUSTOM_TITLE) -> customTitle = json(line)["customTitle"].asString
                     line.startsWith(AI_TITLE) -> aiTitle = json(line)["aiTitle"].asString
                     ASSISTANT in line && EDIT_TOOL_USE.containsMatchIn(line) -> changedFiles += editedFiles(json(line))
-                    (cwd == null || firstPrompt == null) && CWD in line -> {
+                    (cwd == null || prompts.size < PROMPTS) && CWD in line -> {
                         val o = json(line)
                         if (o["isSidechain"]?.asBoolean != true) {
                             cwd = cwd ?: o["cwd"]?.asString
-                            if (firstPrompt == null && o["type"]?.asString == "user" && o["isMeta"]?.asBoolean != true) firstPrompt = promptText(o)
+                            if (prompts.size < PROMPTS && o["type"]?.asString == "user" && o["isMeta"]?.asBoolean != true) promptText(o)?.let(prompts::add)
                         }
                     }
                 }
             }
-            return Transcript(offset, customTitle, aiTitle, cwd, firstPrompt, changedFiles.toList())
+            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList())
         }
 
         /** Paths from the edit tool calls of one assistant message; a notebook edit names its file `notebook_path`. */

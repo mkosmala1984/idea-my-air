@@ -200,14 +200,14 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
     private fun newFolder() {
         val parentId = tree.selectionPath?.let(::targetFolder)
         val name = askName("New Folder", "", parentId, null) ?: return
-        service.updateFolders { it.createFolder(parentId, UUID.randomUUID().toString(), name) }
+        service.updateFolders(ChangeSource.UI) { it.createFolder(parentId, UUID.randomUUID().toString(), name) }
     }
 
     private fun renameFolder() {
         val folder = selectedFolder()!!
         val parentId = ((tree.selectionPath!!.parentPath.lastPathComponent as DefaultMutableTreeNode).userObject as? Folder)?.id
         val name = askName("Rename Folder", folder.name, parentId, folder.id) ?: return
-        service.updateFolders { it.rename(folder.id, name) }
+        service.updateFolders(ChangeSource.UI) { it.rename(folder.id, name) }
     }
 
     private fun deleteFolder() {
@@ -215,7 +215,7 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
         val count = service.folders.sessionCount(folder.id)
         val message = "Delete \"${folder.name}\" and its subfolders?" + if (count > 0) "\n$count session(s) filed there go back to \"sessions\"." else ""
         if (Messages.showYesNoDialog(project, message, "Delete Folder", Messages.getQuestionIcon()) != Messages.YES) return
-        service.updateFolders { it.delete(folder.id) }
+        service.updateFolders(ChangeSource.UI) { it.delete(folder.id) }
     }
 
     /** A trimmed name no other folder under [parentId] has, or null when cancelled. */
@@ -223,6 +223,7 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
         val validator = object : InputValidatorEx {
             override fun getErrorText(input: String) = when {
                 input.isBlank() -> "Name cannot be empty"
+                '/' in input -> "Name cannot contain /, which separates folders in a path"
                 service.folders.nameTaken(parentId, input, except) -> "A folder named \"${input.trim()}\" already exists here"
                 else -> null
             }
@@ -308,7 +309,7 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
 
         override fun importData(support: TransferSupport): Boolean {
             val drop = drop(support) ?: return false
-            service.updateFolders(drop.change)
+            service.updateFolders(ChangeSource.UI, drop.change)
             return true
         }
 

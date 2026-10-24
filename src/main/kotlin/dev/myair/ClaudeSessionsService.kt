@@ -43,6 +43,8 @@ class ClaudeSessionsService : Disposable {
 
     val structureFile: Path get() = structure.file
 
+    val history: StructureHistory get() = structure.history
+
     private val listeners = ArrayList<() -> Unit>()
 
     /** One refresh at a time, so an older result never lands after a newer one. */
@@ -97,9 +99,9 @@ class ClaudeSessionsService : Disposable {
     }
 
     /** Applies [op] to the folders as they are on disk now and shows the result in every panel of this IDE. */
-    fun updateFolders(op: (SessionFolders) -> SessionFolders) {
+    fun updateFolders(source: ChangeSource, op: (SessionFolders) -> SessionFolders) {
         check(foldersError == null) { "folders cannot change while ${structure.file} is unreadable: $foldersError" }
-        folders = structure.update(op)
+        folders = structure.update(source, op)
         listeners.forEach { it() }
     }
 
@@ -127,7 +129,7 @@ class ClaudeSessionsService : Disposable {
         }
         if (changed) TabsSync.getInstance().publish()
         if (switched.isNotEmpty() && foldersError == null) {
-            updateFolders { switched.fold(it) { folders, (from, to) -> folders.carryOver(from, to, titles.keys) } }
+            updateFolders(ChangeSource.AUTO) { switched.fold(it) { folders, (from, to) -> folders.carryOver(from, to, titles.keys) } }
         }
     }
 

@@ -33,7 +33,7 @@ data class SessionFolders(val folders: List<Folder> = emptyList()) {
         items.forEach { require(it.type == SESSION) { "unknown item type '${it.type}'" } }
         require(items.map { it.id }.duplicates().isEmpty()) { "sessions filed twice: ${items.map { it.id }.duplicates()}" }
         (sequenceOf(folders) + all.asSequence().map { it.folders }).forEach { siblings ->
-            siblings.forEach { require(it.name.isNotBlank() && it.name == it.name.trim()) { "bad folder name '${it.name}'" } }
+            siblings.forEach { require(it.name.isNotBlank() && it.name == it.name.trim() && '/' !in it.name) { "bad folder name '${it.name}'" } }
             require(siblings.map { it.name.lowercase() }.duplicates().isEmpty()) { "duplicate folder names among ${siblings.map { it.name }}" }
         }
     }
@@ -43,6 +43,26 @@ data class SessionFolders(val folders: List<Folder> = emptyList()) {
     fun find(id: String) = all().firstOrNull { it.id == id }
 
     fun folderOf(sessionId: String) = all().firstOrNull { folder -> folder.items.any { it.id == sessionId } }?.id
+
+    /** The folder at [path], names joined by `/` and matched ignoring case like sibling names are, or null. */
+    fun findByPath(path: String): Folder? {
+        var level = folders
+        var found: Folder? = null
+        for (name in path.split('/')) {
+            found = level.firstOrNull { it.name.equals(name, true) } ?: return null
+            level = found.folders
+        }
+        return found
+    }
+
+    /** The folder's names from the top level down, joined by `/`. */
+    fun pathOf(id: String): String {
+        fun search(level: List<Folder>, prefix: String): String? = level.firstNotNullOfOrNull { folder ->
+            val path = prefix + folder.name
+            if (folder.id == id) path else search(folder.folders, "$path/")
+        }
+        return checkNotNull(search(folders, "")) { "no folder $id" }
+    }
 
     /** The folders directly under [parentId], or at the top level for null. */
     fun children(parentId: String?) = if (parentId == null) folders else checkNotNull(find(parentId)) { "no folder $parentId" }.folders
@@ -128,11 +148,29 @@ private fun List<Folder>.without(id: String): List<Folder> = filter { it.id != i
 
 private fun <T> List<T>.duplicates() = groupingBy { it }.eachCount().filterValues { it > 1 }.keys
 
+/** What made a change to `structure.json`; snapshot names carry it, so an undo can find the change it is after. */
+enum class ChangeSource {
+    /** A tree action or drop. */
+    UI,
+
+    /** A new session filed in the target folder, or a `/clear` carrying its folder over. */
+    AUTO,
+
+    /** An agent's change list. */
+    MCP,
+
+    /** A snapshot restored. */
+    RESTORE;
+
+    val label = name.lowercase()
+}
+
 /**
  * `structure.json`, shared by every IDE. Each change re-reads the file before applying, so two IDEs editing at once lose
- * at most a change made in the same few milliseconds. A missing file is an empty structure.
+ * at most a change made in the same few milliseconds, and the replaced version goes to [history] first. A missing file
+ * is an empty structure.
  */
-class StructureStore(val file: Path) {
+class StructureStore(val file: Path, val history: StructureHistory = StructureHistory(file.resolveSibling("history"))) {
     init {
         file.parent.createDirectories()
     }
@@ -140,10 +178,13 @@ class StructureStore(val file: Path) {
     fun read() = if (file.exists()) SessionFolders.parse(file.readText()) else SessionFolders()
 
     @Synchronized
-    fun update(op: (SessionFolders) -> SessionFolders): SessionFolders {
-        val before = read()
+    fun update(source: ChangeSource, op: (SessionFolders) -> SessionFolders): SessionFolders {
+        val text = if (file.exists()) file.readText() else null
+        val before = text?.let(SessionFolders::parse) ?: SessionFolders()
         val after = op(before)
-        if (after != before) writeAtomically(file, after.toJson())
+        if (after == before) return after
+        if (text != null) history.snapshot(text, source)
+        writeAtomically(file, after.toJson())
         return after
     }
 }

@@ -87,7 +87,7 @@ object ClaudeSessionOpener {
         openTab(project, ClaudeSessionVirtualFile(id, cwd, ClaudeSessionsService.NEW_SESSION_TITLE, listOf("--session-id", id)))
         val service = ClaudeSessionsService.getInstance()
         val target = project.service<FolderTarget>().folderId
-        if (target != null && service.foldersError == null) service.updateFolders { it.assign(id, target) }
+        if (target != null && service.foldersError == null) service.updateFolders(ChangeSource.AUTO) { it.assign(id, target) }
     }
 
     private fun openTab(project: Project, file: ClaudeSessionVirtualFile) {
