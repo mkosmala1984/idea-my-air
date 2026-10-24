@@ -6,3 +6,7 @@ build/
 .claude/
 air-plugin/
 air-plugin-*.zip
+taskbar/bin/
+taskbar/obj/
+taskbar/tests/bin/
+taskbar/tests/obj/

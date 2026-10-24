@@ -1,5 +1,6 @@
 package dev.myair
 
+import com.intellij.ide.impl.ProjectUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -7,6 +8,7 @@ import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.VirtualFile
 import java.nio.file.Path
@@ -19,8 +21,16 @@ class TabsSync : Disposable {
 
     private val requests = store.receiveRequests { sessionId ->
         ApplicationManager.getApplication().invokeLater {
-            // The tab may have closed between the other IDE reading the list and this request arriving.
-            SessionHosts.findTab(sessionId)?.let(SessionHosts::focus) ?: thisLogger().warn("focus request for $sessionId, but no tab shows it")
+            val tab = SessionHosts.findTab(sessionId)
+            if (tab != null) return@invokeLater SessionHosts.focus(tab)
+            // The taskbar widget sends any running session here when no IDE shows it, and a tab may have closed since
+            // the sender read the lists; opening goes where the session runs, as from the tool window.
+            val session = ClaudeSessionsService.getInstance().sessions.firstOrNull { it.id == sessionId }
+                ?: return@invokeLater thisLogger().warn("focus request for $sessionId, which has no transcript yet")
+            val projects = ProjectManager.getInstance().openProjects
+            val project = projects.firstOrNull { session.cwd.startsWith(projectBase(it)) } ?: projects.first()
+            ProjectUtil.focusProjectWindow(project, true)
+            ClaudeSessionOpener.open(project, session)
         }
     }
 
