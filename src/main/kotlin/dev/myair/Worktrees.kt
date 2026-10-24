@@ -60,9 +60,11 @@ object Git {
     fun run(dir: Path, vararg args: String, input: String? = null, ok: Set<Int> = setOf(0)): String {
         val process = ProcessBuilder(listOf("git") + args).directory(dir.toFile()).start()
         val stderr = CompletableFuture.supplyAsync { process.errorStream.readAllBytes().toString(Charsets.UTF_8) }
-        process.outputStream.use { if (input != null) it.write(input.toByteArray()) }
+        // Written apart from the stdout read: git may fill its stdout pipe before it has read all of a large input.
+        val stdin = CompletableFuture.runAsync { process.outputStream.use { if (input != null) it.write(input.toByteArray()) } }
         val stdout = process.inputStream.readAllBytes().toString(Charsets.UTF_8)
         val exit = process.waitFor()
+        stdin.get()
         check(exit in ok) { "git ${args.joinToString(" ")} failed in $dir (exit $exit):\n${stderr.get().trim()}" }
         return stdout
     }
