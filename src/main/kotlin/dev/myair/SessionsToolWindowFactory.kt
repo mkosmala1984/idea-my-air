@@ -139,7 +139,8 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
             }
         })
         val newSession = ActionManager.getInstance().getAction("dev.myair.NewClaudeSession")
-        toolbar = ActionManager.getInstance().createActionToolbar("ClaudeSessions", DefaultActionGroup(newSession, newFolder, mode, refresh), true)
+        val newSessionInWorktree = ActionManager.getInstance().getAction("dev.myair.NewClaudeSessionInWorktree")
+        toolbar = ActionManager.getInstance().createActionToolbar("ClaudeSessions", DefaultActionGroup(newSession, newSessionInWorktree, newFolder, mode, refresh), true)
             .apply { targetComponent = tree }.component
         onOpen(tree, ::openSelected)
         onOpen(pinned) { pinned.selectedValue?.let { ClaudeSessionOpener.open(project, it) } != null }
