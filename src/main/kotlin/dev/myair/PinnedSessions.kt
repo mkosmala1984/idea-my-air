@@ -10,7 +10,7 @@ import kotlin.io.path.readText
 
 /**
  * [sessions]: ids pinned by hand, in pinning order. [dismissed]: running sessions removed from the list, each with the
- * time its transcript had when removed; one comes back once it has written more and stopped working, i.e. waits again.
+ * time of its last message when removed; one comes back once it has a newer message and stopped working, i.e. waits again.
  * [settled]: sessions marked as done, hidden from the list and the tree unless all sessions are shown.
  */
 data class Pins(val sessions: Set<String> = emptySet(), val dismissed: Map<String, Long> = emptyMap(), val settled: Set<String> = emptySet()) {
@@ -20,7 +20,7 @@ data class Pins(val sessions: Set<String> = emptySet(), val dismissed: Map<Strin
 
     /** Takes [removed] off the list: unpinned, and the running ones (per [live]) hidden until they wait again. */
     fun remove(removed: List<ClaudeSession>, live: Map<String, LiveSession>) =
-        copy(sessions = sessions - removed.map { it.id }.toSet(), dismissed = dismissed + removed.filter { it.id in live }.associate { it.id to it.lastModified.toMillis() })
+        copy(sessions = sessions - removed.map { it.id }.toSet(), dismissed = dismissed + removed.filter { it.id in live }.associate { it.id to it.lastMessage.toEpochMilli() })
 
     /** Marks [ids] as done: no longer pinned or dismissed, just hidden. */
     fun settle(ids: Collection<String>) = Pins(sessions - ids.toSet(), dismissed - ids.toSet(), settled + ids)
@@ -62,9 +62,9 @@ data class Pins(val sessions: Set<String> = emptySet(), val dismissed: Map<Strin
     }
 }
 
-/** A dismissed session stays hidden until its transcript moves past [at] and it is not working any more. */
+/** A dismissed session stays hidden until it has a message after [at] and it is not working any more. */
 private fun hidden(session: ClaudeSession, at: Long, live: Map<String, LiveSession>) =
-    session.lastModified.toMillis() <= at || live[session.id]?.status == SessionStatus.WORKING
+    session.lastMessage.toEpochMilli() <= at || live[session.id]?.status == SessionStatus.WORKING
 
 /**
  * The list above the tree: every session with a running process, plus the ones pinned by hand, less the dismissed ones

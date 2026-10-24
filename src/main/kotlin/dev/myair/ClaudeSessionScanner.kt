@@ -2,20 +2,25 @@ package dev.myair
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.attribute.FileTime
+import java.io.StringReader
+import java.time.Instant
 import kotlin.io.path.extension
 import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.nameWithoutExtension
 
-/** [changedFiles] are the files the agent wrote or edited, in the order it first touched them; [prompts] the first human prompts. */
+/**
+ * [lastMessage] is the time of the latest message of the conversation, not of the file: resuming a session appends lines
+ * too. [changedFiles] are the files the agent wrote or edited, in the order it first touched them; [prompts] the first human prompts.
+ */
 data class ClaudeSession(
-    val id: String, val cwd: Path, val title: String, val lastModified: FileTime, val changedFiles: List<Path>, val prompts: List<String>,
+    val id: String, val cwd: Path, val title: String, val lastMessage: Instant, val changedFiles: List<Path>, val prompts: List<String>,
 ) {
     /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
     fun matches(query: String): Boolean =
@@ -44,24 +49,25 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             val known = cache[file]?.takeIf { size >= it.offset }
             val transcript = if (known != null && known.offset == size) known else read(file, known ?: Transcript.EMPTY)
             cache[file] = transcript
-            transcript.toSession(file, Files.getLastModifiedTime(file))
-        }.sortedByDescending { it.lastModified }
+            transcript.toSession(file)
+        }.sortedByDescending { it.lastMessage }
     }
 
     /** What a transcript says up to [offset], the byte after its last complete line. */
     data class Transcript(
         val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val prompts: List<String>,
-        val changedFiles: List<String>,
+        val changedFiles: List<String>, val lastMessage: Instant?,
     ) {
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
-        fun toSession(file: Path, lastModified: FileTime): ClaudeSession? {
+        fun toSession(file: Path): ClaudeSession? {
             val title = customTitle ?: aiTitle ?: prompts.firstOrNull()?.lineSequence()?.first()?.take(80) ?: return null
             val cwd = Path.of(checkNotNull(cwd) { "titled session without cwd: $file" })
-            return ClaudeSession(file.nameWithoutExtension, cwd, title, lastModified, changedFiles.map(Path::of), prompts)
+            val lastMessage = checkNotNull(lastMessage) { "titled session without a message: $file" }
+            return ClaudeSession(file.nameWithoutExtension, cwd, title, lastMessage, changedFiles.map(Path::of), prompts)
         }
 
         companion object {
-            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList())
+            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null)
         }
     }
 
@@ -73,13 +79,16 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         /** Human prompts kept per session: enough for an agent to judge what the session was about. */
         const val PROMPTS = 3
         private const val ASSISTANT = "\"type\":\"assistant\""
+
+        /** Substrings of every line [messageTime] may accept; they only spare parsing the lines that cannot be messages. */
+        private val MESSAGE_HINTS = listOf("\"type\":\"user\"", ASSISTANT, "\"subtype\":\"local_command\"")
         private const val NEWLINE = '\n'.code.toByte()
 
         /** The tools Air's PostToolUse hook watches for project changes. */
         private val EDIT_TOOLS = setOf("Write", "Edit", "MultiEdit", "NotebookEdit")
         private val EDIT_TOOL_USE = Regex("\"name\":\"(${EDIT_TOOLS.joinToString("|")})\",\"input\"")
 
-        fun parse(file: Path, lastModified: FileTime): ClaudeSession? = read(file, Transcript.EMPTY).toSession(file, lastModified)
+        fun parse(file: Path): ClaudeSession? = read(file, Transcript.EMPTY).toSession(file)
 
         /** Continues [from] with the complete lines after its offset; a line still being written is left for the next read. */
         fun read(file: Path, from: Transcript): Transcript {
@@ -88,7 +97,9 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             var cwd = from.cwd
             val prompts = from.prompts.toMutableList()
             val changedFiles = LinkedHashSet(from.changedFiles)
+            var lastMessage = from.lastMessage
             val offset = forEachCompleteLine(file, from.offset) { line ->
+                if (MESSAGE_HINTS.any { it in line }) messageTime(line)?.let { lastMessage = it }
                 when {
                     line.startsWith(CUSTOM_TITLE) -> customTitle = json(line)["customTitle"].asString
                     line.startsWith(AI_TITLE) -> aiTitle = json(line)["aiTitle"].asString
@@ -102,7 +113,30 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                     }
                 }
             }
-            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList())
+            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage)
+        }
+
+        /**
+         * The time of [line] when it is a message of the main conversation: a human or assistant one, or a slash command
+         * run; null for anything else. Reads only top-level fields, skipping message bodies without building them.
+         */
+        private fun messageTime(line: String): Instant? {
+            var type: String? = null
+            var subtype: String? = null
+            var timestamp: String? = null
+            var aside = false
+            JsonReader(StringReader(line)).use { reader ->
+                reader.beginObject()
+                while (reader.hasNext()) when (reader.nextName()) {
+                    "type" -> type = reader.nextString()
+                    "subtype" -> subtype = reader.nextString()
+                    "timestamp" -> timestamp = reader.nextString()
+                    "isMeta", "isSidechain" -> aside = reader.nextBoolean() || aside
+                    else -> reader.skipValue()
+                }
+            }
+            val message = type == "user" || type == "assistant" || type == "system" && subtype == "local_command"
+            return if (message && !aside) Instant.parse(checkNotNull(timestamp) { "message without timestamp: ${line.take(200)}" }) else null
         }
 
         /** Paths from the edit tool calls of one assistant message; a notebook edit names its file `notebook_path`. */

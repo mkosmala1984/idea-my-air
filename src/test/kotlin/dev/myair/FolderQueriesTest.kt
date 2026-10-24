@@ -4,7 +4,6 @@ import com.google.gson.JsonParser
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.nio.file.Path
-import java.nio.file.attribute.FileTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlin.test.assertEquals
@@ -14,7 +13,7 @@ class FolderQueriesTest {
     private val now = ZonedDateTime.of(2026, 10, 24, 12, 0, 0, 0, zone)
 
     private fun session(id: String, title: String, project: String, at: ZonedDateTime, prompts: List<String> = emptyList()) =
-        ClaudeSession(id, Path.of(project), title, FileTime.from(at.toInstant()), emptyList(), prompts)
+        ClaudeSession(id, Path.of(project), title, at.toInstant(), emptyList(), prompts)
 
     private val sessions = listOf(
         session("old", "Migration import", "/rtm", now.minusDays(10)),
@@ -74,7 +73,7 @@ class FolderQueriesTest {
         val entry = json.getAsJsonArray("sessions")[0].asJsonObject
         assertEquals("rtm/fixes", entry["folder"].asString)
         assertEquals(PROMPT_CHARS, entry.getAsJsonArray("prompts")[0].asString.length)
-        assertEquals("2026-10-24T12:00+02:00", entry["modified"].asString)
+        assertEquals("2026-10-24T12:00+02:00", entry["lastMessage"].asString)
         val unfiled = JsonParser.parseString(SessionPage(1, 0, listOf(session("tf", "T", "/t", now))).toJson(structure, zone)).asJsonObject
         assertEquals(true, unfiled.getAsJsonArray("sessions")[0].asJsonObject["folder"].isJsonNull)
     }
