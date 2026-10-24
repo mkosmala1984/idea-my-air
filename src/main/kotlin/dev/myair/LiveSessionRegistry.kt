@@ -27,6 +27,8 @@ class LiveSessionRegistry(
         val pid = o["pid"].asLong
         val procStart = checkNotNull(o["procStart"]) { "no procStart in $file" }.asString.toLong()
         if (!isSameProcess(pid, procStart)) return@mapNotNull null
+        // A starting `claude` writes its file once without a status, then again with `status` and `statusUpdatedAt`.
+        if (o["statusUpdatedAt"] == null) return@mapNotNull null
         val status = when (val s = checkNotNull(o["status"]) { "no status in $file" }.asString) {
             // `shell`: running a shell command; claude's own session list shows it as working, like `busy`.
             "busy", "shell" -> SessionStatus.WORKING

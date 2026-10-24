@@ -14,7 +14,7 @@ class LiveSessionRegistryTest {
     lateinit var dir: Path
 
     private fun entry(pid: Long, session: String, status: String, extra: String = "") = dir.resolve("$pid.json").writeText(
-        """{"pid":$pid,"sessionId":"$session","cwd":"E:\\x","procStart":"${pid * 10}","kind":"interactive","entrypoint":"cli",$extra"status":"$status"}"""
+        """{"pid":$pid,"sessionId":"$session","cwd":"E:\\x","procStart":"${pid * 10}","kind":"interactive","entrypoint":"cli",$extra"status":"$status","statusUpdatedAt":1}"""
     )
 
     @Test
@@ -40,6 +40,19 @@ class LiveSessionRegistryTest {
     @Test
     fun `unknown status fails loudly`() {
         entry(1, "a", "sleeping")
+        assertFailsWith<IllegalStateException> { LiveSessionRegistry(dir) { _, _ -> true }.read() }
+    }
+
+    @Test
+    fun `a process that has not reported a status yet is skipped`() {
+        entry(1, "a", "busy")
+        dir.resolve("2.json").writeText("""{"pid":2,"sessionId":"b","procStart":"20","entrypoint":"cli","updatedAt":1}""")
+        assertEquals(setOf("a"), LiveSessionRegistry(dir) { _, _ -> true }.read().keys)
+    }
+
+    @Test
+    fun `a missing status after one was reported fails loudly`() {
+        dir.resolve("1.json").writeText("""{"pid":1,"sessionId":"a","procStart":"10","entrypoint":"cli","statusUpdatedAt":1}""")
         assertFailsWith<IllegalStateException> { LiveSessionRegistry(dir) { _, _ -> true }.read() }
     }
 
