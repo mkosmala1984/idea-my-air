@@ -23,6 +23,10 @@ class ClaudeSessionsService : Disposable {
     private val structure = StructureStore(Path.of(System.getProperty("user.home"), ".my-air", "structure.json"))
     private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
 
+    /** False until the first refresh lands; the first scan reads every transcript and takes seconds. */
+    var loaded = false
+        private set
+
     var sessions = emptyList<ClaudeSession>()
         private set
 
@@ -85,8 +89,9 @@ class ClaudeSessionsService : Disposable {
                 // Also read where updatePins writes, dropping dismissals that are over (written only when some are);
                 // a broken pins.json throws, which the IDE reports as an error.
                 val pinned = pinStore.update { it.prune(scanned, current) }
-                if (scanned == sessions && current == live && read == folders && error == foldersError && pinned == pins) return@invokeLater
+                if (loaded && scanned == sessions && current == live && read == folders && error == foldersError && pinned == pins) return@invokeLater
                 if (failure != null && error != foldersError) thisLogger().error("Cannot read ${structure.file}", failure)
+                loaded = true
                 sessions = scanned
                 live = current
                 pins = pinned
