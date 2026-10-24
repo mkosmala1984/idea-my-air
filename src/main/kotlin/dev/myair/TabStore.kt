@@ -87,12 +87,6 @@ class TabStore(
         idesDir.resolve("${self.pid()}.json").deleteIfExists()
     }
 
-    private fun writeAtomically(target: Path, text: String) {
-        val temp = target.resolveSibling("${target.fileName}.${UUID.randomUUID()}.tmp")
-        temp.writeText(text)
-        Files.move(temp, target, ATOMIC_MOVE)
-    }
-
     private data class FocusRequest(val sessionId: String)
 
     companion object {
@@ -100,4 +94,11 @@ class TabStore(
 
         fun isAlive(pid: Long, started: Long): Boolean = ProcessHandle.of(pid).map { startMillis(it) == started }.orElse(false)
     }
+}
+
+/** Writes to a temp name and moves it into place, so a reader never sees half a file. */
+fun writeAtomically(target: Path, text: String) {
+    val temp = target.resolveSibling("${target.fileName}.${UUID.randomUUID()}.tmp")
+    temp.writeText(text)
+    Files.move(temp, target, ATOMIC_MOVE)
 }

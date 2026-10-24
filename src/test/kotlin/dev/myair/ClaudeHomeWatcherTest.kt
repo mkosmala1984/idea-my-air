@@ -20,7 +20,7 @@ class ClaudeHomeWatcherTest {
     private val sessions by lazy { home.resolve("sessions").createDirectories() }
     private val projects by lazy { home.resolve("projects").createDirectories() }
 
-    private fun watcher() = ClaudeHomeWatcher(sessions, projects) { calls.put(System.nanoTime()) }
+    private fun watcher() = ClaudeHomeWatcher(listOf(sessions), projects) { calls.put(System.nanoTime()) }
 
     private fun awaitCall() = assertNotNull(calls.poll(5, TimeUnit.SECONDS), "onChange was not called")
     private fun assertNoCall() = assertNull(calls.poll(1500, TimeUnit.MILLISECONDS), "unexpected onChange")
