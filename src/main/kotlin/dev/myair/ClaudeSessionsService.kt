@@ -12,14 +12,15 @@ import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
 /**
- * The one watcher over `~/.claude`, shared by every project: session list, live statuses, and the session each tab shows.
- * [sessions], [live] and the listeners are touched on the EDT only.
+ * The one watcher over `~/.claude` and `~/.my-air`, shared by every project: session list, live statuses, the session each
+ * tab shows, and the user's folders. [sessions], [live], [folders] and the listeners are touched on the EDT only.
  */
 @Service(Service.Level.APP)
 class ClaudeSessionsService : Disposable {
     private val claudeHome = Path.of(System.getProperty("user.home"), ".claude")
     private val scanner = ClaudeSessionScanner(claudeHome.resolve("projects"))
     private val registry = LiveSessionRegistry(claudeHome.resolve("sessions"))
+    private val structure = StructureStore(Path.of(System.getProperty("user.home"), ".my-air", "structure.json"))
 
     var sessions = emptyList<ClaudeSession>()
         private set
@@ -28,13 +29,22 @@ class ClaudeSessionsService : Disposable {
     var live = emptyMap<String, LiveSession>()
         private set
 
+    var folders = SessionFolders()
+        private set
+
+    /** Why `structure.json` could not be read; Folders mode shows it instead of the tree and allows no changes meanwhile. */
+    var foldersError: String? = null
+        private set
+
+    val structureFile: Path get() = structure.file
+
     private val listeners = ArrayList<() -> Unit>()
 
     /** One refresh at a time, so an older result never lands after a newer one. */
     private val refresher = AppExecutorUtil.createBoundedApplicationPoolExecutor("Claude sessions refresh", 1)
 
     // File events drive refreshes; the 60 s rescan covers events the OS dropped, as Air's REREAD_INTERVAL does.
-    private val watcher = ClaudeHomeWatcher(claudeHome.resolve("sessions"), claudeHome.resolve("projects")) { refresh() }
+    private val watcher = ClaudeHomeWatcher(listOf(claudeHome.resolve("sessions"), structure.file.parent), claudeHome.resolve("projects")) { refresh() }
     private val safetyNet = AppExecutorUtil.getAppScheduledExecutorService().scheduleWithFixedDelay(::refresh, 60, 60, TimeUnit.SECONDS)
 
     init {
@@ -57,23 +67,43 @@ class ClaudeSessionsService : Disposable {
                 return@execute
             }
             ApplicationManager.getApplication().invokeLater {
-                if (scanned == sessions && current == live) return@invokeLater
+                // Read on the EDT, where updateFolders writes, so a read from before a drop cannot undo it; on its own,
+                // so a broken structure.json does not hide the sessions.
+                val (read, failure) = try {
+                    structure.read() to null
+                } catch (e: Exception) {
+                    SessionFolders() to e
+                }
+                val error = failure?.let { "${it.javaClass.simpleName}: ${it.message}" }
+                if (scanned == sessions && current == live && read == folders && error == foldersError) return@invokeLater
+                if (failure != null && error != foldersError) thisLogger().error("Cannot read ${structure.file}", failure)
                 sessions = scanned
                 live = current
+                folders = read
+                foldersError = error
                 retargetTabs()
                 listeners.forEach { it() }
             }
         }
     }
 
+    /** Applies [op] to the folders as they are on disk now and shows the result in every panel of this IDE. */
+    fun updateFolders(op: (SessionFolders) -> SessionFolders) {
+        check(foldersError == null) { "folders cannot change while ${structure.file} is unreadable: $foldersError" }
+        folders = structure.update(op)
+        listeners.forEach { it() }
+    }
+
     private fun retargetTabs() {
         val titles = sessions.associate { it.id to it.title }
         var changed = false
+        val switched = ArrayList<Pair<String, String>>()
         for (project in ProjectManager.getInstance().openProjects) {
             val editors = FileEditorManagerEx.getInstanceEx(project)
             for (file in editors.openFiles.filterIsInstance<ClaudeSessionVirtualFile>()) {
                 val (sessionId, title) = retarget(file.sessionId, file.title, file.pid, live, titles)
                 if (sessionId == file.sessionId && title == file.title) continue
+                if (sessionId != file.sessionId) switched += file.sessionId to sessionId
                 file.sessionId = sessionId
                 file.title = title
                 editors.updateFilePresentation(file)
@@ -81,6 +111,9 @@ class ClaudeSessionsService : Disposable {
             }
         }
         if (changed) TabsSync.getInstance().publish()
+        if (switched.isNotEmpty() && foldersError == null) {
+            updateFolders { switched.fold(it) { folders, (from, to) -> folders.carryOver(from, to, titles.keys) } }
+        }
     }
 
     override fun dispose() {

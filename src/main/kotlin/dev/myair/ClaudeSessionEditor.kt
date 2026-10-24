@@ -3,6 +3,8 @@ package dev.myair
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.impl.EditorTabTitleProvider
@@ -83,12 +85,21 @@ object ClaudeSessionOpener {
         val cwd = Path.of(checkNotNull(project.basePath) { "project ${project.name} has no base path" })
         val id = UUID.randomUUID().toString()
         openTab(project, ClaudeSessionVirtualFile(id, cwd, ClaudeSessionsService.NEW_SESSION_TITLE, listOf("--session-id", id)))
+        val service = ClaudeSessionsService.getInstance()
+        val target = project.service<FolderTarget>().folderId
+        if (target != null && service.foldersError == null) service.updateFolders { it.assign(id, target) }
     }
 
     private fun openTab(project: Project, file: ClaudeSessionVirtualFile) {
         ClaudeSessionsService.getInstance() // starts tracking which session each tab shows
         FileEditorManager.getInstance(project).openFile(file, true)
     }
+}
+
+/** The folder new sessions of this project window go to: set by the last selection in Folders mode, none until then. */
+@Service(Service.Level.PROJECT)
+class FolderTarget {
+    var folderId: String? = null
 }
 
 class NewClaudeSessionAction : DumbAwareAction() {

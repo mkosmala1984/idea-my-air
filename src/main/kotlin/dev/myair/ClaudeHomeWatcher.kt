@@ -16,12 +16,12 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Watches `sessions/` and every `projects/<encoded-cwd>/` and calls [onChange] on its own thread once a burst of writes
- * settles: [quiet] after the last event, but no later than [maxWait] after the first, so a session that keeps writing
- * still refreshes. Air uses the same 500/700 ms.
+ * Watches [dirs] (not their subdirectories) and every `projects/<encoded-cwd>/` and calls [onChange] on its own thread
+ * once a burst of writes settles: [quiet] after the last event, but no later than [maxWait] after the first, so a session
+ * that keeps writing still refreshes. Air uses the same 500/700 ms.
  */
 class ClaudeHomeWatcher(
-    private val sessionsDir: Path,
+    dirs: List<Path>,
     private val projectsDir: Path,
     private val quiet: Duration = 500.milliseconds,
     private val maxWait: Duration = 700.milliseconds,
@@ -30,7 +30,7 @@ class ClaudeHomeWatcher(
     private val service = FileSystems.getDefault().newWatchService()
 
     init {
-        register(sessionsDir)
+        dirs.forEach(::register)
         register(projectsDir)
         projectsDir.listDirectoryEntries().filter { it.isDirectory() }.forEach(::register)
     }
