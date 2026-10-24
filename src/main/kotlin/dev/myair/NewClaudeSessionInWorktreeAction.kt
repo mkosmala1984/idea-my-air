@@ -12,6 +12,8 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.ui.popup.ListSeparator
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
+import com.intellij.ui.awt.RelativePoint
+import java.awt.Point
 import java.util.UUID
 
 /**
@@ -27,7 +29,9 @@ class NewClaudeSessionInWorktreeAction : DumbAwareAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project!!
-        val where = JBPopupFactory.getInstance().guessBestPopupLocation(e.dataContext)
+        // A toolbar's data context points at its target component (the tree), so the popup goes under the button instead.
+        val button = e.inputEvent?.component?.takeIf { e.isFromActionToolbar }
+        val where = if (button != null) RelativePoint(button, Point(0, button.height)) else JBPopupFactory.getInstance().guessBestPopupLocation(e.dataContext)
         background(project, "Reading branches", { Git.repo(projectBase(project)) }) { repo ->
             val recent = PropertiesComponent.getInstance(project).getList(RECENT_BASES).orEmpty()
             val choices = baseChoices(repo.branches, repo.default, recent)
