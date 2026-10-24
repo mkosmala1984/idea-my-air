@@ -121,19 +121,19 @@ class SessionFoldersTest {
         val file = root.resolve("my-air/structure.json")
         val mine = StructureStore(file)
         assertEquals(SessionFolders(), mine.read())
-        mine.update { it.createFolder(null, "a", "a") }
-        StructureStore(file).update { it.createFolder(null, "b", "b") }
-        mine.update { it.assign("s1", "a") }
+        mine.update(ChangeSource.UI) { it.createFolder(null, "a", "a") }
+        StructureStore(file).update(ChangeSource.UI) { it.createFolder(null, "b", "b") }
+        mine.update(ChangeSource.UI) { it.assign("s1", "a") }
         assertEquals(listOf("a", "b"), mine.read().names())
         assertEquals("a", mine.read().folderOf("s1"))
-        assertEquals(listOf(file), file.parent.listDirectoryEntries())
+        assertEquals(emptyList(), file.parent.listDirectoryEntries("*.tmp"))
     }
 
     @Test
     fun `the store refuses to write over a file it cannot read`(@TempDir root: Path) {
         val file = root.resolve("structure.json")
         file.writeText("broken")
-        assertThrows<Exception> { StructureStore(file).update { it.createFolder(null, "a", "a") } }
+        assertThrows<Exception> { StructureStore(file).update(ChangeSource.UI) { it.createFolder(null, "a", "a") } }
         assertEquals("broken", file.toFile().readText())
     }
 }

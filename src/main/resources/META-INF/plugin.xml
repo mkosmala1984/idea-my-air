@@ -6,6 +6,8 @@
 
   <depends>com.intellij.modules.platform</depends>
   <depends>org.jetbrains.plugins.terminal</depends>
+  <!-- The folder tools need the IDE's MCP server; without it the rest of the plugin works as before. -->
+  <depends optional="true" config-file="my-air-mcp.xml">com.intellij.mcpServer</depends>
 
   <extensions defaultExtensionNs="com.intellij">
     <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"

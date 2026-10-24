@@ -21,6 +21,7 @@ dependencies {
     intellijPlatform {
         local("E:/dev/apps/jetbrains/IntelliJ IDEA Ultimate")
         bundledPlugin("org.jetbrains.plugins.terminal")
+        bundledPlugin("com.intellij.mcpServer")
     }
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
