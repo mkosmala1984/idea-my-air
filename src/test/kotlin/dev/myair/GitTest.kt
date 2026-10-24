@@ -1,6 +1,7 @@
 package dev.myair
 
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
@@ -87,6 +88,16 @@ class GitTest {
         copyIncluded(repo, worktree, files)
         assertEquals("KEY=1", worktree.resolve(".env").readText())
         assertEquals("{}", worktree.resolve("cache/keep.json").readText())
+    }
+
+    @Test
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    fun `an input larger than the pipe buffers does not block`() {
+        val repo = init("plain")
+        repo.resolve(".gitignore").writeText("*.tmp\n")
+        val paths = (1..20_000).map { "dir$it/file-with-a-long-name-$it.tmp" }
+        val ignored = Git.run(repo, "check-ignore", "-z", "--stdin", input = paths.joinToString("\u0000"))
+        assertEquals(paths, ignored.split('\u0000').filter { it.isNotEmpty() })
     }
 
     @Test
