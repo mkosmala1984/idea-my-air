@@ -84,7 +84,6 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
     }
     private val pinned = JBList<ClaudeSession>().apply {
         cellRenderer = PinnedRenderer({ service.live[it.id] }, ::isSettled)
-        emptyText.text = "No running or pinned sessions"
     }
     private val filter = SearchTextField(false).apply {
         addDocumentListener(object : DocumentAdapter() {
@@ -183,12 +182,13 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
     /** Rebuilt on every change, since a status change reorders it; the selection follows the session ids. */
     private fun renderPinned() {
         val selected = pinned.selectedValuesList.map { it.id }.toSet()
+        pinned.emptyText.text = if (service.loaded) "No running or pinned sessions" else LOADING
         val items = pinnedSessions(shownSessions(), service.live, service.pins)
         pinned.setListData(items.toTypedArray())
         pinned.selectedIndices = items.indices.filter { items[it].id in selected }.toIntArray()
     }
 
-    private fun snapshot() = listOf(foldersMode, showSettled, service.sessions, service.pins.settled, service.folders, service.foldersError)
+    private fun snapshot() = listOf(service.loaded, foldersMode, showSettled, service.sessions, service.pins.settled, service.folders, service.foldersError)
 
     private fun shownSessions() = service.pins.shown(service.sessions, showSettled)
 
@@ -256,7 +256,11 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
         val query = filter.text.trim()
         val state = TreeState.createOn(tree)
         val error = service.foldersError.takeIf { foldersMode }
-        tree.emptyText.text = error?.let { "Cannot read ${service.structureFile}: $it" } ?: StatusText.getDefaultEmptyText()
+        tree.emptyText.text = when {
+            !service.loaded -> LOADING
+            error != null -> "Cannot read ${service.structureFile}: $error"
+            else -> StatusText.getDefaultEmptyText()
+        }
         tree.dragEnabled = foldersMode
         // The drop shown refers to nodes of the old model; the next pointer move computes it on the new one.
         tree.drop = null
@@ -356,6 +360,7 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
     companion object {
         private const val FOLDERS_MODE = "dev.myair.foldersMode"
         private const val SHOW_SETTLED = "dev.myair.showSettled"
+        private const val LOADING = "Loading sessions..."
     }
 }
 
