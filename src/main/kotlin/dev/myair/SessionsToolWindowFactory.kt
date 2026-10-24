@@ -8,6 +8,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonShortcuts
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.KeepPopupOnPerform
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.components.service
@@ -293,6 +294,9 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
     private fun settleAction(selected: () -> List<ClaudeSession>) =
         PinsToggle("Settled", "Hide the session from the list and the tree; Show All Sessions shows it again", AllIcons.Actions.Checked, selected, Pins::settled) { pins, ids, on ->
             if (on) pins.settle(ids) else pins.unsettle(ids)
+        }.apply {
+            // A toggle keeps its popup open by default; settling hides the row the menu was opened on.
+            templatePresentation.keepPopupOnPerform = KeepPopupOnPerform.Never
         }
 
     /** Checked when all [selected] sessions are in [marked]; toggling applies [change] to them. */
