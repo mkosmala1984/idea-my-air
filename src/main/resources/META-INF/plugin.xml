@@ -13,6 +13,7 @@
     <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"
                 factoryClass="dev.myair.SessionsToolWindowFactory"/>
     <fileEditorProvider implementation="dev.myair.ClaudeSessionEditorProvider"/>
+    <fileIconProvider order="first" implementation="dev.myair.ClaudeSessionFileIconProvider"/>
     <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>
     <editorTabTitleProvider implementation="dev.myair.ClaudeSessionTabTitleProvider"/>
     <postStartupActivity implementation="dev.myair.TabsSyncStartup"/>

@@ -1,6 +1,8 @@
 package dev.myair
 
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
+import com.intellij.icons.AllIcons
+import com.intellij.ide.FileIconProvider
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.components.Service
@@ -26,6 +28,7 @@ import org.jetbrains.plugins.terminal.ShellTerminalWidget
 import java.beans.PropertyChangeListener
 import java.nio.file.Path
 import java.util.UUID
+import javax.swing.Icon
 import javax.swing.JComponent
 import kotlin.io.path.isDirectory
 
@@ -38,6 +41,10 @@ class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, var title: 
     @Volatile
     var pid: Long? = null
 
+    /** The status the registry reports for [pid]; null until the process registers and after it ends. */
+    @Volatile
+    var status: SessionStatus? = null
+
     init {
         isWritable = false
     }
@@ -46,6 +53,19 @@ class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, var title: 
 class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {
     override fun getEditorTabTitle(project: Project, file: VirtualFile) = (file as? ClaudeSessionVirtualFile)?.title
 }
+
+/** The tab icon shows the session's status, as the rows of the Claude Sessions tool window do. */
+class ClaudeSessionFileIconProvider : FileIconProvider, DumbAware {
+    override fun getIcon(file: VirtualFile, flags: Int, project: Project?): Icon? =
+        (file as? ClaudeSessionVirtualFile)?.let { it.status?.icon ?: AllIcons.Toolwindows.ToolWindowMessages }
+}
+
+val SessionStatus.icon: Icon
+    get() = when (this) {
+        SessionStatus.WORKING -> AllIcons.Actions.Execute
+        SessionStatus.NEEDS_INPUT -> AllIcons.General.Warning
+        SessionStatus.IDLE -> AllIcons.Actions.Checked
+    }
 
 fun projectBase(project: Project): Path = Path.of(checkNotNull(project.basePath) { "project ${project.name} has no base path" })
 

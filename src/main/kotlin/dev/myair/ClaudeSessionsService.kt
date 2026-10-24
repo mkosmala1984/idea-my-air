@@ -119,12 +119,16 @@ class ClaudeSessionsService : Disposable {
             val editors = FileEditorManagerEx.getInstanceEx(project)
             for (file in editors.openFiles.filterIsInstance<ClaudeSessionVirtualFile>()) {
                 val (sessionId, title) = retarget(file.sessionId, file.title, file.pid, live, titles)
-                if (sessionId == file.sessionId && title == file.title) continue
+                // By pid rather than session id: another process may run the same session ("Open Anyway").
+                val status = live.values.firstOrNull { it.pid == file.pid }?.status
+                if (sessionId == file.sessionId && title == file.title && status == file.status) continue
                 if (sessionId != file.sessionId) switched += file.sessionId to sessionId
+                // Other IDEs list tabs by session and title only, so a status change alone is not published.
+                if (sessionId != file.sessionId || title != file.title) changed = true
                 file.sessionId = sessionId
                 file.title = title
+                file.status = status
                 editors.updateFilePresentation(file)
-                changed = true
             }
         }
         if (changed) TabsSync.getInstance().publish()
