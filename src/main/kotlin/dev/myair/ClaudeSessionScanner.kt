@@ -2,6 +2,9 @@ package dev.myair
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import java.io.ByteArrayOutputStream
+import java.nio.channels.Channels
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
@@ -10,20 +13,23 @@ import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.nameWithoutExtension
 
-data class ClaudeSession(val id: String, val cwd: Path, val title: String, val lastModified: FileTime) {
+/** [changedFiles] are the files the agent wrote or edited, in the order it first touched them. */
+data class ClaudeSession(val id: String, val cwd: Path, val title: String, val lastModified: FileTime, val changedFiles: List<Path>) {
     /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
     fun matches(query: String): Boolean =
         query.split(' ').filter { it.isNotEmpty() }.all { title.contains(it, true) || cwd.toString().contains(it, true) }
+
+    /** TreeState matches nodes by toString(), so a session keeps its selection while its title and time change. */
+    override fun toString() = id
 }
 
 /**
  * Reads `<projectsDir>/<encoded-cwd>/<sessionId>.jsonl`. Subagent transcripts live one level deeper and are not listed.
  * The directory name encodes the cwd lossily, so the cwd comes from the transcript itself.
+ * Transcripts are append-only, so a rescan reads only the lines added since the previous one.
  */
 class ClaudeSessionScanner(private val projectsDir: Path) {
-    private data class FileKey(val size: Long, val lastModified: FileTime)
-
-    private val cache = HashMap<Path, Pair<FileKey, ClaudeSession?>>()
+    private val cache = HashMap<Path, Transcript>()
 
     @Synchronized
     fun scan(): List<ClaudeSession> {
@@ -31,38 +37,98 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             .flatMap { dir -> dir.listDirectoryEntries().filter { it.extension == "jsonl" } }
         cache.keys.retainAll(files.toSet())
         return files.mapNotNull { file ->
-            val key = FileKey(Files.size(file), Files.getLastModifiedTime(file))
-            val cached = cache[file]
-            if (cached != null && cached.first == key) cached.second
-            else parse(file, key.lastModified).also { cache[file] = key to it }
+            val size = Files.size(file)
+            // A file shorter than what was already read has been rewritten: start over.
+            val known = cache[file]?.takeIf { size >= it.offset }
+            val transcript = if (known != null && known.offset == size) known else read(file, known ?: Transcript.EMPTY)
+            cache[file] = transcript
+            transcript.toSession(file, Files.getLastModifiedTime(file))
         }.sortedByDescending { it.lastModified }
+    }
+
+    /** What a transcript says up to [offset], the byte after its last complete line. */
+    data class Transcript(
+        val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val firstPrompt: String?,
+        val changedFiles: List<String>,
+    ) {
+        /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
+        fun toSession(file: Path, lastModified: FileTime): ClaudeSession? {
+            val title = customTitle ?: aiTitle ?: firstPrompt?.lineSequence()?.first()?.take(80) ?: return null
+            val cwd = Path.of(checkNotNull(cwd) { "titled session without cwd: $file" })
+            return ClaudeSession(file.nameWithoutExtension, cwd, title, lastModified, changedFiles.map(Path::of))
+        }
+
+        companion object {
+            val EMPTY = Transcript(0, null, null, null, null, emptyList())
+        }
     }
 
     companion object {
         private const val CUSTOM_TITLE = "{\"type\":\"custom-title\""
         private const val AI_TITLE = "{\"type\":\"ai-title\""
         private const val CWD = "\"cwd\":"
+        private const val ASSISTANT = "\"type\":\"assistant\""
+        private const val NEWLINE = '\n'.code.toByte()
 
-        /** Returns null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
-        fun parse(file: Path, lastModified: FileTime): ClaudeSession? {
-            var customTitle: String? = null
-            var aiTitle: String? = null
-            var cwd: String? = null
-            var firstPrompt: String? = null
-            Files.newBufferedReader(file).useLines { lines ->
-                for (line in lines) when {
+        /** The tools Air's PostToolUse hook watches for project changes. */
+        private val EDIT_TOOLS = setOf("Write", "Edit", "MultiEdit", "NotebookEdit")
+        private val EDIT_TOOL_USE = Regex("\"name\":\"(${EDIT_TOOLS.joinToString("|")})\",\"input\"")
+
+        fun parse(file: Path, lastModified: FileTime): ClaudeSession? = read(file, Transcript.EMPTY).toSession(file, lastModified)
+
+        /** Continues [from] with the complete lines after its offset; a line still being written is left for the next read. */
+        fun read(file: Path, from: Transcript): Transcript {
+            var customTitle = from.customTitle
+            var aiTitle = from.aiTitle
+            var cwd = from.cwd
+            var firstPrompt = from.firstPrompt
+            val changedFiles = LinkedHashSet(from.changedFiles)
+            val offset = forEachCompleteLine(file, from.offset) { line ->
+                when {
                     line.startsWith(CUSTOM_TITLE) -> customTitle = json(line)["customTitle"].asString
                     line.startsWith(AI_TITLE) -> aiTitle = json(line)["aiTitle"].asString
+                    ASSISTANT in line && EDIT_TOOL_USE.containsMatchIn(line) -> changedFiles += editedFiles(json(line))
                     (cwd == null || firstPrompt == null) && CWD in line -> {
                         val o = json(line)
-                        if (o["isSidechain"]?.asBoolean == true) continue
-                        cwd = cwd ?: o["cwd"]?.asString
-                        if (firstPrompt == null && o["type"]?.asString == "user" && o["isMeta"]?.asBoolean != true) firstPrompt = promptText(o)
+                        if (o["isSidechain"]?.asBoolean != true) {
+                            cwd = cwd ?: o["cwd"]?.asString
+                            if (firstPrompt == null && o["type"]?.asString == "user" && o["isMeta"]?.asBoolean != true) firstPrompt = promptText(o)
+                        }
                     }
                 }
             }
-            val title = customTitle ?: aiTitle ?: firstPrompt?.lineSequence()?.first()?.take(80) ?: return null
-            return ClaudeSession(file.nameWithoutExtension, Path.of(checkNotNull(cwd) { "titled session without cwd: $file" }), title, lastModified)
+            return Transcript(offset, customTitle, aiTitle, cwd, firstPrompt, changedFiles.toList())
+        }
+
+        /** Paths from the edit tool calls of one assistant message; a notebook edit names its file `notebook_path`. */
+        private fun editedFiles(o: JsonObject): List<String> =
+            o.getAsJsonObject("message").getAsJsonArray("content").map { it.asJsonObject }
+                .filter { it["type"].asString == "tool_use" && it["name"].asString in EDIT_TOOLS }
+                .map { val input = it.getAsJsonObject("input"); checkNotNull(input["file_path"] ?: input["notebook_path"]) { "edit without a path: $it" }.asString }
+
+        /** Returns the offset just past the last newline read. */
+        private fun forEachCompleteLine(file: Path, from: Long, action: (String) -> Unit): Long {
+            FileChannel.open(file).use { channel ->
+                val input = Channels.newInputStream(channel.position(from))
+                val buffer = ByteArray(1 shl 16)
+                val line = ByteArrayOutputStream()
+                var position = from
+                var end = from
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n < 0) return end
+                    var start = 0
+                    for (i in 0 until n) if (buffer[i] == NEWLINE) {
+                        line.write(buffer, start, i - start)
+                        action(line.toString(Charsets.UTF_8))
+                        line.reset()
+                        start = i + 1
+                        end = position + i + 1
+                    }
+                    line.write(buffer, start, n - start)
+                    position += n
+                }
+            }
         }
 
         private fun json(line: String): JsonObject = JsonParser.parseString(line).asJsonObject

@@ -3,7 +3,9 @@ package dev.myair
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.fileEditor.FileEditor
+import com.intellij.openapi.fileEditor.impl.EditorTabTitleProvider
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorPolicy
 import com.intellij.openapi.fileEditor.FileEditorProvider
@@ -12,49 +14,80 @@ import com.intellij.openapi.fileTypes.FileTypes
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
 import org.jetbrains.plugins.terminal.LocalTerminalDirectRunner
 import org.jetbrains.plugins.terminal.ShellStartupOptions
+import org.jetbrains.plugins.terminal.ShellTerminalWidget
 import java.beans.PropertyChangeListener
 import java.nio.file.Path
 import java.util.UUID
 import javax.swing.JComponent
 import kotlin.io.path.isDirectory
 
-/** A tab running `claude <claudeArgs>` in [cwd]; [sessionId] identifies the conversation whether it is resumed or new. */
-class ClaudeSessionVirtualFile(val sessionId: String, val cwd: Path, title: String, val claudeArgs: List<String>) :
+/**
+ * A tab running `claude <claudeArgs>` in [cwd]. [sessionId] and [title] follow the session the process shows now, which
+ * `/clear` or `/resume` can change; [ClaudeSessionsService] updates them by [pid], known once the process has started.
+ */
+class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, var title: String, val claudeArgs: List<String>) :
     LightVirtualFile(title, FileTypes.PLAIN_TEXT, "") {
+    @Volatile
+    var pid: Long? = null
+
     init {
         isWritable = false
     }
 }
 
+class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {
+    override fun getEditorTabTitle(project: Project, file: VirtualFile) = (file as? ClaudeSessionVirtualFile)?.title
+}
+
+/** Opening a session goes where it already runs, since two `claude` processes on one id would append to one transcript. */
 object ClaudeSessionOpener {
     fun open(project: Project, session: ClaudeSession) {
+        val tab = SessionHosts.findTab(session.id)
+        if (tab != null) return SessionHosts.focus(tab)
+        if (TabsSync.getInstance().focusElsewhere(session.id)) return
+        val live = ClaudeSessionsService.getInstance().live[session.id]
+        if (live != null && !confirmRunningElsewhere(project, session, live)) return
         if (!session.cwd.isDirectory()) {
             Messages.showErrorDialog(project, "Session directory no longer exists:\n${session.cwd}", "Cannot Resume Session")
             return
         }
-        show(project, session.id) { ClaudeSessionVirtualFile(session.id, session.cwd, session.title, listOf("--resume", session.id)) }
+        openTab(project, ClaudeSessionVirtualFile(session.id, session.cwd, session.title, listOf("--resume", session.id)))
+    }
+
+    /**
+     * The session runs with no tab in any IDE running this plugin: in an IDE without it, Claude Desktop, a terminal, or a
+     * part of this IDE that is not an editor tab. Offers that window when it belongs to another program; returns whether
+     * to open a second process.
+     */
+    private fun confirmRunningElsewhere(project: Project, session: ClaudeSession, live: LiveSession): Boolean {
+        val host = SessionHosts.hostWindow(live.pid, session.cwd)?.takeIf { it.pid != ProcessHandle.current().pid() }
+        val where = host?.let { "in ${it.executable} (\"${it.title}\")" } ?: "outside an editor tab of this IDE"
+        val message = "\"${session.title}\" is already running $where: claude pid ${live.pid}, started from ${live.entrypoint}.\n" +
+            "Opening it here starts a second process that writes to the same transcript."
+        val options = listOfNotNull(if (host != null) "Switch to Window" else null, "Open Anyway", "Cancel")
+        // Escape closes the dialog with -1, which means Cancel.
+        return when (options.getOrNull(Messages.showDialog(project, message, "Session Already Running", options.toTypedArray(), 0, Messages.getWarningIcon()))) {
+            "Switch to Window" -> false.also { SessionHosts.bringToFront(host!!) }
+            "Open Anyway" -> true
+            else -> false
+        }
     }
 
     fun startNew(project: Project) {
         val cwd = Path.of(checkNotNull(project.basePath) { "project ${project.name} has no base path" })
         val id = UUID.randomUUID().toString()
-        show(project, id) { ClaudeSessionVirtualFile(id, cwd, "New session", listOf("--session-id", id)) }
+        openTab(project, ClaudeSessionVirtualFile(id, cwd, ClaudeSessionsService.NEW_SESSION_TITLE, listOf("--session-id", id)))
     }
 
-    /** One tab per session across all open projects: two `claude` processes on one id would append to the same transcript. */
-    private fun show(project: Project, sessionId: String, create: () -> ClaudeSessionVirtualFile) {
-        val open = ProjectManager.getInstance().openProjects.firstNotNullOfOrNull { p ->
-            FileEditorManager.getInstance(p).openFiles.firstOrNull { it is ClaudeSessionVirtualFile && it.sessionId == sessionId }?.let { p to it }
-        }
-        val (owner, file) = open ?: (project to create())
-        FileEditorManager.getInstance(owner).openFile(file, true)
+    private fun openTab(project: Project, file: ClaudeSessionVirtualFile) {
+        ClaudeSessionsService.getInstance() // starts tracking which session each tab shows
+        FileEditorManager.getInstance(project).openFile(file, true)
     }
 }
 
@@ -84,7 +117,12 @@ class ClaudeSessionEditor(project: Project, private val file: ClaudeSessionVirtu
             // Skip auto-install of claude's own JetBrains plugin into this IDE, as Air does.
             .envVariables(mapOf("CLAUDE_CODE_NO_FLICKER" to "1", "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL" to "true"))
             .build()
-        LocalTerminalDirectRunner.createTerminalRunner(project).startShellTerminalWidget(this, options, true)
+        LocalTerminalDirectRunner.createTerminalRunner(project).startShellTerminalWidget(this, options, true).also { widget ->
+            widget.ttyConnectorAccessor.executeWithTtyConnector { tty ->
+                file.pid = checkNotNull(ShellTerminalWidget.getProcessTtyConnector(tty)) { "claude tab without a process: $tty" }.process.pid()
+                thisLogger().info("claude for session ${file.sessionId} runs as pid ${file.pid}")
+            }
+        }
     }
 
     override fun getComponent(): JComponent = widget.component

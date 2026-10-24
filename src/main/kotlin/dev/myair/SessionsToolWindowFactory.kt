@@ -1,16 +1,17 @@
 package dev.myair
 
 import com.intellij.icons.AllIcons
-import com.intellij.openapi.Disposable
+import com.intellij.ide.util.treeView.TreeState
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.SimpleToolWindowPanel
-import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.ColoredTreeCellRenderer
@@ -19,9 +20,7 @@ import com.intellij.ui.DoubleClickListener
 import com.intellij.ui.ScrollPaneFactory
 import com.intellij.ui.SearchTextField
 import com.intellij.ui.SimpleTextAttributes
-import com.intellij.ide.util.treeView.TreeState
 import com.intellij.ui.treeStructure.SimpleTree
-import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.text.DateFormatUtil
 import com.intellij.util.ui.tree.TreeUtil
 import java.awt.BorderLayout
@@ -29,7 +28,6 @@ import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import java.awt.event.MouseEvent
 import java.nio.file.Path
-import java.util.concurrent.TimeUnit
 import javax.swing.JPanel
 import javax.swing.JTree
 import javax.swing.event.DocumentEvent
@@ -38,27 +36,25 @@ import javax.swing.tree.DefaultTreeModel
 
 class SessionsToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val panel = SessionsPanel(project, toolWindow.disposable)
+        val panel = SessionsPanel(project, toolWindow)
         toolWindow.contentManager.addContent(toolWindow.contentManager.factory.createContent(panel, null, false))
     }
 }
 
-private val claudeHome = Path.of(System.getProperty("user.home"), ".claude")
-private val scanner = ClaudeSessionScanner(claudeHome.resolve("projects"))
-private val registry = LiveSessionRegistry(claudeHome.resolve("sessions"))
+/** A file a session's agent wrote or edited; toString() is the node id TreeState keeps the selection by. */
+private class ChangedFile(val path: Path, val cwd: Path) {
+    override fun toString() = path.toString()
+}
 
-private class SessionsPanel(private val project: Project, parent: Disposable) : SimpleToolWindowPanel(true, true) {
-    /** Session id to status of its running `claude` process; a session absent here has no process. */
-    @Volatile
-    private var live = emptyMap<String, LiveSession>()
+private class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : SimpleToolWindowPanel(true, true) {
+    private val service = ClaudeSessionsService.getInstance()
+    private var shown = emptyList<ClaudeSession>()
     private val tree = SimpleTree().apply {
         isRootVisible = false
-        cellRenderer = SessionRenderer { live[it.id] }
+        // Double-click opens a session, so it must not also expand its changed files.
+        toggleClickCount = 0
+        cellRenderer = SessionRenderer { service.live[it.id] }
     }
-    private var sessions = emptyList<ClaudeSession>()
-    /** Ids on the list, for the poller; null until the first scan, so its own startup does not count as new sessions. */
-    @Volatile
-    private var listed: Set<String>? = null
     private val filter = SearchTextField(false).apply {
         addDocumentListener(object : DocumentAdapter() {
             override fun textChanged(e: DocumentEvent) = render()
@@ -71,7 +67,7 @@ private class SessionsPanel(private val project: Project, parent: Disposable) : 
             add(ScrollPaneFactory.createScrollPane(tree), BorderLayout.CENTER)
         })
         val refresh = object : DumbAwareAction("Refresh", null, AllIcons.Actions.Refresh) {
-            override fun actionPerformed(e: AnActionEvent) = reload()
+            override fun actionPerformed(e: AnActionEvent) = service.refresh()
         }
         val newSession = ActionManager.getInstance().getAction("dev.myair.NewClaudeSession")
         toolbar = ActionManager.getInstance().createActionToolbar("ClaudeSessions", DefaultActionGroup(newSession, refresh), true)
@@ -84,62 +80,44 @@ private class SessionsPanel(private val project: Project, parent: Disposable) : 
                 if (e.keyCode == KeyEvent.VK_ENTER) openSelected()
             }
         })
-        // Statuses change within seconds; repainting keeps the tree's expansion and selection, unlike a model rebuild.
-        // The poller runs serially, so `previous` needs no synchronisation.
-        var previous = emptyMap<String, LiveSession>()
-        val poll = AppExecutorUtil.getAppScheduledExecutorService().scheduleWithFixedDelay({
-            try {
-                val current = registry.read()
-                val known = listed
-                if (known != null && LiveSessionRegistry.hasNewUnlisted(previous, current, known)) reload()
-                previous = current
-                if (current != live) ApplicationManager.getApplication().invokeLater {
-                    live = current
-                    tree.repaint()
-                }
-            } catch (e: Throwable) {
-                thisLogger().error("Reading Claude session statuses failed", e)
-            }
-        }, 0, 2, TimeUnit.SECONDS)
-        Disposer.register(parent) { poll.cancel(false) }
-        reload()
+        // Statuses alone only repaint, which keeps expansion and selection; a changed list rebuilds the model.
+        service.subscribe(toolWindow.disposable) {
+            if (service.sessions != shown) render() else tree.repaint()
+        }
+        render()
     }
 
     private fun openSelected(): Boolean {
-        val session = (tree.lastSelectedPathComponent as? DefaultMutableTreeNode)?.userObject as? ClaudeSession ?: return false
-        ClaudeSessionOpener.open(project, session)
+        val path = tree.selectionPath ?: return false
+        when (val item = (path.lastPathComponent as DefaultMutableTreeNode).userObject) {
+            is ClaudeSession -> ClaudeSessionOpener.open(project, item)
+            is ChangedFile -> {
+                val file = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(item.path)
+                if (file == null) Messages.showErrorDialog(project, "File no longer exists:\n${item.path}", "Cannot Open File")
+                else FileEditorManager.getInstance(project).openFile(file, true)
+            }
+            else -> if (tree.isExpanded(path)) tree.collapsePath(path) else tree.expandPath(path)
+        }
         return true
     }
 
-    private fun reload() {
-        // The Future is discarded, so an exception would vanish with it and leave an empty list; log it as an IDE error instead.
-        ApplicationManager.getApplication().executeOnPooledThread {
-            val scanned = try {
-                scanner.scan()
-            } catch (e: Throwable) {
-                thisLogger().error("Claude session scan failed", e)
-                return@executeOnPooledThread
-            }
-            listed = scanned.mapTo(HashSet()) { it.id }
-            ApplicationManager.getApplication().invokeLater {
-                sessions = scanned
-                render()
-            }
-        }
-    }
-
-    /** Keeps expanded projects across rebuilds; a non-empty filter expands every group, so all matches are visible at once. */
+    /** Keeps expanded nodes and the selection across rebuilds; a non-empty filter expands every project, so all matches are visible at once. */
     private fun render() {
+        shown = service.sessions
         val query = filter.text.trim()
         val state = TreeState.createOn(tree)
-        tree.model = DefaultTreeModel(buildRoot(sessions.filter { it.matches(query) }))
+        tree.model = DefaultTreeModel(buildRoot(shown.filter { it.matches(query) }))
         if (query.isNotEmpty()) TreeUtil.expandAll(tree) else state.applyTo(tree)
     }
 
-    /** Projects ordered by their most recent session; [sessions] arrive newest first. */
+    /** Projects ordered by their most recent session; [sessions] arrive newest first. A session's children are its changed files. */
     private fun buildRoot(sessions: List<ClaudeSession>) = DefaultMutableTreeNode().apply {
         sessions.groupBy { it.cwd }.forEach { (cwd, group) ->
-            add(DefaultMutableTreeNode(cwd).apply { group.forEach { add(DefaultMutableTreeNode(it)) } })
+            add(DefaultMutableTreeNode(cwd).apply {
+                group.forEach { session ->
+                    add(DefaultMutableTreeNode(session).apply { session.changedFiles.forEach { add(DefaultMutableTreeNode(ChangedFile(it, cwd))) } })
+                }
+            })
         }
     }
 }
@@ -174,6 +152,11 @@ private class SessionRenderer(private val liveOf: (ClaudeSession) -> LiveSession
                     null -> {}
                 }
                 append("  " + DateFormatUtil.formatPrettyDateTime(item.lastModified.toMillis()), SimpleTextAttributes.GRAYED_ATTRIBUTES)
+            }
+            is ChangedFile -> {
+                icon = FileTypeManager.getInstance().getFileTypeByFileName(item.path.fileName.toString()).icon
+                // Files inside the session's directory read relative to it; anything else keeps its full path.
+                append(if (item.path.startsWith(item.cwd)) item.cwd.relativize(item.path).toString() else item.path.toString())
             }
         }
     }

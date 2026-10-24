@@ -11,11 +11,21 @@
     <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"
                 factoryClass="dev.myair.SessionsToolWindowFactory"/>
     <fileEditorProvider implementation="dev.myair.ClaudeSessionEditorProvider"/>
+    <editorTabTitleProvider implementation="dev.myair.ClaudeSessionTabTitleProvider"/>
+    <postStartupActivity implementation="dev.myair.TabsSyncStartup"/>
   </extensions>
+
+  <projectListeners>
+    <listener class="dev.myair.TabsSyncListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+  </projectListeners>
 
   <actions>
     <action id="dev.myair.NewClaudeSession" class="dev.myair.NewClaudeSessionAction" text="New Claude Session"
             description="Start claude in the project directory in an editor tab" icon="AllIcons.General.Add">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+    <action id="dev.myair.FocusClaudeSession" class="dev.myair.FocusClaudeSessionAction" text="Focus Claude Session..."
+            description="Switch to the window and tab of a Claude session open in any IDE">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
   </actions>

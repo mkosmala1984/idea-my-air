@@ -14,7 +14,7 @@ class LiveSessionRegistryTest {
     lateinit var dir: Path
 
     private fun entry(pid: Long, session: String, status: String, extra: String = "") = dir.resolve("$pid.json").writeText(
-        """{"pid":$pid,"sessionId":"$session","cwd":"E:\\x","procStart":"${pid * 10}","kind":"interactive",$extra"status":"$status"}"""
+        """{"pid":$pid,"sessionId":"$session","cwd":"E:\\x","procStart":"${pid * 10}","kind":"interactive","entrypoint":"cli",$extra"status":"$status"}"""
     )
 
     @Test
@@ -27,24 +27,12 @@ class LiveSessionRegistryTest {
         val live = LiveSessionRegistry(dir) { pid, procStart -> pid in alive && procStart == pid * 10 }.read()
         assertEquals(
             mapOf(
-                "a" to LiveSession(SessionStatus.WORKING, null),
-                "b" to LiveSession(SessionStatus.NEEDS_INPUT, "dialog open"),
-                "c" to LiveSession(SessionStatus.IDLE, null),
+                "a" to LiveSession(1, "cli", SessionStatus.WORKING, null),
+                "b" to LiveSession(2, "cli", SessionStatus.NEEDS_INPUT, "dialog open"),
+                "c" to LiveSession(3, "cli", SessionStatus.IDLE, null),
             ),
             live,
         )
-    }
-
-    @Test
-    fun `rescan only when an unlisted running session appears or changes status`() {
-        val idle = LiveSession(SessionStatus.IDLE, null)
-        val busy = LiveSession(SessionStatus.WORKING, null)
-        val listed = setOf("a")
-        assertTrue(LiveSessionRegistry.hasNewUnlisted(mapOf("a" to idle), mapOf("a" to idle, "new" to idle), listed))
-        assertFalse(LiveSessionRegistry.hasNewUnlisted(mapOf("new" to idle), mapOf("new" to idle), listed))
-        assertTrue(LiveSessionRegistry.hasNewUnlisted(mapOf("new" to idle), mapOf("new" to busy), listed))
-        assertFalse(LiveSessionRegistry.hasNewUnlisted(mapOf("a" to idle), mapOf("a" to busy), listed))
-        assertFalse(LiveSessionRegistry.hasNewUnlisted(mapOf("new" to idle), emptyMap(), listed))
     }
 
     @Test
