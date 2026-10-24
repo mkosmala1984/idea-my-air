@@ -62,6 +62,20 @@ class PinnedSessionsTest {
     }
 
     @Test
+    fun `a settled session is shown only with all sessions, stops being pinned or dismissed, and a pin unsettles it`() {
+        val pins = Pins(setOf("s1", "s2"), mapOf("s3" to 1L)).settle(listOf("s1", "s3"))
+        assertEquals(Pins(setOf("s2"), settled = setOf("s1", "s3")), pins)
+        assertEquals(listOf("s2", "s4", "s5", "s6"), pins.shown(sessions, showSettled = false).map { it.id })
+        assertEquals(sessions, pins.shown(sessions, showSettled = true))
+        val live = mapOf("s1" to live(SessionStatus.NEEDS_INPUT))
+        assertEquals(listOf("s2"), ids(live, pins, pins.shown(sessions, showSettled = false)))
+        assertEquals(listOf("s1", "s2"), ids(live, pins, pins.shown(sessions, showSettled = true)))
+        assertEquals(Pins(setOf("s2"), settled = setOf("s1")), pins.unsettle(listOf("s3")))
+        assertEquals(Pins(setOf("s2", "s1"), settled = setOf("s3")), pins.pin(listOf("s1")))
+        assertEquals(pins, pins.remove(listOf(sessions[1]), emptyMap()).pin(listOf("s2")))
+    }
+
+    @Test
     fun `pins survive a fresh store, keep pinning order, and an unchanged update writes nothing`(@TempDir dir: Path) {
         val file = dir.resolve("pins.json")
         val store = PinStore(file)
@@ -74,6 +88,8 @@ class PinnedSessionsTest {
         store.update { it.copy(dismissed = mapOf("x" to 5L)) }
         assertEquals(Pins(linkedSetOf("b", "a"), mapOf("x" to 5L)), PinStore(file).read())
         assertEquals(listOf("b", "a"), PinStore(file).read().sessions.toList())
+        store.update { it.settle(listOf("a")) }
+        assertEquals(Pins(linkedSetOf("b"), mapOf("x" to 5L), setOf("a")), PinStore(file).read())
     }
 
     @Test
@@ -82,6 +98,8 @@ class PinnedSessionsTest {
         file.writeText("""{"sessions":["a"],"extra":1}""")
         assertThrows<IllegalStateException> { PinStore(file).read() }
         file.writeText("""{"sessions":[1]}""")
+        assertThrows<IllegalStateException> { PinStore(file).read() }
+        file.writeText("""{"settled":["a"]}""")
         assertThrows<IllegalStateException> { PinStore(file).read() }
     }
 }
