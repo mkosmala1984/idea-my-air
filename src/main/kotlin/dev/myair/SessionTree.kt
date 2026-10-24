@@ -36,18 +36,24 @@ fun foldersTree(structure: SessionFolders, sessions: List<ClaudeSession>, query:
 /** The folder new sessions go to after [path] was selected: the nearest user folder above it, none under [UnfiledSessions]. */
 fun targetFolder(path: TreePath): String? = path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>().lastOrNull()?.id
 
+/** A drop as it will happen: the [change], and where the tree shows it: [childIndex] -1 frames [path]'s row, otherwise a line before that child. */
+class Drop(val change: (SessionFolders) -> SessionFolders, val path: TreePath, val childIndex: Int)
+
 /**
  * What dropping [dragged] (sessions, or one folder) on the node at [path] does, or null where the drop is refused.
  * [childIndex] is JTree's: -1 drops onto the node, otherwise between its children. Sessions land in the folder of whatever
- * they are dropped on or into, none under [UnfiledSessions]. A folder goes into a folder or the top level, before the
- * folder it is dropped in front of, or last.
+ * they are dropped on or into, none under [UnfiledSessions], and that folder is what the drop shows. A folder goes into a
+ * folder or the top level, before the folder it is dropped in front of, or after the last one; the drop shows that spot,
+ * not the pointer's, since sessions and [UnfiledSessions] always follow the folders.
  */
-fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, childIndex: Int): ((SessionFolders) -> SessionFolders)? {
+fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, childIndex: Int): Drop? {
     val target = path.lastPathComponent as DefaultMutableTreeNode
     val moved = dragged.singleOrNull() as? Folder ?: run {
         if (target.isRoot) return null
         val folderId = targetFolder(path)
-        return { dragged.fold(it) { folders, session -> folders.assign((session as ClaudeSession).id, folderId) } }
+        val home = generateSequence(path) { it.parentPath }
+            .first { (it.lastPathComponent as DefaultMutableTreeNode).userObject.let { item -> item is Folder || item == UnfiledSessions } }
+        return Drop({ dragged.fold(it) { folders, session -> folders.assign((session as ClaudeSession).id, folderId) } }, home, -1)
     }
     val parentId = when (val item = target.userObject) {
         null -> null
@@ -56,12 +62,14 @@ fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, ch
     }
     val current = structure.find(moved.id) ?: return null
     if (current.subtree().any { it.id == parentId } || structure.nameTaken(parentId, moved.name, except = moved.id)) return null
-    // A position in the tree, which a filter may have thinned, becomes the index of the folder it lands before.
     val siblings = structure.children(parentId)
-    val before = (if (childIndex in 0 until target.childCount) target.getChildAt(childIndex) else null)
-        ?.let { (it as DefaultMutableTreeNode).userObject as? Folder }
-    val index = if (before == null) siblings.size else siblings.indexOfFirst { it.id == before.id }
-    return { it.moveFolder(moved.id, parentId, index) }
+    if (childIndex < 0) return Drop({ it.moveFolder(moved.id, parentId, siblings.size) }, path, -1)
+    // A position in the tree, which a filter may have thinned, becomes the index of the folder it lands before.
+    val items = target.children().toList().map { (it as DefaultMutableTreeNode).userObject }
+    val before = items.getOrNull(childIndex) as? Folder
+    if (before != null) return Drop({ it.moveFolder(moved.id, parentId, siblings.indexOfFirst { f -> f.id == before.id }) }, path, childIndex)
+    val afterFolders = items.indexOfFirst { it !is Folder }.takeIf { it >= 0 } ?: items.size
+    return Drop({ it.moveFolder(moved.id, parentId, siblings.size) }, path, afterFolders)
 }
 
 private fun projectNodes(sessions: List<ClaudeSession>) = sessions.groupBy { it.cwd }.map { (cwd, group) -> node(cwd, group.map(::sessionNode)) }

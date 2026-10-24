@@ -30,9 +30,12 @@ import com.intellij.ui.SearchTextField
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.treeStructure.SimpleTree
 import com.intellij.util.text.DateFormatUtil
+import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.StatusText
 import com.intellij.util.ui.tree.TreeUtil
 import java.awt.BorderLayout
+import java.awt.Graphics
+import java.awt.Rectangle
 import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.Transferable
 import java.awt.event.KeyAdapter
@@ -49,6 +52,8 @@ import javax.swing.TransferHandler
 import javax.swing.event.DocumentEvent
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
+import javax.swing.tree.TreeNode
+import javax.swing.tree.TreePath
 
 class SessionsToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -61,7 +66,7 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
     private val service = ClaudeSessionsService.getInstance()
     private var foldersMode = PropertiesComponent.getInstance().getBoolean(FOLDERS_MODE)
     private var shown: List<Any?> = emptyList()
-    private val tree = SimpleTree().apply {
+    private val tree = DropLineTree().apply {
         isRootVisible = false
         // Double-click opens a session, so it must not also expand its changed files.
         toggleClickCount = 0
@@ -184,6 +189,8 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
         val error = service.foldersError.takeIf { foldersMode }
         tree.emptyText.text = error?.let { "Cannot read ${service.structureFile}: $it" } ?: StatusText.getDefaultEmptyText()
         tree.dragEnabled = foldersMode
+        // The drop shown refers to nodes of the old model; the next pointer move computes it on the new one.
+        tree.drop = null
         tree.model = DefaultTreeModel(
             when {
                 error != null -> DefaultMutableTreeNode()
@@ -222,17 +229,23 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
 
         override fun exportDone(source: JComponent, data: Transferable?, action: Int) {
             dragged = emptyList()
+            tree.drop = null
         }
 
-        override fun canImport(support: TransferSupport) = support.isDrop && drop(support) != null
+        override fun canImport(support: TransferSupport): Boolean {
+            val drop = if (support.isDrop) drop(support) else null
+            support.setShowDropLocation(false)
+            tree.drop = drop
+            return drop != null
+        }
 
         override fun importData(support: TransferSupport): Boolean {
-            val change = drop(support) ?: return false
-            service.updateFolders(change)
+            val drop = drop(support) ?: return false
+            service.updateFolders(drop.change)
             return true
         }
 
-        private fun drop(support: TransferSupport): ((SessionFolders) -> SessionFolders)? {
+        private fun drop(support: TransferSupport): Drop? {
             if (!canEditFolders() || dragged.isEmpty()) return null
             val location = support.dropLocation as JTree.DropLocation
             return dropChange(service.folders, dragged, location.path ?: return null, location.childIndex)
@@ -242,6 +255,47 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
     companion object {
         private const val FOLDERS_MODE = "dev.myair.foldersMode"
     }
+}
+
+/**
+ * Draws a drop itself: a line between rows, a frame around the row dropped onto. IntelliJ's tree UI would instead fill the
+ * row of the drop's parent, which flickers as the pointer crosses rows, so the drop handler keeps it from showing.
+ */
+private class DropLineTree : SimpleTree() {
+    var drop: Drop? = null
+        set(value) {
+            field = value
+            repaint()
+        }
+
+    override fun paintComponent(g: Graphics) {
+        super.paintComponent(g)
+        val drop = drop ?: return
+        g.color = JBUI.CurrentTheme.DragAndDrop.BORDER_COLOR
+        if (drop.childIndex >= 0) insertLine(this, drop.path, drop.childIndex).let { g.fillRect(it.x, it.y - 1, it.width, 2) }
+        else getPathBounds(drop.path)?.let { g.drawRect(it.x, it.y, width - it.x - 1, it.height - 1) }
+    }
+}
+
+/**
+ * The line for a drop between the children of [parent] at [childIndex]: above that child's row, or below the last row of
+ * the parent's subtree when dropping after its last child, indented like the children.
+ */
+fun insertLine(tree: JTree, parent: TreePath, childIndex: Int): Rectangle {
+    val node = parent.lastPathComponent as TreeNode
+    fun line(x: Int, y: Int) = Rectangle(x, y, tree.width - x, 0)
+    if (childIndex < node.childCount) {
+        val row = checkNotNull(tree.getPathBounds(parent.pathByAddingChild(node.getChildAt(childIndex)))) { "drop into collapsed $parent" }
+        return line(row.x, row.y)
+    }
+    if (node.childCount == 0) {
+        val row = checkNotNull(tree.getPathBounds(parent)) { "drop into hidden $parent" }
+        return line(row.x + row.height, row.y + row.height)
+    }
+    val last = parent.pathByAddingChild(node.getChildAt(node.childCount - 1))
+    var bottom = tree.getRowForPath(last)
+    while (bottom + 1 < tree.rowCount && last.isDescendant(tree.getPathForRow(bottom + 1))) bottom++
+    return line(checkNotNull(tree.getPathBounds(last)) { "drop into collapsed $parent" }.x, tree.getRowBounds(bottom).let { it.y + it.height })
 }
 
 private class SessionRenderer(private val liveOf: (ClaudeSession) -> LiveSession?) : ColoredTreeCellRenderer() {
