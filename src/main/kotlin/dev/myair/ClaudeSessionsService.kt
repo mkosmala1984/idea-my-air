@@ -10,6 +10,7 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.util.concurrency.AppExecutorUtil
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import kotlin.io.path.createDirectories
 
 /**
  * The one watcher over `~/.claude` and `~/.my-air`, shared by every project: session list, live statuses, the session each
@@ -22,6 +23,12 @@ class ClaudeSessionsService : Disposable {
     private val registry = LiveSessionRegistry(claudeHome.resolve("sessions"))
     private val structure = StructureStore(Path.of(System.getProperty("user.home"), ".my-air", "structure.json"))
     private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
+
+    // In a directory of its own: the watcher above sees `~/.my-air`, and every IDE would rescan on each write.
+    private val boardFile = structure.file.resolveSibling("taskbar").createDirectories().resolve("board.json")
+
+    /** What this IDE last wrote to [boardFile]; folder, pin and title changes refresh too, but leave the board as it is. */
+    private var boardText: String? = null
 
     /** False until the first refresh lands; the first scan reads every transcript and takes seconds. */
     var loaded = false
@@ -99,6 +106,12 @@ class ClaudeSessionsService : Disposable {
                 foldersError = error
                 retargetTabs()
                 listeners.forEach { it() }
+                // Every IDE writes the same content, derived from the same files, so it needs no single owner.
+                val board = boardJson(boardSessions(sessions, live))
+                if (board != boardText) {
+                    writeAtomically(boardFile, board)
+                    boardText = board
+                }
             }
         }
     }
