@@ -47,6 +47,8 @@ class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {
     override fun getEditorTabTitle(project: Project, file: VirtualFile) = (file as? ClaudeSessionVirtualFile)?.title
 }
 
+fun projectBase(project: Project): Path = Path.of(checkNotNull(project.basePath) { "project ${project.name} has no base path" })
+
 /** Opening a session goes where it already runs, since two `claude` processes on one id would append to one transcript. */
 object ClaudeSessionOpener {
     fun open(project: Project, session: ClaudeSession) {
@@ -81,9 +83,7 @@ object ClaudeSessionOpener {
         }
     }
 
-    fun startNew(project: Project) {
-        val cwd = Path.of(checkNotNull(project.basePath) { "project ${project.name} has no base path" })
-        val id = UUID.randomUUID().toString()
+    fun startNew(project: Project, cwd: Path = projectBase(project), id: String = UUID.randomUUID().toString()) {
         openTab(project, ClaudeSessionVirtualFile(id, cwd, ClaudeSessionsService.NEW_SESSION_TITLE, listOf("--session-id", id)))
         val service = ClaudeSessionsService.getInstance()
         val target = project.service<FolderTarget>().folderId
