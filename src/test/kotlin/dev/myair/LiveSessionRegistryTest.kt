@@ -23,13 +23,15 @@ class LiveSessionRegistryTest {
         entry(2, "b", "waiting", """"waitingFor":"dialog open",""")
         entry(3, "c", "idle")
         entry(4, "d", "busy")
-        val alive = setOf(1L, 2L, 3L)
+        entry(5, "e", "shell")
+        val alive = setOf(1L, 2L, 3L, 5L)
         val live = LiveSessionRegistry(dir) { pid, procStart -> pid in alive && procStart == pid * 10 }.read()
         assertEquals(
             mapOf(
                 "a" to LiveSession(1, "cli", SessionStatus.WORKING, null),
                 "b" to LiveSession(2, "cli", SessionStatus.NEEDS_INPUT, "dialog open"),
                 "c" to LiveSession(3, "cli", SessionStatus.IDLE, null),
+                "e" to LiveSession(5, "cli", SessionStatus.WORKING, null),
             ),
             live,
         )
