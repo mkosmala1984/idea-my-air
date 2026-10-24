@@ -21,6 +21,7 @@ class ClaudeSessionsService : Disposable {
     private val scanner = ClaudeSessionScanner(claudeHome.resolve("projects"))
     private val registry = LiveSessionRegistry(claudeHome.resolve("sessions"))
     private val structure = StructureStore(Path.of(System.getProperty("user.home"), ".my-air", "structure.json"))
+    private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
 
     var sessions = emptyList<ClaudeSession>()
         private set
@@ -34,6 +35,10 @@ class ClaudeSessionsService : Disposable {
 
     /** Why `structure.json` could not be read; Folders mode shows it instead of the tree and allows no changes meanwhile. */
     var foldersError: String? = null
+        private set
+
+    /** Pinned and dismissed sessions; see [pinnedSessions] for what the list shows. */
+    var pins = Pins()
         private set
 
     val structureFile: Path get() = structure.file
@@ -75,10 +80,14 @@ class ClaudeSessionsService : Disposable {
                     SessionFolders() to e
                 }
                 val error = failure?.let { "${it.javaClass.simpleName}: ${it.message}" }
-                if (scanned == sessions && current == live && read == folders && error == foldersError) return@invokeLater
+                // Also read where updatePins writes, dropping dismissals that are over (written only when some are);
+                // a broken pins.json throws, which the IDE reports as an error.
+                val pinned = pinStore.update { it.prune(scanned, current) }
+                if (scanned == sessions && current == live && read == folders && error == foldersError && pinned == pins) return@invokeLater
                 if (failure != null && error != foldersError) thisLogger().error("Cannot read ${structure.file}", failure)
                 sessions = scanned
                 live = current
+                pins = pinned
                 folders = read
                 foldersError = error
                 retargetTabs()
@@ -91,6 +100,12 @@ class ClaudeSessionsService : Disposable {
     fun updateFolders(op: (SessionFolders) -> SessionFolders) {
         check(foldersError == null) { "folders cannot change while ${structure.file} is unreadable: $foldersError" }
         folders = structure.update(op)
+        listeners.forEach { it() }
+    }
+
+    /** Applies [op] to the pins as they are on disk now and shows the result in every panel of this IDE. */
+    fun updatePins(op: (Pins) -> Pins) {
+        pins = pinStore.update(op)
         listeners.forEach { it() }
     }
 

@@ -8,6 +8,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonShortcuts
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -21,20 +22,26 @@ import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
+import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.DoubleClickListener
+import com.intellij.ui.OnePixelSplitter
 import com.intellij.ui.PopupHandler
 import com.intellij.ui.ScrollPaneFactory
 import com.intellij.ui.SearchTextField
+import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
+import com.intellij.ui.components.JBList
 import com.intellij.ui.treeStructure.SimpleTree
 import com.intellij.util.text.DateFormatUtil
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.StatusText
 import com.intellij.util.ui.tree.TreeUtil
 import java.awt.BorderLayout
+import java.awt.Component
 import java.awt.Graphics
+import java.awt.Point
 import java.awt.Rectangle
 import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.Transferable
@@ -46,6 +53,7 @@ import java.util.UUID
 import javax.swing.DropMode
 import javax.swing.Icon
 import javax.swing.JComponent
+import javax.swing.JList
 import javax.swing.JPanel
 import javax.swing.JTree
 import javax.swing.TransferHandler
@@ -73,6 +81,10 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
         cellRenderer = SessionRenderer { service.live[it.id] }
         dropMode = DropMode.ON_OR_INSERT
     }
+    private val pinned = JBList<ClaudeSession>().apply {
+        cellRenderer = PinnedRenderer { service.live[it.id] }
+        emptyText.text = "No running or pinned sessions"
+    }
     private val filter = SearchTextField(false).apply {
         addDocumentListener(object : DocumentAdapter() {
             override fun textChanged(e: DocumentEvent) = render()
@@ -81,9 +93,12 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
 
     init {
         tree.transferHandler = FolderDrop()
-        setContent(JPanel(BorderLayout()).apply {
-            add(filter, BorderLayout.NORTH)
-            add(ScrollPaneFactory.createScrollPane(tree), BorderLayout.CENTER)
+        setContent(OnePixelSplitter(true, "dev.myair.pinnedSplitter", 0.25f).apply {
+            firstComponent = ScrollPaneFactory.createScrollPane(pinned)
+            secondComponent = JPanel(BorderLayout()).apply {
+                add(filter, BorderLayout.NORTH)
+                add(ScrollPaneFactory.createScrollPane(tree), BorderLayout.CENTER)
+            }
         })
         val refresh = object : DumbAwareAction("Refresh", null, AllIcons.Actions.Refresh) {
             override fun actionPerformed(e: AnActionEvent) = service.refresh()
@@ -101,27 +116,64 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
         val rename = FolderAction("Rename Folder...", null, { canEditFolders() && selectedFolder() != null }, ::renameFolder)
         val delete = FolderAction("Delete Folder...", AllIcons.Actions.GC, { canEditFolders() && selectedFolder() != null }, ::deleteFolder)
         delete.registerCustomShortcutSet(CommonShortcuts.getDelete(), tree)
-        PopupHandler.installPopupMenu(tree, DefaultActionGroup(newFolder, rename, delete), "ClaudeSessionsPopup")
+        val pinInTree = PinAction { tree.selectionPaths.orEmpty().mapNotNull { (it.lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession } }
+        PopupHandler.installPopupMenu(tree, DefaultActionGroup(pinInTree, Separator.getInstance(), newFolder, rename, delete), "ClaudeSessionsPopup")
+        // A plain list keeps its selection on a right click, so the row under the pointer is selected first.
+        val remove = object : DumbAwareAction("Remove from List", "Unpin; a running session comes back when it waits for you again", AllIcons.General.Remove) {
+            override fun getActionUpdateThread() = ActionUpdateThread.EDT
+            override fun update(e: AnActionEvent) {
+                e.presentation.isEnabled = !pinned.isSelectionEmpty
+            }
+            override fun actionPerformed(e: AnActionEvent) {
+                val removed = pinned.selectedValuesList
+                service.updatePins { it.remove(removed, service.live) }
+            }
+        }
+        remove.registerCustomShortcutSet(CommonShortcuts.getDelete(), pinned)
+        val pinnedPopup = DefaultActionGroup(PinAction { pinned.selectedValuesList }, remove)
+        pinned.addMouseListener(object : PopupHandler() {
+            override fun invokePopup(comp: Component, x: Int, y: Int) {
+                val row = pinned.locationToIndex(Point(x, y))
+                if (row >= 0 && !pinned.isSelectedIndex(row)) pinned.selectedIndex = row
+                ActionManager.getInstance().createActionPopupMenu("ClaudePinnedPopup", pinnedPopup).component.show(comp, x, y)
+            }
+        })
         val newSession = ActionManager.getInstance().getAction("dev.myair.NewClaudeSession")
         toolbar = ActionManager.getInstance().createActionToolbar("ClaudeSessions", DefaultActionGroup(newSession, newFolder, mode, refresh), true)
             .apply { targetComponent = tree }.component
-        object : DoubleClickListener() {
-            override fun onDoubleClick(event: MouseEvent) = openSelected()
-        }.installOn(tree)
-        tree.addKeyListener(object : KeyAdapter() {
-            override fun keyPressed(e: KeyEvent) {
-                if (e.keyCode == KeyEvent.VK_ENTER) openSelected()
-            }
-        })
+        onOpen(tree, ::openSelected)
+        onOpen(pinned) { pinned.selectedValue?.let { ClaudeSessionOpener.open(project, it) } != null }
         // A rebuild clears the selection before restoring it, so only a real selection moves the target.
         tree.addTreeSelectionListener {
             if (foldersMode) tree.selectionPath?.let { project.service<FolderTarget>().folderId = targetFolder(it) }
         }
         // Statuses alone only repaint, which keeps expansion and selection; anything else rebuilds the model.
         service.subscribe(toolWindow.disposable) {
+            renderPinned()
             if (snapshot() != shown) render() else tree.repaint()
         }
+        renderPinned()
         render()
+    }
+
+    /** Double-click and Enter on [component] run [open]. */
+    private fun onOpen(component: JComponent, open: () -> Boolean) {
+        object : DoubleClickListener() {
+            override fun onDoubleClick(event: MouseEvent) = open()
+        }.installOn(component)
+        component.addKeyListener(object : KeyAdapter() {
+            override fun keyPressed(e: KeyEvent) {
+                if (e.keyCode == KeyEvent.VK_ENTER) open()
+            }
+        })
+    }
+
+    /** Rebuilt on every change, since a status change reorders it; the selection follows the session ids. */
+    private fun renderPinned() {
+        val selected = pinned.selectedValuesList.map { it.id }.toSet()
+        val items = pinnedSessions(service.sessions, service.live, service.pins)
+        pinned.setListData(items.toTypedArray())
+        pinned.selectedIndices = items.indices.filter { items[it].id in selected }.toIntArray()
     }
 
     private fun snapshot() = listOf(foldersMode, service.sessions, service.folders, service.foldersError)
@@ -211,6 +263,21 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
         override fun actionPerformed(e: AnActionEvent) = run()
     }
 
+    /** Pins or unpins the [selected] sessions; a running session is listed anyway, a pin keeps it there after it ends. */
+    private inner class PinAction(private val selected: () -> List<ClaudeSession>) :
+        ToggleAction("Pin Session", "Keep the session in the list above the tree after its process ends", AllIcons.General.Pin_tab), DumbAware {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+        override fun update(e: AnActionEvent) {
+            super.update(e)
+            e.presentation.isEnabledAndVisible = selected().isNotEmpty()
+        }
+        override fun isSelected(e: AnActionEvent) = selected().let { it.isNotEmpty() && it.all { session -> session.id in service.pins.sessions } }
+        override fun setSelected(e: AnActionEvent, state: Boolean) {
+            val ids = selected().map { it.id }
+            service.updatePins { if (state) it.pin(ids) else it.unpin(ids) }
+        }
+    }
+
     /** Drags sessions (one or many) or a single folder within the tree; nothing crosses to other components. */
     private inner class FolderDrop : TransferHandler() {
         private var dragged = emptyList<Any>()
@@ -298,6 +365,38 @@ fun insertLine(tree: JTree, parent: TreePath, childIndex: Int): Rectangle {
     return line(checkNotNull(tree.getPathBounds(last)) { "drop into collapsed $parent" }.x, tree.getRowBounds(bottom).let { it.y + it.height })
 }
 
+/** A session's row in the tree and in the pinned list: title, status icon and label, optionally its project, last change. */
+private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: LiveSession?, showProject: Boolean) {
+    // A session without a live process is greyed out, so the running ones stand out in a long list.
+    append(item.title, if (live == null) SimpleTextAttributes.GRAYED_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
+    when (live?.status) {
+        SessionStatus.WORKING -> {
+            icon = AllIcons.Actions.Execute
+            append("  working", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+        }
+        SessionStatus.NEEDS_INPUT -> {
+            icon = AllIcons.General.Warning
+            append("  needs input" + (live.waitingFor?.let { ": $it" } ?: ""), SimpleTextAttributes.ERROR_ATTRIBUTES)
+        }
+        SessionStatus.IDLE -> {
+            icon = AllIcons.Actions.Checked
+            append("  waiting for prompt", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+        }
+        null -> {}
+    }
+    if (showProject) append("  ${item.cwd.fileName ?: item.cwd}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+    append("  " + DateFormatUtil.formatPrettyDateTime(item.lastModified.toMillis()), SimpleTextAttributes.GRAYED_ATTRIBUTES)
+}
+
+/** Sessions from every project, so each row names its project; a row without a process is there because it is pinned. */
+private class PinnedRenderer(private val liveOf: (ClaudeSession) -> LiveSession?) : ColoredListCellRenderer<ClaudeSession>() {
+    override fun customizeCellRenderer(list: JList<out ClaudeSession>, value: ClaudeSession, index: Int, selected: Boolean, hasFocus: Boolean) {
+        val live = liveOf(value)
+        appendSession(value, live, showProject = true)
+        if (live == null) icon = AllIcons.General.Pin_tab
+    }
+}
+
 private class SessionRenderer(private val liveOf: (ClaudeSession) -> LiveSession?) : ColoredTreeCellRenderer() {
     override fun customizeCellRenderer(
         tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean,
@@ -317,29 +416,8 @@ private class SessionRenderer(private val liveOf: (ClaudeSession) -> LiveSession
                 append(item.fileName?.toString() ?: item.toString())
                 append("  $item", SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
-            is ClaudeSession -> {
-                // A session without a live process is greyed out, so the running ones stand out in a long list.
-                val live = liveOf(item)
-                append(item.title, if (live == null) SimpleTextAttributes.GRAYED_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
-                when (live?.status) {
-                    SessionStatus.WORKING -> {
-                        icon = AllIcons.Actions.Execute
-                        append("  working", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
-                    }
-                    SessionStatus.NEEDS_INPUT -> {
-                        icon = AllIcons.General.Warning
-                        append("  needs input" + (live.waitingFor?.let { ": $it" } ?: ""), SimpleTextAttributes.ERROR_ATTRIBUTES)
-                    }
-                    SessionStatus.IDLE -> {
-                        icon = AllIcons.Actions.Checked
-                        append("  waiting for prompt", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
-                    }
-                    null -> {}
-                }
-                // In a user folder the project is no longer the parent node, so the row names it.
-                if ((node.parent as DefaultMutableTreeNode).userObject is Folder) append("  ${item.cwd.fileName ?: item.cwd}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-                append("  " + DateFormatUtil.formatPrettyDateTime(item.lastModified.toMillis()), SimpleTextAttributes.GRAYED_ATTRIBUTES)
-            }
+            // In a user folder the project is no longer the parent node, so the row names it.
+            is ClaudeSession -> appendSession(item, liveOf(item), showProject = (node.parent as DefaultMutableTreeNode).userObject is Folder)
             is ChangedFile -> {
                 icon = FileTypeManager.getInstance().getFileTypeByFileName(item.path.fileName.toString()).icon
                 // Files inside the session's directory read relative to it; anything else keeps its full path.
