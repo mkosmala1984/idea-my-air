@@ -40,24 +40,44 @@ class SessionTreeTest {
     fun `a dropped folder goes before the folder it lands in front of, last above sessions, or last inside a folder`() {
         val root = foldersTree(structure, sessions, "")
         val rtm = TreePath(arrayOf(root, root.getChildAt(0)))
-        fun drop(id: String, path: TreePath, childIndex: Int) = dropChange(structure, listOf(structure.find(id)!!), path, childIndex)?.invoke(structure)
-        assertEquals(listOf("experiments", "rtm"), drop("rtm", TreePath(root), 2)!!.children(null).map { it.name })
-        assertEquals(listOf("experiments", "rtm"), drop("empty", TreePath(root), 0)!!.children(null).map { it.name })
-        assertEquals(listOf("fixes", "experiments"), drop("empty", rtm, -1)!!.children("rtm").map { it.name })
-        assertEquals(listOf("rtm", "fixes", "experiments"), drop("fix", TreePath(root), 1)!!.children(null).map { it.name })
+        fun drop(id: String, path: TreePath, childIndex: Int) = dropChange(structure, listOf(structure.find(id)!!), path, childIndex)
+        fun names(drop: Drop?, parentId: String?) = drop!!.change(structure).children(parentId).map { it.name }
+        assertEquals(listOf("experiments", "rtm"), names(drop("rtm", TreePath(root), 2), null))
+        assertEquals(listOf("experiments", "rtm"), names(drop("empty", TreePath(root), 0), null))
+        assertEquals(listOf("fixes", "experiments"), names(drop("empty", rtm, -1), "rtm"))
+        assertEquals(listOf("rtm", "fixes", "experiments"), names(drop("fix", TreePath(root), 1), null))
         assertNull(drop("rtm", rtm, -1))
         assertNull(dropChange(structure.createFolder(null, "f2", "fixes"), listOf(structure.find("fix")!!), TreePath(root), 0))
         assertNull(dropChange(structure.createFolder(null, "f2", "Fixes"), listOf(Folder("f2", "Fixes")), rtm, -1))
     }
 
     @Test
-    fun `dropped sessions are filed in the folder they land on, unassigned under sessions, refused between top-level rows`() {
+    fun `a folder drop shows where the folder lands, not where the pointer is`() {
+        val root = foldersTree(structure, sessions, "")
+        val rtm = TreePath(arrayOf(root, root.getChildAt(0)))
+        fun drop(path: TreePath, childIndex: Int) = dropChange(structure, listOf(structure.find("empty")!!), path, childIndex)!!
+        fun shown(path: TreePath, childIndex: Int) = drop(path, childIndex).let { it.path to it.childIndex }
+        // Below `sessions` at the end of the tree: the folder goes last above `sessions`, so the line is there too.
+        assertEquals(TreePath(root) to 2, shown(TreePath(root), 3))
+        assertEquals(listOf("rtm", "experiments"), drop(TreePath(root), 3).change(structure).children(null).map { it.name })
+        assertEquals(TreePath(root) to 0, shown(TreePath(root), 0))
+        // Between rtm's sessions: the folder goes after rtm's last subfolder.
+        assertEquals(rtm to 1, shown(rtm, 2))
+        assertEquals(rtm to -1, shown(rtm, -1))
+    }
+
+    @Test
+    fun `dropped sessions are filed in the folder they land on, shown as that folder, refused between top-level rows`() {
         val root = foldersTree(structure, sessions, "")
         val dragged = listOf(sessions[1], sessions[2])
-        val onRtm = dropChange(structure, dragged, TreePath(arrayOf(root, root.getChildAt(0))), -1)!!.invoke(structure)
-        assertEquals(listOf("rtm", "rtm"), dragged.map { onRtm.folderOf(it.id) })
-        val onSessions = dropChange(structure, dragged, TreePath(arrayOf(root, root.getChildAt(2))), 0)!!.invoke(structure)
-        assertEquals(listOf(null, null), dragged.map { onSessions.folderOf(it.id) })
+        val rtm = TreePath(arrayOf(root, root.getChildAt(0)))
+        val onSession = dropChange(structure, dragged, rtm.pathByAddingChild(root.getChildAt(0).getChildAt(1)), -1)!!
+        assertEquals(listOf("rtm", "rtm"), dragged.map { onSession.change(structure).folderOf(it.id) })
+        assertEquals(rtm to -1, onSession.path to onSession.childIndex)
+        val unfiled = TreePath(arrayOf(root, root.getChildAt(2)))
+        val underSessions = dropChange(structure, dragged, unfiled.pathByAddingChild(root.getChildAt(2).getChildAt(0)), 0)!!
+        assertEquals(listOf(null, null), dragged.map { underSessions.change(structure).folderOf(it.id) })
+        assertEquals(unfiled to -1, underSessions.path to underSessions.childIndex)
         assertNull(dropChange(structure, dragged, TreePath(root), 1))
     }
 
