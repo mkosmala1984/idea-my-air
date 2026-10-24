@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
+import java.time.Instant
 import kotlin.io.path.appendText
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -20,13 +21,13 @@ class ClaudeSessionScannerTest {
 
     private val cwdLine = """"cwd":"E:\\dev\\projects\\rtm-cloud""""
 
-    private fun user(content: String, extra: String = "") =
-        """{"parentUuid":null,"isSidechain":false,$extra"type":"user","message":{"role":"user","content":$content},$cwdLine,"sessionId":"s1"}"""
+    private fun user(content: String, extra: String = "", at: String = "2026-10-24T10:00:00Z") =
+        """{"parentUuid":null,"isSidechain":false,$extra"type":"user","message":{"role":"user","content":$content},$cwdLine,"sessionId":"s1","timestamp":"$at"}"""
 
     private fun write(name: String, vararg lines: String): Path =
         dir.resolve("E--dev-projects-rtm-cloud").createDirectories().resolve("$name.jsonl").apply { writeText(lines.joinToString("") { it + "\n" }) }
 
-    private fun parse(file: Path) = ClaudeSessionScanner.parse(file, FileTime.fromMillis(0))
+    private fun parse(file: Path) = ClaudeSessionScanner.parse(file)
 
     @Test
     fun `custom title wins over ai title and prompt, cwd comes from the transcript`() {
@@ -87,11 +88,12 @@ class ClaudeSessionScannerTest {
     @Test
     fun `titled transcript without user message takes cwd from a system line`() {
         val s = parse(write("s1",
-            """{"parentUuid":null,"isSidechain":false,"type":"system","subtype":"local_command","content":"/plugin",$cwdLine}""",
+            """{"parentUuid":null,"isSidechain":false,"type":"system","subtype":"local_command","content":"/plugin",$cwdLine,"timestamp":"2026-10-24T09:00:00Z"}""",
             """{"type":"custom-title","customTitle":"T","sessionId":"s1"}""",
         ))!!
         assertEquals("T", s.title)
         assertEquals(Path.of("E:\\dev\\projects\\rtm-cloud"), s.cwd)
+        assertEquals(Instant.parse("2026-10-24T09:00:00Z"), s.lastMessage)
     }
 
     @Test
@@ -100,8 +102,29 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
+    fun `the date is the last message's, not the lines a resume or the harness appends`() {
+        val s = parse(write("s1",
+            user("\"prompt\"", at = "2026-10-20T08:00:00Z"),
+            """{"parentUuid":"p","isSidechain":false,"type":"assistant","message":{"role":"assistant","content":[]},$cwdLine,"timestamp":"2026-10-20T08:01:00Z"}""",
+            """{"type":"attachment","attachment":{"type":"user","timestamp":"2026-10-24T12:00:00Z"},"timestamp":"2026-10-24T12:00:00Z"}""",
+            """{"type":"queue-operation","operation":"enqueue","timestamp":"2026-10-24T12:00:01Z"}""",
+            user("\"<local-command-caveat>x</local-command-caveat>\"", """"isMeta":true,""", at = "2026-10-24T12:00:02Z"),
+            user("\"sub\"", at = "2026-10-24T12:00:03Z").replace(""""isSidechain":false""", """"isSidechain":true"""),
+            """{"type":"system","subtype":"turn_duration","durationMs":5,"timestamp":"2026-10-24T12:00:04Z"}""",
+            """{"type":"last-prompt","lastPrompt":"prompt","sessionId":"s1"}""",
+            """{"type":"custom-title","customTitle":"T","sessionId":"s1"}""",
+        ))!!
+        assertEquals(Instant.parse("2026-10-20T08:01:00Z"), s.lastMessage)
+    }
+
+    @Test
+    fun `a message without a timestamp fails loudly`() {
+        assertFailsWith<IllegalStateException> { parse(write("s1", user("\"prompt\"").replace(""","timestamp":"2026-10-24T10:00:00Z"""", ""))) }
+    }
+
+    @Test
     fun `filter matches every word against title or project path, ignoring case`() {
-        val s = ClaudeSession("s1", Path.of("E:\\dev\\projects\\rtm-cloud"), "Rebase na branch release", FileTime.fromMillis(0), emptyList(), emptyList())
+        val s = ClaudeSession("s1", Path.of("E:\\dev\\projects\\rtm-cloud"), "Rebase na branch release", Instant.EPOCH, emptyList(), emptyList())
         assertTrue(s.matches(""))
         assertTrue(s.matches("REBASE"))
         assertTrue(s.matches("rtm-cloud"))
@@ -111,22 +134,23 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
-    fun `scan lists top-level transcripts only, newest first, and picks up appended lines`() {
-        val a = write("a", user("\"A\""))
-        val b = write("b", user("\"B\""))
+    fun `scan lists top-level transcripts only, latest message first, and picks up appended lines`() {
+        val a = write("a", user("\"A\"", at = "2026-10-24T10:00:00Z"))
+        val b = write("b", user("\"B\"", at = "2026-10-24T11:00:00Z"))
         dir.resolve("E--dev-projects-rtm-cloud/a/subagents").createDirectories().resolve("agent-x.jsonl").writeText(user("\"sub\"") + "\n")
-        Files.setLastModifiedTime(a, FileTime.fromMillis(1000))
-        Files.setLastModifiedTime(b, FileTime.fromMillis(2000))
+        Files.setLastModifiedTime(a, FileTime.fromMillis(2000))
+        Files.setLastModifiedTime(b, FileTime.fromMillis(1000))
         val scanner = ClaudeSessionScanner(dir)
         assertEquals(listOf("B", "A"), scanner.scan().map { it.title })
 
         a.appendText("""{"type":"custom-title","customTitle":"A2","sessionId":"a"}""" + "\n")
-        Files.setLastModifiedTime(a, FileTime.fromMillis(3000))
+        assertEquals(listOf("B", "A2"), scanner.scan().map { it.title })
+        a.appendText(user("\"again\"", at = "2026-10-24T12:00:00Z") + "\n")
         assertEquals(listOf("A2", "B"), scanner.scan().map { it.title })
     }
 
     private fun assistant(vararg toolUses: String) =
-        """{"parentUuid":"p","isSidechain":false,"message":{"role":"assistant","content":[${toolUses.joinToString(",")}]},"type":"assistant",$cwdLine,"sessionId":"s1"}"""
+        """{"parentUuid":"p","isSidechain":false,"message":{"role":"assistant","content":[${toolUses.joinToString(",")}]},"type":"assistant",$cwdLine,"sessionId":"s1","timestamp":"2026-10-24T10:00:00Z"}"""
 
     private fun toolUse(name: String, input: String) = """{"type":"tool_use","id":"t","name":"$name","input":$input}"""
 
@@ -145,7 +169,7 @@ class ClaudeSessionScannerTest {
         file.appendText(assistant(toolUse("MultiEdit", """{"file_path":"C:\\a.kt","edits":[]}"""), toolUse("NotebookEdit", """{"notebook_path":"C:\\n.ipynb"}""")) + "\n")
         val next = ClaudeSessionScanner.read(file, first)
         assertEquals(listOf("C:\\a.kt", "C:\\b.kt", "C:\\n.ipynb"), next.changedFiles)
-        assertEquals(listOf(Path.of("C:\\a.kt"), Path.of("C:\\b.kt"), Path.of("C:\\n.ipynb")), next.toSession(file, FileTime.fromMillis(0))!!.changedFiles)
+        assertEquals(listOf(Path.of("C:\\a.kt"), Path.of("C:\\b.kt"), Path.of("C:\\n.ipynb")), next.toSession(file)!!.changedFiles)
     }
 
     @Test

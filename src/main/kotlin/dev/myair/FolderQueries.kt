@@ -19,7 +19,7 @@ const val PROMPT_CHARS = 300
 
 /**
  * The sessions matching every filter given, newest first, one page at a time. [since] and [until] bound the last
- * modification inclusively (see [timeBound]); [query] is the tree's filter; [folder] keeps sessions filed in that folder
+ * message inclusively (see [timeBound]); [query] is the tree's filter; [folder] keeps sessions filed in that folder
  * or below it; [unfiled] true keeps the ones under `sessions`, false the filed ones. Bad input throws
  * [IllegalArgumentException] naming it.
  */
@@ -38,9 +38,9 @@ fun findSessions(
     require(size in 1..MAX_LIMIT) { "limit $size outside 1..$MAX_LIMIT" }
     val skip = offset ?: 0
     require(skip >= 0) { "negative offset $skip" }
-    val matches = sessions.sortedByDescending { it.lastModified }.filter { session ->
-        val modified = session.lastModified.toInstant()
-        (from == null || modified >= from) && (to == null || modified <= to) && (query == null || session.matches(query)) &&
+    val matches = sessions.sortedByDescending { it.lastMessage }.filter { session ->
+        val at = session.lastMessage
+        (from == null || at >= from) && (to == null || at <= to) && (query == null || session.matches(query)) &&
             (inFolder == null || session.id in inFolder) && (unfiled == null || unfiled == (session.id !in filed))
     }
     return SessionPage(matches.size, skip, matches.drop(skip).take(size))
@@ -77,7 +77,7 @@ fun SessionPage.toJson(structure: SessionFolders, zone: ZoneId): String = gson.t
                 "id" to session.id,
                 "title" to session.title,
                 "project" to session.cwd.toString(),
-                "modified" to session.lastModified.toInstant().atZone(zone).toOffsetDateTime().toString(),
+                "lastMessage" to session.lastMessage.atZone(zone).toOffsetDateTime().toString(),
                 "folder" to structure.folderOf(session.id)?.let(structure::pathOf),
                 "prompts" to session.prompts.map { it.take(PROMPT_CHARS) },
                 "changedFiles" to session.changedFiles.size,

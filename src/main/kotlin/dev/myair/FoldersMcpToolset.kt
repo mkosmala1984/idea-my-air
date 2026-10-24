@@ -21,14 +21,14 @@ class FoldersMcpToolset : McpToolset {
     @McpTool
     @McpDescription(
         "Finds Claude Code sessions of the user, newest first, one page at a time. All filters are optional and combine. " +
-        "Each session has id, title, project (the directory claude ran in), modified, folder (its path in the user's " +
+        "Each session has id, title, project (the directory claude ran in), lastMessage (when its latest message was written), folder (its path in the user's " +
         "folders, null when unfiled), its first human prompts (cut short) and the number of files it changed. The result " +
         "has total, the number of all matches: fetch the next page with offset until it is covered.",
     )
     suspend fun my_air_sessions_find(
-        @McpDescription("Earliest last modification, inclusive: <n>d or <n>h before now (7d, 12h), a date (2026-10-17) or a local date-time (2026-10-24T09:00).")
+        @McpDescription("Earliest last message, inclusive: <n>d or <n>h before now (7d, 12h), a date (2026-10-17) or a local date-time (2026-10-24T09:00).")
         since: String? = null,
-        @McpDescription("Latest last modification, inclusive, in the same forms; a date covers the whole day.")
+        @McpDescription("Latest last message, inclusive, in the same forms; a date covers the whole day.")
         until: String? = null,
         @McpDescription("Words that must all occur, ignoring case, in the title or the project path.")
         query: String? = null,

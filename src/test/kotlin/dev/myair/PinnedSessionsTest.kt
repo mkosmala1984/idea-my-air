@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
-import java.nio.file.attribute.FileTime
+import java.time.Instant
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
@@ -15,7 +15,7 @@ class PinnedSessionsTest {
     /** Newest first, as the scanner returns them. */
     private val sessions = (1..6).map { session("s$it", 100L - it) }
 
-    private fun session(id: String, time: Long) = ClaudeSession(id, Path.of("/p"), "title $id", FileTime.fromMillis(time), emptyList(), emptyList())
+    private fun session(id: String, time: Long) = ClaudeSession(id, Path.of("/p"), "title $id", Instant.ofEpochMilli(time), emptyList(), emptyList())
 
     private fun live(status: SessionStatus) = LiveSession(1, "cli", status, null)
 

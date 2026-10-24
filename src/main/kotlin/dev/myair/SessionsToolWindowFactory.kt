@@ -400,7 +400,7 @@ fun insertLine(tree: JTree, parent: TreePath, childIndex: Int): Rectangle {
     return line(checkNotNull(tree.getPathBounds(last)) { "drop into collapsed $parent" }.x, tree.getRowBounds(bottom).let { it.y + it.height })
 }
 
-/** A session's row in the tree and in the pinned list: title, status icon and label, settled mark, optionally its project, last change. */
+/** A session's row in the tree and in the pinned list: title, status icon and label, settled mark, optionally its project, last message. */
 private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: LiveSession?, settled: Boolean, showProject: Boolean) {
     // A session without a live process is greyed out, so the running ones stand out in a long list.
     append(item.title, if (live == null) SimpleTextAttributes.GRAYED_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
@@ -413,7 +413,7 @@ private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: Live
     }
     if (settled) append("  settled", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
     if (showProject) append("  ${item.cwd.fileName ?: item.cwd}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-    append("  " + DateFormatUtil.formatPrettyDateTime(item.lastModified.toMillis()), SimpleTextAttributes.GRAYED_ATTRIBUTES)
+    append("  " + DateFormatUtil.formatPrettyDateTime(item.lastMessage.toEpochMilli()), SimpleTextAttributes.GRAYED_ATTRIBUTES)
 }
 
 /** Sessions from every project, so each row names its project; a row without a process is there because it is pinned. */

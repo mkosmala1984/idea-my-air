@@ -2,14 +2,14 @@ package dev.myair
 
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
-import java.nio.file.attribute.FileTime
+import java.time.Instant
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreePath
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class SessionTreeTest {
-    private fun session(id: String, cwd: String, time: Long) = ClaudeSession(id, Path.of(cwd), "title $id", FileTime.fromMillis(time), emptyList(), emptyList())
+    private fun session(id: String, cwd: String, time: Long) = ClaudeSession(id, Path.of(cwd), "title $id", Instant.ofEpochMilli(time), emptyList(), emptyList())
 
     // Newest first, as the scanner returns them.
     private val sessions = listOf(session("s3", "/rtm", 3), session("s2", "/tf", 2), session("s1", "/rtm", 1))
