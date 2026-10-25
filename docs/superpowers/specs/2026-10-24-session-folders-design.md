@@ -137,3 +137,10 @@ sessions                           <- fixed, always last
 - Icons, exact menu wording, keyboard shortcuts beyond `Delete`.
 - Drag-and-drop mechanism (`TransferHandler` vs `DnDSupport`) and drop-indicator look.
 - Whether the structure watcher is a second `ClaudeHomeWatcher` instance or a small generalisation of it.
+
+## Addendum 2026-10-25: projects in folders
+
+- A project row under `sessions` can be dragged onto a user folder or between folders. It becomes a folder named after the directory and bound to it (`"project": "<cwd>"`, format version 2; version 1 reads as unbound). The drop is refused when the name is taken among the new siblings or the project is bound already.
+- Where a session shows (`SessionFolders.placeOf`): the folder it is filed in, else the folder bound to its cwd, else `sessions`. The tree, `my_air_sessions_find` (`folder`, `unfiled`, `folder` in the result) and `my_air_folders_get` (`project`) all use it.
+- MCP: `create` takes an optional `project` (a directory `my_air_sessions_find` reports), making the new folder bound to it.
+- A bound folder is an ordinary folder otherwise: subfolders, rename, move, filing sessions into it and its subfolders. Its sessions do not repeat the project name. Deleting it sends the project back to `sessions`; a session of a bound project cannot be dropped on `sessions`.
