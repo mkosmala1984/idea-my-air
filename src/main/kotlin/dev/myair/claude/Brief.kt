@@ -24,7 +24,7 @@ data class Brief(val goal: String?, val tasks: List<BriefTask>) {
          * next pending one, `done`/`start` complete and start steps by number, counted from 1.
          */
         fun next(previous: Brief?, tool: String, input: JsonObject): Brief = when {
-            tool != UPDATE_PLAN -> Brief(input["goal"].asString, tasks(JsonParser.parseString(input["tasks"].asString).asJsonArray))
+            tool != UPDATE_PLAN -> input(input["goal"].asString, input["tasks"].asString)
             input.has("items") -> Brief(null, tasks(input.getAsJsonArray("items")))
             else -> {
                 val brief = checkNotNull(previous) { "plan moved on before it was set: $input" }
@@ -44,12 +44,30 @@ data class Brief(val goal: String?, val tasks: List<BriefTask>) {
             }
         }
 
+        /** The arguments of `my_air_set_brief`, checked against the rules its description gives the agent. */
+        fun input(goal: String, tasks: String): Brief {
+            require(goal.isNotBlank() && goal.length <= GOAL_CHARS) { "goal must be one non-blank sentence of at most $GOAL_CHARS chars" }
+            val items = try {
+                JsonParser.parseString(tasks).asJsonArray
+            } catch (e: Exception) {
+                throw IllegalArgumentException("tasks must be a JSON array of {\"content\", \"status\"} objects: ${e.message}", e)
+            }
+            require(items.size() <= MAX_TASKS) { "at most $MAX_TASKS tasks, got ${items.size()}" }
+            val parsed = tasks(items)
+            parsed.forEach { require(it.content.isNotBlank() && it.content.length <= TASK_CHARS) { "task content must be non-blank, at most $TASK_CHARS chars: '${it.content}'" } }
+            require(parsed.count { it.status == TaskStatus.IN_PROGRESS } <= 1) { "at most one task may be in_progress" }
+            return Brief(goal, parsed)
+        }
+
         /** Items as both tools write them: `{"content": ..., "status": "pending" | "in_progress" | "completed"}`. */
         fun tasks(items: JsonArray): List<BriefTask> = items.map { it.asJsonObject }.map { o ->
             val status = o["status"].asString
             BriefTask(o["content"].asString, requireNotNull(TaskStatus.entries.firstOrNull { it.name.lowercase() == status }) { "unknown task status '$status'" })
         }
 
+        const val GOAL_CHARS = 200
+        const val TASK_CHARS = 120
+        const val MAX_TASKS = 15
         const val SET_BRIEF = "my_air_set_brief"
         const val UPDATE_PLAN = "mcp__ccd_turn__update_plan"
     }

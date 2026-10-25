@@ -9,7 +9,9 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.ui.dsl.builder.COLUMNS_LARGE
+import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
+import dev.myair.service.ClaudeSessionsService
 import com.intellij.ui.dsl.builder.columns
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.dsl.builder.toNonNullableProperty
@@ -21,9 +23,14 @@ class MyAirSettings : SimplePersistentStateComponent<MyAirSettings.Options>(Opti
     class Options : BaseState() {
         /** Where new worktrees go; a relative path resolves against the root of the repository's main checkout. */
         var worktreesDir by string(".claude/worktrees")
+
+        /** Offer `my_air_set_brief` to agents and show the briefs they write. */
+        var briefs by property(true)
     }
 
     val worktreesDir: String get() = checkNotNull(state.worktreesDir) { "worktrees directory is not set" }
+
+    val briefs: Boolean get() = state.briefs
 
     companion object {
         fun getInstance(): MyAirSettings = service()
@@ -40,5 +47,10 @@ class MyAirConfigurable : BoundConfigurable("My Air") {
                 .validationOnApply { if (it.text.isBlank()) error("Enter a directory") else null }
                 .comment("New Claude Session in Worktree creates &lt;directory&gt;/&lt;id&gt;. A relative path resolves against the root of the repository's main checkout.")
         }
+        row {
+            checkBox("Session briefs: let agents describe their goal and tasks (my_air_set_brief) and show them")
+                .bindSelected(MyAirSettings.getInstance().state::briefs)
+        }
+        onApply { ClaudeSessionsService.getInstance().settingsChanged() }
     }
 }
