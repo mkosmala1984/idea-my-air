@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Taskbar Flyout Plan</title>
+<link rel="stylesheet" href="htmlplan.css">
+<script src="htmlplan.js" defer></script>
+<style data-mock-shared>
+  .fly { font: 13px/1.35 "Segoe UI Variable Text", "Segoe UI", sans-serif; color: #1a1a1a; background: #f9f9f9; border: 1px solid rgba(0,0,0,.08); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14), 0 1px 3px rgba(0,0,0,.08); width: 340px; overflow: hidden; }
+  .fly .hd { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 16px 6px; }
+  .fly .hd b { font: 600 14px "Segoe UI Variable Display", "Segoe UI", sans-serif; }
+  .fly .hd span { color: #6b6b6b; font-size: 12px; }
+  .fly .grp { padding: 8px 16px 4px; color: #6b6b6b; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; display: flex; gap: 6px; align-items: center; }
+  .fly .grp i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .fly .row { margin: 0 6px; padding: 7px 10px; border-radius: 5px; display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; }
+  .fly .row.hov { background: rgba(0,0,0,.045); }
+  .fly .row.kb { box-shadow: inset 0 0 0 2px #005fb8; }
+  .fly .row b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fly .row small { color: #6b6b6b; font-size: 12px; }
+  .fly .row .t { color: #6b6b6b; font-size: 12px; text-align: right; }
+  .fly .chip { display: inline-block; padding: 0 6px; border-radius: 9px; background: #fff4e5; color: #8a4b00; font-size: 11.5px; }
+  .fly .new { width: 8px; height: 8px; border-radius: 50%; background: #005fb8; justify-self: end; align-self: center; }
+  .fly .ft { margin-top: 6px; padding: 9px 16px 11px; border-top: 1px solid rgba(0,0,0,.06); color: #6b6b6b; font-size: 12px; background: #f3f3f3; }
+  .bar { font: 13px "Segoe UI", sans-serif; background: #dfeaf2; height: 48px; width: 340px; display: flex; align-items: center; padding: 0 10px; gap: 14px; box-sizing: border-box; border-top: 1px solid #c9d6df; }
+  .bar .w { display: grid; grid-template-columns: auto auto; gap: 0 4px; align-items: center; font-size: 13px; padding: 2px 5px; border-radius: 4px; position: relative; }
+  .bar .w.hov { background: rgba(0,0,0,.06); }
+  .bar .w i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .bar .w .u { position: absolute; top: 1px; right: -2px; width: 7px; height: 7px; border-radius: 50%; background: #005fb8; border: 1.5px solid #dfeaf2; }
+  .bar .ico { width: 24px; height: 24px; border-radius: 5px; background: #b9c8d3; }
+</style>
+<body>
+
+<header>
+  <h1>Session Flyout on the Taskbar Widget</h1>
+  <doc-changes new="4" changed="9"></doc-changes>
+  <doc-note tone="info"><strong>TL;DR</strong> A flyout above the widget replaces the tooltip and the menu. It shows three groups: needs input, unread replies, working. A click on a row opens the session and marks it read. The plugin decides “unread” from a per-session “seen” time. Four decisions: what counts as read, which finished sessions show, how the widget shows unread, and the backdrop. Not in scope: autostart, changes to the IDE tool window.</doc-note>
+  <details class="thread"><summary>Why · 1 request</summary>
+    <doc-quote via="prompt" from="the user">zaplanuj komponent wyświetlający sesje na najechanie taskbara i jak i kliknięcie ma wyświetlać w listę aktywnych sesji, czekająych na input, i zakończone wiadomość nie odczytana ładny czysty design</doc-quote>
+  </details>
+</header>
+
+<main>
+<doc-plan>
+
+<!-- ═════ 1 ═════ -->
+<doc-claim>
+  <p>The flyout shows the sessions in three groups above the widget.</p>
+  <doc-mock frame="none" w="360" caption="Groups go from urgent to calm. An empty group does not show."><template>
+<div class="fly">
+  <div class="hd"><b>Claude sessions</b><span>2 need you · 4 running</span></div>
+  <div class="grp" data-ref="g1"><i style="background:#f5a623"></i>Needs input</div>
+  <div class="row hov"><b>Fix tray icon</b><span class="t">now</span><small>my-air · <span class="chip" data-ref="chip">permission</span></small></div>
+  <div class="row"><b>Migracja AGC</b><span class="t">3 min</span><small>rtm-cloud · <span class="chip">dialog open</span></small></div>
+  <div class="grp" data-ref="g2"><i style="background:#005fb8"></i>Unread</div>
+  <div class="row" data-ref="unread"><b>Review PR 7506</b><span class="new"></span><small>rtm-cloud · finished 12 min ago</small></div>
+  <div class="grp"><i style="background:#8a8a8a"></i>Working</div>
+  <div class="row"><b>Build plugin</b><span class="t">1 min</span><small>my-air</small></div>
+  <div class="row"><b>E2E tests on Pipelines</b><span class="t">8 min</span><small>e2e-tests</small></div>
+  <div class="ft" data-ref="ft">3 idle sessions are not shown</div>
+</div></template>
+    <doc-pin ref="chip" anchor="r" title="What claude waits for">The <code>waitingFor</code> text from the registry.</doc-pin>
+    <doc-pin ref="unread" anchor="r" offset="-30,0" title="Blue dot: unread reply"></doc-pin>
+    <doc-pin ref="ft" anchor="r" title="Idle and read: only a count"></doc-pin>
+  </doc-mock>
+
+  <doc-claim>
+    <p>The widget writes nothing new. It groups the rows that <code>board.json</code> gives.</p>
+    <doc-code title="Board.cs · sketch" lang="cs">
+<script type="text/plain">
+public enum Group { NeedsInput, Unread, Working }
+
+/** Null for an idle session that the user read: the flyout shows only their count. */
+public static Group? GroupOf(BoardSession s) => s.Status switch
+{
+    SessionStatus.NeedsInput => Group.NeedsInput,
+    SessionStatus.Working => Group.Working,
+    SessionStatus.Idle => s.Unread ? Group.Unread : null,
+    _ => throw new ArgumentOutOfRangeException(nameof(s), s.Status, null),
+};
+</script>
+    </doc-code>
+    <doc-ask id="ended">
+      <p>Which finished sessions go into “Unread”?</p>
+      <label><input type="radio" name="ended" value="idle" checked> Only sessions with a running process <small>the process waits for the next prompt</small></label>
+      <label><input type="radio" name="ended" value="exited"> Also sessions whose process stopped <small>needs a time limit, for example 24 hours</small></label>
+    </doc-ask>
+    <div data-if="ended=exited"><doc-note tone="warn">Then <code>boardSessions</code> must also read sessions without a process, and claim 3.1 needs a time limit.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>The flyout follows the light or dark taskbar theme.</p>
+    <doc-mock frame="none" w="360" caption="Dark: the same layout with the Windows 11 dark colors."><template>
+<div class="fly" style="background:#2b2b2b;color:#fff;border-color:rgba(255,255,255,.08)">
+  <div class="hd"><b>Claude sessions</b><span style="color:#a0a0a0">1 needs you · 2 running</span></div>
+  <div class="grp" style="color:#a0a0a0"><i style="background:#f5a623"></i>Needs input</div>
+  <div class="row" style="background:rgba(255,255,255,.06)"><b>Fix tray icon</b><span class="t" style="color:#a0a0a0">now</span><small style="color:#a0a0a0">my-air · <span class="chip" style="background:#4a3410;color:#ffd08a">permission</span></small></div>
+  <div class="grp" style="color:#a0a0a0"><i style="background:#8a8a8a"></i>Working</div>
+  <div class="row"><b>Build plugin</b><span class="t" style="color:#a0a0a0">1 min</span><small style="color:#a0a0a0">my-air</small></div>
+  <div class="ft" style="background:#252525;border-color:rgba(255,255,255,.06);color:#a0a0a0">No idle sessions</div>
+</div></template></doc-mock>
+    <doc-ask id="backdrop">
+      <p>What is the flyout background?</p>
+      <label><input type="radio" name="backdrop" value="solid" checked> Solid theme color with a soft shadow <small>works with a transparent WPF window</small></label>
+      <label><input type="radio" name="backdrop" value="acrylic"> Windows 11 acrylic <small>DWMWA_SYSTEMBACKDROP_TYPE; needs a non-transparent window</small></label>
+    </doc-ask>
+    <div data-if="backdrop=acrylic"><doc-note tone="risk">Acrylic does not work with <code>AllowsTransparency</code>. Rounded corners then come from <code>DWMWA_WINDOW_CORNER_PREFERENCE</code>, and the look changes with the wallpaper.</doc-note></div>
+  </doc-claim>
+</doc-claim>
+
+<!-- ═════ 2 ═════ -->
+<doc-claim>
+  <p>The flyout opens on hover and stays open after a click.</p>
+  <doc-machine name="fly" caption="Hover gives a peek. A click pins it until the user clicks outside.">
+<script type="text/plain">
+machine fly initial hidden
+state hidden        # Only the widget shows.
+state peek          # The flyout shows. It has no keyboard focus.
+state pinned        # The flyout shows and has focus. Arrows and Enter work.
+
+| hidden | peek | pinned |
+
+hidden -hover-> peek   : 250 ms
+peek   -leave-> hidden : 300 ms
+peek   -click-> pinned : click
+hidden -click-> pinned : click
+pinned -close-> hidden : outside, Esc
+pinned -pick->  hidden : row
+</script>
+    <div data-state="hidden"><doc-mock frame="none" w="360"><template>
+<div class="bar"><span class="ico"></span><span class="ico"></span><span class="w"><i style="background:#f5a623"></i>2<i style="background:#005fb8"></i>4<span class="u"></span></span><span class="ico"></span></div></template></doc-mock></div>
+    <div data-state="peek"><doc-mock frame="none" w="360"><template>
+<div class="fly" style="margin-bottom:6px"><div class="hd"><b>Claude sessions</b><span>2 need you · 4 running</span></div><div class="grp"><i style="background:#f5a623"></i>Needs input</div><div class="row hov"><b>Fix tray icon</b><span class="t">now</span><small>my-air</small></div><div class="ft">3 idle sessions are not shown</div></div>
+<div class="bar"><span class="ico"></span><span class="w hov"><i style="background:#f5a623"></i>2<i style="background:#005fb8"></i>4</span></div></template></doc-mock></div>
+    <div data-state="pinned"><doc-mock frame="none" w="360"><template>
+<div class="fly" style="margin-bottom:6px"><div class="hd"><b>Claude sessions</b><span>2 need you · 4 running</span></div><div class="grp"><i style="background:#f5a623"></i>Needs input</div><div class="row kb"><b>Fix tray icon</b><span class="t">now</span><small>my-air</small></div><div class="row"><b>Migracja AGC</b><span class="t">3 min</span><small>rtm-cloud</small></div><div class="ft">↑↓ to move · Enter to open · Esc to close</div></div>
+<div class="bar"><span class="ico"></span><span class="w hov"><i style="background:#f5a623"></i>2<i style="background:#005fb8"></i>4</span></div></template></doc-mock></div>
+  </doc-machine>
+
+  <doc-claim>
+    <p>A top-level window above the widget replaces the tooltip and the menu.</p>
+    <doc-calls title="Widget" caption="The right-click menu keeps only Exit.">
+<script type="text/plain">
+~ MainWindow                                   @ taskbar/MainWindow.xaml.cs:31
+~   Render()                                   @ taskbar/MainWindow.xaml.cs:31   -- no ToolTip; the flyout renders the rows
++   **OnEnter / OnLeave**                      @ taskbar/MainWindow.xaml.cs:40   -- timers 250 ms / 300 ms
+~   OnClick(sender, e)                         @ taskbar/MainWindow.xaml.cs:40   -- left: pin the flyout; right: Exit menu
++ **Flyout**(board)                            @ taskbar/Flyout.xaml.cs:1
++   **PlaceAbove**(widget)                     @ taskbar/Flyout.xaml.cs:1        -- PointToScreen, clamped to the work area
++   **OnDeactivated**()                        @ taskbar/Flyout.xaml.cs:1        -- outside click closes a pinned flyout
+</script>
+    </doc-calls>
+    <doc-claim at="taskbar/MainWindow.xaml.cs:40">
+      <p><b>MainWindow.xaml.cs:40</b> · OnClick()</p>
+      <doc-code src="taskbar/MainWindow.xaml.cs" lines="31-59" hl="37,40-58">
+        <doc-pin line="37" tone="info" title="The tooltip goes"></doc-pin>
+        <doc-pin line="42" tone="info" title="The ContextMenu list goes; Exit stays on right click"></doc-pin>
+      </doc-code>
+    </doc-claim>
+  </doc-claim>
+
+  <doc-claim>
+    <p>The flyout is a separate window, not a child of the taskbar.</p>
+    <doc-code title="Flyout.xaml.cs · sketch" lang="cs">
+<script type="text/plain">
+public void PlaceAbove(FrameworkElement widget)
+{
+    // The widget lives inside Shell_TrayWnd; a Popup there would clip to the taskbar.
+    var anchor = widget.PointToScreen(new Point(widget.ActualWidth / 2, 0));
+    var dpi = VisualTreeHelper.GetDpi(this);
+    var area = SystemParameters.WorkArea;
+    Left = Math.Clamp(anchor.X / dpi.DpiScaleX - ActualWidth / 2, area.Left + 8, area.Right - ActualWidth - 8);
+    Top = area.Bottom - ActualHeight - 8;
+}
+</script>
+    </doc-code>
+    <doc-note tone="risk"><strong>Risk</strong> The widget window is a child of the taskbar. Hover events through it worked for the tooltip, but a separate top-level window needs a test on a second monitor.</doc-note>
+  </doc-claim>
+</doc-claim>
+
+<!-- ═════ 3 ═════ -->
+<doc-claim>
+  <p>A reply stays “Unread” until the user looks at the session.</p>
+  <doc-machine name="read" caption="The plugin sets the flag. The widget only shows it.">
+<script type="text/plain">
+machine read initial working
+state working   # Claude writes the reply.
+state unread    # The reply is complete. The user did not see it.
+state read      final   # The user saw it after the last message.
+
+| working | unread | read |
+
+working -done->   unread : idle
+unread  -seen->   read   : seen
+working -watched-> read  : seen
+</script>
+  </doc-machine>
+
+  <doc-claim>
+    <p>A session is unread when its last message is newer than its “seen” time.</p>
+    <doc-schema id="board" lang="ts" diff title="board.json and seen/" caption="Green is new. The plugin writes both.">
+<script type="text/plain">
+ // ~/.my-air/taskbar/board.json
+ type BoardSession = {
+   id: string; title: string; project?: string
+   status: "NEEDS_INPUT" | "IDLE" | "WORKING"
+   waitingFor?: string
++  lastMessage: number   // epoch ms, for "3 min" and "finished 12 min ago"
++  unread: boolean       // IDLE and lastMessage > seen
+ }
++// ~/.my-air/seen/<sessionId>: one epoch ms number
++// One file per session, so the IDEs and the widget never write the same file.
++// No file yet: the plugin writes lastMessage, so old replies are not unread.
+</script>
+    </doc-schema>
+    <doc-ask id="readrule">
+      <p>What counts as “the user looked at the session”?</p>
+      <label><input type="radio" name="readrule" value="tab" checked> Its tab is selected in an active IDE window, or a flyout click <small>covers work in the IDE</small></label>
+      <label><input type="radio" name="readrule" value="flyout"> Only a click in the flyout <small>simple, but replies read in the IDE stay unread</small></label>
+    </doc-ask>
+    <div data-if="readrule=flyout"><doc-note tone="info">Then claim 3.2 goes: no IDE listener.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>The IDE marks a session seen when its tab gets focus.</p>
+    <doc-calls title="Seen" caption="Both the IDE and the widget write seen files.">
+<script type="text/plain">
+~ TabsSyncListener                             @ src/main/kotlin/dev/myair/TabsSync.kt:76
++   **selectionChanged**(event)                @ src/main/kotlin/dev/myair/TabsSync.kt:78   -- only while the IDE frame is active
++     **Seen.mark**(sessionId, now)            @ src/main/kotlin/dev/myair/Seen.kt:1
+~ ClaudeSessionsService.refresh()              @ src/main/kotlin/dev/myair/ClaudeSessionsService.kt:110
+~   boardSessions(sessions, live, seen)        @ src/main/kotlin/dev/myair/TaskbarBoard.kt:13
++   **Seen.read**()                            @ src/main/kotlin/dev/myair/Seen.kt:1
+~   ClaudeHomeWatcher(+ seen/)                 @ src/main/kotlin/dev/myair/ClaudeSessionsService.kt:65   -- a seen write updates the board
+
+~ BoardWatcher.Focus(id)                       @ taskbar/BoardWatcher.cs:93
++   **MarkSeen**(id)                           @ taskbar/BoardWatcher.cs:93   -- for sessions in a terminal, with no tab
+</script>
+    </doc-calls>
+    <doc-claim at="src/main/kotlin/dev/myair/TaskbarBoard.kt:13">
+      <p><b>TaskbarBoard.kt:13</b> · boardSessions()</p>
+      <doc-code src="src/main/kotlin/dev/myair/TaskbarBoard.kt" lines="13-25" hl="14"></doc-code>
+    </doc-claim>
+  </doc-claim>
+</doc-claim>
+
+<!-- ═════ 4 ═════ -->
+<doc-claim>
+  <p>The widget shows when an unread reply waits.</p>
+  <doc-mock frame="none" w="360" caption="Left: no unread reply. Right: one or more."><template>
+<div class="bar"><span class="w"><i style="background:#f5a623"></i>2<i style="background:#005fb8"></i>4</span><span class="ico"></span><span class="w" data-ref="dot"><i style="background:#f5a623"></i>2<i style="background:#005fb8"></i>4<span class="u"></span></span></div></template>
+    <doc-pin ref="dot" anchor="r" title="Blue dot in the corner"></doc-pin>
+  </doc-mock>
+  <doc-ask id="badge">
+    <p>How does the widget show unread replies?</p>
+    <label><input type="radio" name="badge" value="dot" checked> A blue dot in the corner <small>the width stays 40 px</small></label>
+    <label><input type="radio" name="badge" value="count"> A third count row <small>three rows in 48 px; small text</small></label>
+    <label><input type="radio" name="badge" value="none"> Nothing; only the flyout shows them</label>
+  </doc-ask>
+</doc-claim>
+
+<doc-claim aux="shared">
+  <p>Shared: the “seen” files and two new <code>board.json</code> fields.</p>
+  <doc-tree caption="One new folder in ~/.my-air.">
+<script type="text/plain">
+~/.my-air/
+  ~ taskbar/board.json   # + lastMessage, unread
+  + seen/                # one file per session id
+</script>
+  </doc-tree>
+</doc-claim>
+
+<doc-claim aux="scope">
+  <p>Not changing: autostart, the IDE tool window, the focus request format.</p>
+  <ul>
+    <li>No autostart. The user starts the widget.</li>
+    <li>The tool window and the list above the tree do not show the unread state.</li>
+    <li>Requests in <code>requests/&lt;pid&gt;/</code> keep the format <code>{"sessionId"}</code>.</li>
+  </ul>
+</doc-claim>
+
+</doc-plan>
+</main>
+</body></html>
