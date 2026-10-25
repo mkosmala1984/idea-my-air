@@ -101,7 +101,7 @@ class SessionTreeTest {
     }
 
     @Test
-    fun `new sessions go to the folder of the selected folder or session, and nowhere under sessions`() {
+    fun `a selected folder or session points into its folder, and into none under sessions`() {
         val root = foldersTree(structure, sessions, "")
         fun pathTo(vararg indices: Int) = TreePath(indices.fold(listOf(root)) { nodes, i -> nodes + nodes.last().getChildAt(i) as DefaultMutableTreeNode }.toTypedArray())
         assertEquals("fix", targetFolder(pathTo(0, 0)))

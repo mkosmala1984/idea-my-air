@@ -52,7 +52,7 @@ fun foldersTree(structure: SessionFolders, sessions: List<ClaudeSession>, query:
     return node(null, structure.folders.mapNotNull(::folderNode) + node(UnfiledSessions, projectNodes(places[null].orEmpty())))
 }
 
-/** The folder new sessions go to after [path] was selected: the nearest user folder above it, none under [UnfiledSessions]. */
+/** The folder [path] points into, for a new folder or a drop: the nearest user folder above it, none under [UnfiledSessions]. */
 fun targetFolder(path: TreePath): String? = path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>().lastOrNull()?.id
 
 /** A drop as it will happen: the [change], and where the tree shows it: [childIndex] -1 frames [path]'s row, otherwise a line before that child. */
