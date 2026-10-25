@@ -1,7 +1,7 @@
 package dev.myair.folders
 
 import com.google.gson.JsonParser
-import dev.myair.toJson
+import dev.myair.mcp.toJson
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
