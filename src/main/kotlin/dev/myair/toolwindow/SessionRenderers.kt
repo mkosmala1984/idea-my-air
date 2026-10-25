@@ -81,6 +81,8 @@ class SessionRenderer(
         tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean,
     ) {
         val node = value as DefaultMutableTreeNode
+        // clear() keeps the tooltip, and one renderer draws every row: only session rows set one.
+        toolTipText = null
         when (val item = node.userObject) {
             is Folder -> {
                 icon = if (item.project == null) AllIcons.Nodes.Folder else AllIcons.Nodes.Module
