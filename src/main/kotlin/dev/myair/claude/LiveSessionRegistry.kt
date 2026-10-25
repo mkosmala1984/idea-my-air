@@ -2,6 +2,7 @@ package dev.myair.claude
 
 import com.google.gson.JsonParser
 import java.nio.file.Path
+import java.time.Instant
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.readText
 
@@ -10,9 +11,9 @@ enum class SessionStatus { WORKING, NEEDS_INPUT, IDLE }
 /**
  * [pid] is the `claude` process running the session; it keeps its pid when `/clear` or `/resume` switch it to another
  * session. [entrypoint] is what started it, e.g. "cli" or "claude-desktop". [waitingFor] says what a
- * [SessionStatus.NEEDS_INPUT] session is blocked on, e.g. "dialog open".
+ * [SessionStatus.NEEDS_INPUT] session is blocked on, e.g. "dialog open". [since] is when [status] last changed.
  */
-data class LiveSession(val pid: Long, val entrypoint: String, val status: SessionStatus, val waitingFor: String?)
+data class LiveSession(val pid: Long, val entrypoint: String, val status: SessionStatus, val waitingFor: String?, val since: Instant)
 
 /**
  * Reads `~/.claude/sessions/<pid>.json`, which every running `claude` process keeps up to date.
@@ -28,7 +29,7 @@ class LiveSessionRegistry(
         val procStart = checkNotNull(o["procStart"]) { "no procStart in $file" }.asString.toLong()
         if (!isSameProcess(pid, procStart)) return@mapNotNull null
         // A starting `claude` writes its file once without a status, then again with `status` and `statusUpdatedAt`.
-        if (o["statusUpdatedAt"] == null) return@mapNotNull null
+        val since = o["statusUpdatedAt"]?.asLong ?: return@mapNotNull null
         val status = when (val s = checkNotNull(o["status"]) { "no status in $file" }.asString) {
             // `shell`: running a shell command; claude's own session list shows it as working, like `busy`.
             "busy", "shell" -> SessionStatus.WORKING
@@ -37,7 +38,7 @@ class LiveSessionRegistry(
             else -> error("unknown session status '$s' in $file")
         }
         val entrypoint = checkNotNull(o["entrypoint"]) { "no entrypoint in $file" }.asString
-        o["sessionId"].asString to LiveSession(pid, entrypoint, status, o["waitingFor"]?.asString)
+        o["sessionId"].asString to LiveSession(pid, entrypoint, status, o["waitingFor"]?.asString, Instant.ofEpochMilli(since))
     }.toMap()
 
     companion object {

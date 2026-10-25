@@ -20,7 +20,7 @@ class PinnedSessionsTest {
 
     private fun session(id: String, time: Long) = ClaudeSession(id, Path.of("/p"), "title $id", Instant.ofEpochMilli(time), emptyList(), emptyList())
 
-    private fun live(status: SessionStatus) = LiveSession(1, "cli", status, null)
+    private fun live(status: SessionStatus) = LiveSession(1, "cli", status, null, Instant.EPOCH)
 
     private fun ids(live: Map<String, LiveSession>, pins: Pins, list: List<ClaudeSession> = sessions) = pinnedSessions(list, live, pins).map { it.id }
 

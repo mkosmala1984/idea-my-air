@@ -41,5 +41,10 @@
             description="Switch to the window and tab of a Claude session open in any IDE">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
+    <action id="dev.myair.NextSessionNeedingMe" class="dev.myair.actions.NextSessionNeedingMeAction" text="Next Claude Session Needing Me"
+            description="Go to the next Claude session waiting for input or with an unread reply; again for the one after it">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+      <keyboard-shortcut keymap="$default" first-keystroke="alt shift K"/>
+    </action>
   </actions>
 </idea-plugin>

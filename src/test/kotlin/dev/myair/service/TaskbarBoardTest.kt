@@ -15,7 +15,7 @@ class TaskbarBoardTest {
     /** Newest first, as the scanner returns them. */
     private val sessions = (1..4).map { ClaudeSession("s$it", Path.of("/work/p$it"), "title s$it", Instant.ofEpochMilli(100L - it), emptyList(), emptyList()) }
 
-    private fun live(status: SessionStatus, waitingFor: String? = null) = LiveSession(1, "cli", status, waitingFor)
+    private fun live(status: SessionStatus, waitingFor: String? = null) = LiveSession(1, "cli", status, waitingFor, Instant.EPOCH)
 
     @Test
     fun `lists running sessions only, waiting for the user first, then idle, then working, newest first within a group`() {

@@ -26,7 +26,7 @@ class BriefTextTest {
 
     @Test
     fun `the tooltip shows what the session waits for, its goal, its tasks and the first prompt`() {
-        val waiting = LiveSession(1, "cli", SessionStatus.NEEDS_INPUT, "dialog open")
+        val waiting = LiveSession(1, "cli", SessionStatus.NEEDS_INPUT, "dialog open", Instant.EPOCH)
         assertEquals(
             listOf("Waiting for: dialog open", "Goal: Move AGC config", "✓ export", "▶ map", "○ e2e", "Asked: Migrate AGC"),
             tooltipLines(session, waiting),

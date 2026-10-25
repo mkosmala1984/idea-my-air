@@ -3,6 +3,7 @@ package dev.myair.claude
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import java.time.Instant
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -14,7 +15,7 @@ class LiveSessionRegistryTest {
     lateinit var dir: Path
 
     private fun entry(pid: Long, session: String, status: String, extra: String = "") = dir.resolve("$pid.json").writeText(
-        """{"pid":$pid,"sessionId":"$session","cwd":"E:\\x","procStart":"${pid * 10}","kind":"interactive","entrypoint":"cli",$extra"status":"$status","statusUpdatedAt":1}"""
+        """{"pid":$pid,"sessionId":"$session","cwd":"E:\\x","procStart":"${pid * 10}","kind":"interactive","entrypoint":"cli",$extra"status":"$status","statusUpdatedAt":${pid * 1000}}"""
     )
 
     @Test
@@ -28,10 +29,10 @@ class LiveSessionRegistryTest {
         val live = LiveSessionRegistry(dir) { pid, procStart -> pid in alive && procStart == pid * 10 }.read()
         assertEquals(
             mapOf(
-                "a" to LiveSession(1, "cli", SessionStatus.WORKING, null),
-                "b" to LiveSession(2, "cli", SessionStatus.NEEDS_INPUT, "dialog open"),
-                "c" to LiveSession(3, "cli", SessionStatus.IDLE, null),
-                "e" to LiveSession(5, "cli", SessionStatus.WORKING, null),
+                "a" to LiveSession(1, "cli", SessionStatus.WORKING, null, Instant.ofEpochMilli(1000)),
+                "b" to LiveSession(2, "cli", SessionStatus.NEEDS_INPUT, "dialog open", Instant.ofEpochMilli(2000)),
+                "c" to LiveSession(3, "cli", SessionStatus.IDLE, null, Instant.ofEpochMilli(3000)),
+                "e" to LiveSession(5, "cli", SessionStatus.WORKING, null, Instant.ofEpochMilli(5000)),
             ),
             live,
         )

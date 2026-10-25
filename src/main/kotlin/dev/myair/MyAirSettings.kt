@@ -50,6 +50,7 @@ class MyAirConfigurable : BoundConfigurable("My Air") {
         row {
             checkBox("Session briefs: let agents describe their goal and tasks (my_air_set_brief) and show them")
                 .bindSelected(MyAirSettings.getInstance().state::briefs)
+                .comment("Briefs show or hide at once. The IDE's MCP server lists its tools when the IDE starts, so the tool itself appears or goes away after a restart.")
         }
         onApply { ClaudeSessionsService.getInstance().refresh() }
     }
