@@ -44,7 +44,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
     data class Transcript(
         val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val prompts: List<String>,
         val changedFiles: List<String>, val lastMessage: Instant?, val brief: Brief?, val briefCalls: Map<String, BriefCall>,
-        val addedDirs: List<String>, val model: String?, val effort: String?,
+        val addedDirs: List<String>, val model: String?, val effort: String?, val artifacts: Map<String, Artifact>,
     ) {
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
         fun toSession(file: Path, desktopProject: Path? = null): ClaudeSession? {
@@ -54,11 +54,12 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             return ClaudeSession(
                 file.nameWithoutExtension, cwd, title, lastMessage, changedFiles.map(Path::of), prompts, brief, desktopProject ?: cwd,
                 desktop = desktopProject != null, addedDirs = addedDirs.map(Path::of).filter { it != cwd }, model = model, effort = effort,
+                artifacts = artifacts.values.toList(),
             )
         }
 
         companion object {
-            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList(), null, null)
+            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList(), null, null, emptyMap())
         }
     }
 
@@ -92,6 +93,9 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         private const val TOOL_RESULT = "\"type\":\"tool_result\""
 
         /** The attachment `claude` writes with the session's environment: cwd, worktree, the directories added to it. */
+        /** In the `toolUseResult` of an Artifact publish, which names the artifact's url, title and local file. */
+        private const val ARTIFACT = "\"artifact_id\":"
+
         private const val ENVIRONMENT = "\"attachment\":{\"type\":\"environment\",\"snapshot\":"
 
         fun parse(file: Path): ClaudeSession? = read(file, Transcript.EMPTY).toSession(file)
@@ -109,12 +113,18 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             var addedDirs = from.addedDirs
             var model = from.model
             var effort = from.effort
+            // A republished artifact keeps the position of its first publish.
+            val artifacts = LinkedHashMap(from.artifacts)
             val offset = forEachCompleteLine(file, from.offset) { line ->
                 // Outside the `when` below: the line also carries a cwd.
                 if (ENVIRONMENT in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
                     val snapshot = o.getAsJsonObject("attachment").getAsJsonObject("snapshot")
                     addedDirs = checkNotNull(snapshot.getAsJsonArray("additionalWorkingDirectories")) { "environment without additionalWorkingDirectories: $file" }
                         .map { it.asString }
+                }
+                if (ARTIFACT in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.getAsJsonObject("toolUseResult")?.let { r ->
+                    fun field(name: String) = checkNotNull(r[name]?.asString) { "artifact result without $name: $file" }
+                    artifacts[field("artifact_id")] = Artifact(field("artifact_id"), field("title"), field("url"), Path.of(field("path")))
                 }
                 if (MESSAGE_HINTS.any { it in line }) message(line)?.let {
                     lastMessage = it.time
@@ -145,7 +155,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                     }
                 }
             }
-            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs, model, effort)
+            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs, model, effort, artifacts)
         }
 
         /** A message of the main conversation: its [time], and for a reply of the model the [model] and [effort] it ran with. */
