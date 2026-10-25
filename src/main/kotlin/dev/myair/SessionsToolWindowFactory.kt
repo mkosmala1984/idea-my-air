@@ -90,11 +90,11 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
         isRootVisible = false
         // Double-click opens a session, so it must not also expand its changed files.
         toggleClickCount = 0
-        cellRenderer = SessionRenderer({ service.live[it.id] }, ::isSettled)
+        cellRenderer = SessionRenderer({ service.live[it.id] }, ::isSettled, ::isUnread)
         dropMode = DropMode.ON_OR_INSERT
     }
     private val pinned = TrailerList().apply {
-        cellRenderer = PinnedRenderer({ service.live[it.id] }, ::isSettled)
+        cellRenderer = PinnedRenderer({ service.live[it.id] }, ::isSettled, ::isUnread)
     }
     private val trailerButtons = listOf(SETTLE, PIN).map { mark ->
         TrailerButton(mark.icon, { it.id in mark.marked(service.pins) }) { session ->
@@ -296,6 +296,8 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
     private fun shownSessions() = service.pins.shown(service.sessions, showSettled)
 
     private fun isSettled(session: ClaudeSession) = session.id in service.pins.settled
+
+    private fun isUnread(session: ClaudeSession) = session.id in service.unread
 
     private fun canEditFolders() = foldersMode && service.foldersError == null
 
@@ -528,14 +530,19 @@ fun insertLine(tree: JTree, parent: TreePath, childIndex: Int): Rectangle {
 }
 
 /** A session's row in the tree and in the pinned list: title, status icon and label, settled mark, optionally its project; [SessionTrailer] adds the age. */
-private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: LiveSession?, settled: Boolean, showProject: Boolean) {
+private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: LiveSession?, settled: Boolean, unread: Boolean, showProject: Boolean) {
     // A session without a live process is greyed out, so the running ones stand out in a long list.
     append(item.title, if (live == null) SimpleTextAttributes.GRAYED_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
     live?.status?.let { icon = it.icon }
     when (live?.status) {
         SessionStatus.WORKING -> append("  working", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
         SessionStatus.NEEDS_INPUT -> append("  needs input" + (live.waitingFor?.let { ": $it" } ?: ""), SimpleTextAttributes.ERROR_ATTRIBUTES)
-        SessionStatus.IDLE -> append("  waiting for prompt", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+        SessionStatus.IDLE -> if (unread) {
+            icon = UNREAD_ICON
+            append("  unread reply", SimpleTextAttributes.LINK_ATTRIBUTES)
+        } else {
+            append("  waiting for prompt", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+        }
         null -> {}
     }
     if (settled) append("  settled", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
@@ -543,17 +550,19 @@ private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: Live
 }
 
 /** Sessions from every project, so each row names its project; a row without a process is there because it is pinned. */
-private class PinnedRenderer(private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean) :
-    ColoredListCellRenderer<ClaudeSession>() {
+private class PinnedRenderer(
+    private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
+) : ColoredListCellRenderer<ClaudeSession>() {
     override fun customizeCellRenderer(list: JList<out ClaudeSession>, value: ClaudeSession, index: Int, selected: Boolean, hasFocus: Boolean) {
         val live = liveOf(value)
-        appendSession(value, live, settled(value), showProject = true)
+        appendSession(value, live, settled(value), unread(value), showProject = true)
         if (live == null) icon = AllIcons.General.Pin_tab
     }
 }
 
-private class SessionRenderer(private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean) :
-    ColoredTreeCellRenderer() {
+private class SessionRenderer(
+    private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
+) : ColoredTreeCellRenderer() {
     override fun customizeCellRenderer(
         tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean,
     ) {
@@ -573,7 +582,7 @@ private class SessionRenderer(private val liveOf: (ClaudeSession) -> LiveSession
                 append("  $item", SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
             // In a user folder the project is no longer the parent node, so the row names it.
-            is ClaudeSession -> appendSession(item, liveOf(item), settled(item), showProject = (node.parent as DefaultMutableTreeNode).userObject is Folder)
+            is ClaudeSession -> appendSession(item, liveOf(item), settled(item), unread(item), showProject = (node.parent as DefaultMutableTreeNode).userObject is Folder)
             is ChangedFile -> {
                 icon = FileTypeManager.getInstance().getFileTypeByFileName(item.path.fileName.toString()).icon
                 // Files inside the session's directory read relative to it; anything else keeps its full path.

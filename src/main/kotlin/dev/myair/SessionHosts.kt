@@ -5,6 +5,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.wm.WindowManager
 import com.sun.jna.Native
 import com.sun.jna.platform.win32.User32
 import com.sun.jna.platform.win32.WinDef.HWND
@@ -34,6 +35,10 @@ object SessionHosts {
             sessionIds(file)?.let { OpenTab(it, (file as? ClaudeSessionVirtualFile)?.title ?: file.presentableName, project.name) }
         }
     }
+
+    /** Sessions whose tab is selected in a project window that is active now: what the user looks at. */
+    fun visibleSessions(): List<String> = ProjectManager.getInstance().openProjects.filter { WindowManager.getInstance().getFrame(it)?.isActive == true }
+        .flatMap { project -> FileEditorManager.getInstance(project).selectedFiles.flatMap { sessionIds(it).orEmpty() } }
 
     fun focus(tab: SessionTab) {
         ProjectUtil.focusProjectWindow(tab.project, true)
