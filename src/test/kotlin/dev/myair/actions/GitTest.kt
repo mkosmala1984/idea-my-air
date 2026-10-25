@@ -135,4 +135,10 @@ class GitTest {
     fun `state outside a repository is null`() {
         assertEquals(null, Git.state(dir.resolve("plain").createDirectories()))
     }
+
+    @Test
+    fun `state of a broken repository fails with git's message`() {
+        val broken = dir.resolve("broken").createDirectories().also { it.resolve(".git").writeText("gitdir: nowhere\n") }
+        assertContains(assertThrows<IllegalStateException> { Git.state(broken) }.message!!, "not a git repository")
+    }
 }
