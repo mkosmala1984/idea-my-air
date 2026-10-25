@@ -1,6 +1,9 @@
 package dev.myair
 
 import com.google.gson.Gson
+import dev.myair.claude.ClaudeSession
+import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
 
 /**
  * A running session as the taskbar widget (`taskbar/`) shows it; [project] and [lastMessage] (epoch ms) are null while its

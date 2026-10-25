@@ -1,6 +1,7 @@
 package dev.myair
 
 import com.google.gson.GsonBuilder
+import dev.myair.claude.ClaudeSession
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime

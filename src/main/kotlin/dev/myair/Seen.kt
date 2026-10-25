@@ -1,5 +1,7 @@
 package dev.myair
 
+import dev.myair.claude.ClaudeSession
+import dev.myair.claude.LiveSession
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.listDirectoryEntries

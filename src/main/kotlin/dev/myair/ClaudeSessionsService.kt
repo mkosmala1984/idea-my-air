@@ -8,6 +8,11 @@ import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.Disposer
 import com.intellij.util.concurrency.AppExecutorUtil
+import dev.myair.claude.ClaudeHomeWatcher
+import dev.myair.claude.ClaudeSession
+import dev.myair.claude.ClaudeSessionScanner
+import dev.myair.claude.LiveSession
+import dev.myair.claude.LiveSessionRegistry
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createDirectories

@@ -3,6 +3,9 @@ package dev.myair
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
 import com.google.gson.JsonParser
+import dev.myair.claude.ClaudeSession
+import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists

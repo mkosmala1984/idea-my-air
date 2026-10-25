@@ -1,5 +1,6 @@
 package dev.myair
 
+import dev.myair.claude.ClaudeSession
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import java.time.Instant

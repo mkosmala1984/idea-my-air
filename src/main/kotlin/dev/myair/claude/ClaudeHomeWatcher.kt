@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.claude
 
 import java.io.Closeable
 import java.nio.file.ClosedWatchServiceException
