@@ -29,6 +29,14 @@ class TaskbarBoardTest {
     }
 
     @Test
+    fun `a session in a worktree is named after the main checkout`() {
+        val worktree = ClaudeSession("w", Path.of("/work/my-air/.claude/worktrees/552d9159"), "t", Instant.ofEpochMilli(1), emptyList(), emptyList(), project = Path.of("/work/my-air"))
+        val board = boardSessions(listOf(worktree), mapOf("w" to live(SessionStatus.WORKING)), emptyMap())
+        assertEquals(listOf("my-air"), board.map { it.project })
+        assertEquals(listOf("my-air"), recentSessions(listOf(worktree), emptyList(), emptySet()).map { it.project })
+    }
+
+    @Test
     fun `a process whose transcript is not scanned yet is shown as a new session without a project, last in its group`() {
         val board = boardSessions(sessions, mapOf("fresh" to live(SessionStatus.NEEDS_INPUT, "dialog open"), "s3" to live(SessionStatus.NEEDS_INPUT)), emptyMap())
         assertEquals(

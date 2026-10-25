@@ -58,7 +58,7 @@ public partial class Bubble : Window
             Dismiss();
             return;
         }
-        Items.ItemsSource = Popup.Items(new BoardFile(_sessions, []), [Group.NeedsInput, Group.Unread], Resources);
+        Items.ItemsSource = Popup.Items(new BoardFile(_sessions, []), [Group.NeedsInput, Group.Unread], Resources, projectInTitle: true);
         if (IsVisible) return;
         // Shown transparent and placed before the first frame, so it never flashes where it was last.
         Opacity = 0;

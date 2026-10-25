@@ -7,9 +7,10 @@ import dev.myair.claude.SessionStatus
 import dev.myair.store.SeenStore
 
 /**
- * A running session as the taskbar widget (`taskbar/`) shows it; [project] and [lastMessage] (epoch ms) are null while its
- * transcript is not scanned yet. [unread]: idle, with a message after the user last looked at it. [activity]: the task in
- * progress of its brief, else the brief's goal.
+ * A running session as the taskbar widget (`taskbar/`) shows it. [project] names [ClaudeSession.project], the main checkout
+ * for a session in one of its worktrees; it and [lastMessage] (epoch ms) are null while the transcript is not scanned yet.
+ * [unread]: idle, with a message after the user last looked at it. [activity]: the task in progress of its brief, else the
+ * brief's goal.
  */
 data class BoardSession(
     val id: String, val title: String, val project: String?, val status: SessionStatus, val waitingFor: String?,
@@ -26,7 +27,7 @@ fun boardSessions(sessions: List<ClaudeSession>, live: Map<String, LiveSession>,
         val at = s.lastMessage.toEpochMilli()
         live[s.id]?.let {
             val unread = it.status == SessionStatus.IDLE && seen[s.id]?.let { seenAt -> at > seenAt } == true
-            BoardSession(s.id, s.title, s.cwd.fileName.toString(), it.status, it.waitingFor, at, unread, s.brief?.current?.content ?: s.brief?.goal)
+            BoardSession(s.id, s.title, s.project.fileName.toString(), it.status, it.waitingFor, at, unread, s.brief?.current?.content ?: s.brief?.goal)
         }
     }
     val unscanned = (live.keys - sessions.map { it.id }.toSet()).map { id ->
@@ -54,7 +55,7 @@ const val RECENT = 5
 fun recentSessions(sessions: List<ClaudeSession>, board: List<BoardSession>, settled: Set<String>): List<RecentSession> {
     val grouped = board.filter { it.status != SessionStatus.IDLE || it.unread }.map { it.id }.toSet()
     return sessions.asSequence().filter { it.id !in grouped && it.id !in settled }.take(RECENT)
-        .map { RecentSession(it.id, it.title, it.cwd.fileName.toString(), it.lastMessage.toEpochMilli()) }.toList()
+        .map { RecentSession(it.id, it.title, it.project.fileName.toString(), it.lastMessage.toEpochMilli()) }.toList()
 }
 
 /** The file the widget reads; status names are the enum constants, a null field is left out. */
