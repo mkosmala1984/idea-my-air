@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.service
 
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
@@ -31,7 +31,7 @@ class TaskbarBoardTest {
         assertEquals(
             listOf(
                 BoardSession("s3", "title s3", "p3", SessionStatus.NEEDS_INPUT, null, 97, false),
-                BoardSession("fresh", ClaudeSessionsService.NEW_SESSION_TITLE, null, SessionStatus.NEEDS_INPUT, "dialog open", null, false),
+                BoardSession("fresh", NEW_SESSION_TITLE, null, SessionStatus.NEEDS_INPUT, "dialog open", null, false),
             ),
             board,
         )

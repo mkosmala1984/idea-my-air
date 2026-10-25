@@ -5,10 +5,11 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
-import dev.myair.ClaudeSessionsService
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.folders.ChangeSource
+import dev.myair.service.ClaudeSessionsService
+import dev.myair.service.NEW_SESSION_TITLE
 import dev.myair.tabs.SessionHosts
 import dev.myair.tabs.TabsSync
 import java.nio.file.Path
@@ -52,7 +53,7 @@ object ClaudeSessionOpener {
     }
 
     fun startNew(project: Project, cwd: Path = projectBase(project), id: String = UUID.randomUUID().toString()) {
-        openTab(project, ClaudeSessionVirtualFile(id, cwd, ClaudeSessionsService.NEW_SESSION_TITLE, listOf("--session-id", id)))
+        openTab(project, ClaudeSessionVirtualFile(id, cwd, NEW_SESSION_TITLE, listOf("--session-id", id)))
         val service = ClaudeSessionsService.getInstance()
         val target = project.service<FolderTarget>().folderId
         if (target != null && service.foldersError == null) service.updateFolders(ChangeSource.AUTO) { it.assign(id, target) }

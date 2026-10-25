@@ -1,9 +1,9 @@
 package dev.myair.toolwindow
 
-import dev.myair.ClaudeSessionsService
 import dev.myair.claude.ClaudeSession
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.Folder
+import dev.myair.service.ClaudeSessionsService
 import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.Transferable
 import java.nio.file.Path

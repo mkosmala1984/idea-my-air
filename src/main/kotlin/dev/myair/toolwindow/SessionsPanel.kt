@@ -38,11 +38,11 @@ import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.StatusText
 import com.intellij.util.ui.tree.TreeUtil
-import dev.myair.ClaudeSessionsService
 import dev.myair.claude.ClaudeSession
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.FolderTarget
 import dev.myair.folders.Folder
+import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.pinnedSessions
 import java.awt.BorderLayout
 import java.awt.CardLayout

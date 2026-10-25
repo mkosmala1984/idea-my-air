@@ -1,11 +1,9 @@
-package dev.myair
+package dev.myair.service
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
-import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
-import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.Disposer
 import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.claude.ClaudeHomeWatcher
@@ -13,23 +11,15 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.claude.ClaudeSessionScanner
 import dev.myair.claude.LiveSession
 import dev.myair.claude.LiveSessionRegistry
-import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.StructureHistory
 import dev.myair.folders.StructureStore
 import dev.myair.store.PinStore
 import dev.myair.store.Pins
-import dev.myair.store.SeenStore
-import dev.myair.store.firstSight
-import dev.myair.store.newToUser
 import dev.myair.store.pinnedSessions
-import dev.myair.store.writeAtomically
-import dev.myair.tabs.SessionHosts
-import dev.myair.tabs.TabsSync
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
-import kotlin.io.path.createDirectories
 
 /**
  * The one watcher over `~/.claude` and `~/.my-air`, shared by every project: session list, live statuses, the session each
@@ -42,14 +32,7 @@ class ClaudeSessionsService : Disposable {
     private val registry = LiveSessionRegistry(claudeHome.resolve("sessions"))
     private val structure = StructureStore(Path.of(System.getProperty("user.home"), ".my-air", "structure.json"))
     private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
-
-    // In a directory of its own: the watcher above sees `~/.my-air`, and every IDE would rescan on each write.
-    private val boardFile = structure.file.resolveSibling("taskbar").createDirectories().resolve("board.json")
-
-    /** What this IDE last wrote to [boardFile]; folder, pin and title changes refresh too, but leave the board as it is. */
-    private var boardText: String? = null
-
-    private val seenStore = SeenStore(structure.file.resolveSibling("seen"))
+    private val board = BoardWriter(structure.file.parent)
 
     /** False until the first refresh lands; the first scan reads every transcript and takes seconds. */
     var loaded = false
@@ -87,7 +70,7 @@ class ClaudeSessionsService : Disposable {
     private val refresher = AppExecutorUtil.createBoundedApplicationPoolExecutor("Claude sessions refresh", 1)
 
     // File events drive refreshes; the 60 s rescan covers events the OS dropped, as Air's REREAD_INTERVAL does.
-    private val watcher = ClaudeHomeWatcher(listOf(claudeHome.resolve("sessions"), structure.file.parent, seenStore.dir), claudeHome.resolve("projects")) { refresh() }
+    private val watcher = ClaudeHomeWatcher(listOf(claudeHome.resolve("sessions"), structure.file.parent, board.seenStore.dir), claudeHome.resolve("projects")) { refresh() }
     private val safetyNet = AppExecutorUtil.getAppScheduledExecutorService().scheduleWithFixedDelay(::refresh, 60, 60, TimeUnit.SECONDS)
 
     init {
@@ -144,24 +127,10 @@ class ClaudeSessionsService : Disposable {
         listeners.forEach { it() }
     }
 
-    /**
-     * Marks seen the sessions met for the first time and those whose tab the user looks at now, then writes the board.
-     * Every IDE writes the same content, derived from the same files, so it needs no single owner. Returns whether [unread]
-     * changed.
-     */
+    /** Writes the board ([BoardWriter.update]); returns whether [unread] changed. */
     private fun updateBoard(sessions: List<ClaudeSession>, live: Map<String, LiveSession>, settled: Set<String>): Boolean {
-        val seen = seenStore.read()
-        val now = System.currentTimeMillis()
-        val marks = firstSight(sessions, live, seen) + newToUser(SessionHosts.visibleSessions(), sessions, seen).associateWith { now }
-        marks.forEach { (id, at) -> seenStore.mark(id, at) }
-        val running = boardSessions(sessions, live, seen + marks)
-        val board = boardJson(running, recentSessions(sessions, running, settled))
-        if (board != boardText) {
-            writeAtomically(boardFile, board)
-            boardText = board
-        }
         val before = unread
-        unread = running.filter { it.unread }.map { it.id }.toSet()
+        unread = board.update(sessions, live, settled)
         return unread != before
     }
 
@@ -182,27 +151,7 @@ class ClaudeSessionsService : Disposable {
 
     private fun retargetTabs() {
         val titles = sessions.associate { it.id to it.title }
-        var changed = false
-        val switched = ArrayList<Pair<String, String>>()
-        for (project in ProjectManager.getInstance().openProjects) {
-            val editors = FileEditorManagerEx.getInstanceEx(project)
-            for (file in editors.openFiles.filterIsInstance<ClaudeSessionVirtualFile>()) {
-                val (sessionId, title) = retarget(file.sessionId, file.title, file.pid, live, titles)
-                // By pid rather than session id: another process may run the same session ("Open Anyway").
-                val status = live.values.firstOrNull { it.pid == file.pid }?.status
-                val unread = sessionId in this.unread
-                if (sessionId == file.sessionId && title == file.title && status == file.status && unread == file.unread) continue
-                if (sessionId != file.sessionId) switched += file.sessionId to sessionId
-                // Other IDEs list tabs by session and title only, so a status change alone is not published.
-                if (sessionId != file.sessionId || title != file.title) changed = true
-                file.sessionId = sessionId
-                file.title = title
-                file.status = status
-                file.unread = unread
-                editors.updateFilePresentation(file)
-            }
-        }
-        if (changed) TabsSync.getInstance().publish()
+        val switched = retargetOpenTabs(live, titles, unread)
         if (switched.isNotEmpty() && foldersError == null) {
             updateFolders(ChangeSource.AUTO) { switched.fold(it) { folders, (from, to) -> folders.carryOver(from, to, titles.keys) } }
         }
@@ -215,16 +164,5 @@ class ClaudeSessionsService : Disposable {
 
     companion object {
         fun getInstance(): ClaudeSessionsService = ApplicationManager.getApplication().getService(ClaudeSessionsService::class.java)
-
-        /**
-         * The session and title a tab running process [pid] shows now. `/clear` and `/resume` keep the process but switch its
-         * session, which the registry reports under the same pid. A process not (or no longer) registered keeps its session.
-         */
-        fun retarget(sessionId: String, title: String, pid: Long?, live: Map<String, LiveSession>, titles: Map<String, String>): Pair<String, String> {
-            val current = live.entries.firstOrNull { it.value.pid == pid }?.key ?: sessionId
-            return current to (titles[current] ?: if (current == sessionId) title else NEW_SESSION_TITLE)
-        }
-
-        const val NEW_SESSION_TITLE = "New session"
     }
 }

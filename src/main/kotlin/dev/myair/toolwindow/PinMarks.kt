@@ -7,8 +7,8 @@ import com.intellij.openapi.actionSystem.KeepPopupOnPerform
 import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.project.DumbAware
 import com.intellij.ui.components.JBList
-import dev.myair.ClaudeSessionsService
 import dev.myair.claude.ClaudeSession
+import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.Pins
 import java.awt.Graphics
 import javax.swing.Icon
