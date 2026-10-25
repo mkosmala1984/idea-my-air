@@ -51,6 +51,6 @@ class MyAirConfigurable : BoundConfigurable("My Air") {
             checkBox("Session briefs: let agents describe their goal and tasks (my_air_set_brief) and show them")
                 .bindSelected(MyAirSettings.getInstance().state::briefs)
         }
-        onApply { ClaudeSessionsService.getInstance().settingsChanged() }
+        onApply { ClaudeSessionsService.getInstance().refresh() }
     }
 }

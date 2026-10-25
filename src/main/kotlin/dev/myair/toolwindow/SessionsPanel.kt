@@ -54,6 +54,7 @@ import java.awt.event.MouseEvent
 import javax.swing.DropMode
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.ToolTipManager
 import javax.swing.Timer
 import javax.swing.event.DocumentEvent
 import javax.swing.tree.DefaultMutableTreeNode
@@ -88,6 +89,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private val top = JPanel(CardLayout())
 
     init {
+        // Both take their tooltips from the renderer, which sets one per session row.
+        listOf(tree, pinned).forEach(ToolTipManager.sharedInstance()::registerComponent)
         tree.transferHandler = FolderDrop(tree, service, ::canEditFolders)
         tree.trailer = SessionTrailer(
             tree, { tree.getClosestRowForLocation(it.x, it.y) }, tree::getRowBounds,
@@ -284,6 +287,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val path = tree.selectionPath ?: return false
         when (val item = (path.lastPathComponent as DefaultMutableTreeNode).userObject) {
             is ClaudeSession -> ClaudeSessionOpener.open(project, item)
+            is BriefGoal -> ClaudeSessionOpener.open(project, item.session)
+            is BriefTaskRow -> ClaudeSessionOpener.open(project, item.session)
             is ChangedFile -> {
                 val file = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(item.path)
                 if (file == null) Messages.showErrorDialog(project, "File no longer exists:\n${item.path}", "Cannot Open File")

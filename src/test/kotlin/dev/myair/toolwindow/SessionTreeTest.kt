@@ -1,6 +1,9 @@
 package dev.myair.toolwindow
 
+import dev.myair.claude.Brief
+import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
+import dev.myair.claude.TaskStatus
 import dev.myair.folders.Folder
 import dev.myair.folders.SessionFolders
 import org.junit.jupiter.api.Test
@@ -32,6 +35,19 @@ class SessionTreeTest {
     fun `filed sessions sit in their folder newest first, the rest under sessions, missing ones are not shown`() {
         val root = foldersTree(structure, sessions, "")
         assertEquals("rtm(fix, s3, s1), empty, sessions(${Path.of("/tf")}(s2))", shape(root))
+    }
+
+    @Test
+    fun `a session's brief comes first among its children, goal then tasks, then its changed files`() {
+        val briefed = session("s1", "/rtm", 1).copy(
+            changedFiles = listOf(Path.of("/rtm/a.kt")),
+            brief = Brief("Migrate", listOf(BriefTask("export", TaskStatus.COMPLETED), BriefTask("map", TaskStatus.IN_PROGRESS))),
+        )
+        val goalless = session("s2", "/rtm", 0).copy(brief = Brief(null, listOf(BriefTask("run", TaskStatus.PENDING))))
+        assertEquals(
+            "${Path.of("/rtm")}(s1(goal s1, task s1 0, task s1 1, ${Path.of("/rtm/a.kt")}), s2(task s2 0))",
+            shape(projectsTree(listOf(briefed, goalless))),
+        )
     }
 
     @Test

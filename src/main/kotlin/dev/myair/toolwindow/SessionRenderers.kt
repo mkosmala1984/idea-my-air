@@ -6,9 +6,13 @@ import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
+import com.intellij.openapi.util.text.StringUtil
+import dev.myair.claude.Brief
+import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
+import dev.myair.claude.TaskStatus
 import dev.myair.editor.UNREAD_ICON
 import dev.myair.editor.icon
 import dev.myair.folders.Folder
@@ -17,11 +21,33 @@ import javax.swing.JList
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
 
+/** "2/5 · task in progress", "2/5" with none in progress, null for a brief without tasks. */
+fun briefLabel(brief: Brief?): String? =
+    brief?.takeIf { it.tasks.isNotEmpty() }?.let { "${it.done}/${it.tasks.size}" + (it.current?.let { task -> " · ${task.content}" } ?: "") }
+
+private val TaskStatus.mark get() = when (this) {
+    TaskStatus.COMPLETED -> "✓"
+    TaskStatus.IN_PROGRESS -> "▶"
+    TaskStatus.PENDING -> "○"
+}
+
+fun BriefTask.line() = "${status.mark} $content"
+
+/** A session row's tooltip: what it waits for, its brief, and the first human prompt. */
+fun tooltipLines(session: ClaudeSession, live: LiveSession?): List<String> = listOfNotNull(
+    live?.takeIf { it.status == SessionStatus.NEEDS_INPUT }?.waitingFor?.let { "Waiting for: $it" },
+    session.brief?.goal?.let { "Goal: $it" },
+) + session.brief?.tasks.orEmpty().map { it.line() } + listOfNotNull(session.prompts.firstOrNull()?.lineSequence()?.first()?.take(PROMPT_CHARS)?.let { "Asked: $it" })
+
+private const val PROMPT_CHARS = 200
+
 /** A session's row in the tree and in the pinned list: title, status icon and label, settled mark, optionally its project; [SessionTrailer] adds the age. */
 private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: LiveSession?, settled: Boolean, unread: Boolean, showProject: Boolean) {
     // A session without a live process is greyed out, so the running ones stand out in a long list.
     append(item.title, if (live == null) SimpleTextAttributes.GRAYED_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
+    toolTipText = tooltipLines(item, live).takeIf { it.isNotEmpty() }?.joinToString("<br>", "<html>", "</html>") { StringUtil.escapeXmlEntities(it) }
     live?.status?.let { icon = it.icon }
+    briefLabel(item.brief)?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
     when (live?.status) {
         SessionStatus.WORKING -> append("  working", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
         SessionStatus.NEEDS_INPUT -> append("  needs input" + (live.waitingFor?.let { ": $it" } ?: ""), SimpleTextAttributes.ERROR_ATTRIBUTES)
@@ -75,6 +101,15 @@ class SessionRenderer(
                 item, liveOf(item), settled(item), unread(item),
                 showProject = ((node.parent as DefaultMutableTreeNode).userObject as? Folder)?.let { it.project != item.cwd.toString() } ?: false,
             )
+            is BriefGoal -> {
+                icon = AllIcons.Actions.IntentionBulb
+                append(item.text)
+            }
+            is BriefTaskRow -> append(item.task.line(), when (item.task.status) {
+                TaskStatus.COMPLETED -> SimpleTextAttributes.GRAYED_ATTRIBUTES
+                TaskStatus.IN_PROGRESS -> SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
+                TaskStatus.PENDING -> SimpleTextAttributes.REGULAR_ATTRIBUTES
+            })
             is ChangedFile -> {
                 icon = FileTypeManager.getInstance().getFileTypeByFileName(item.path.fileName.toString()).icon
                 // Files inside the session's directory read relative to it; anything else keeps its full path.
