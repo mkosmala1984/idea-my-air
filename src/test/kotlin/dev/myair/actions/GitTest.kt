@@ -107,4 +107,32 @@ class GitTest {
         repo.resolve(".env").writeText("KEY=1")
         assertEquals(emptyList(), Git.includedFiles(repo))
     }
+
+    @Test
+    fun `state of a repository names its branch and counts uncommitted lines`() {
+        val repo = init("changed")
+        repo.resolve("a.txt").writeText("1\n2\n3\n")
+        git(repo, "add", "a.txt")
+        git(repo, "commit", "-m", "a")
+        repo.resolve("a.txt").writeText("1\nX\n3\n4\n5\n")
+        assertEquals(GitState("main", 3, 1), Git.state(repo))
+    }
+
+    @Test
+    fun `state of a detached head names its commit`() {
+        val repo = init("detached")
+        git(repo, "checkout", "--detach")
+        assertEquals(GitState("detached at ${git(repo, "rev-parse", "--short=7", "HEAD")}", 0, 0), Git.state(repo))
+    }
+
+    @Test
+    fun `state of a repository without commits is its branch with no changes`() {
+        val repo = dir.resolve("unborn").createDirectories().also { git(it, "init", "-b", "main") }
+        assertEquals(GitState("main", 0, 0), Git.state(repo))
+    }
+
+    @Test
+    fun `state outside a repository is null`() {
+        assertEquals(null, Git.state(dir.resolve("plain").createDirectories()))
+    }
 }
