@@ -24,6 +24,8 @@ import dev.myair.store.firstSight
 import dev.myair.store.newToUser
 import dev.myair.store.pinnedSessions
 import dev.myair.store.writeAtomically
+import dev.myair.tabs.SessionHosts
+import dev.myair.tabs.TabsSync
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createDirectories

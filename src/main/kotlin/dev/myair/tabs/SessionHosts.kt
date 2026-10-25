@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.tabs
 
 import com.intellij.ide.impl.ProjectUtil
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -13,6 +13,7 @@ import com.sun.jna.platform.win32.WinUser
 import com.sun.jna.ptr.IntByReference
 import com.sun.jna.win32.StdCallLibrary
 import com.sun.jna.win32.W32APIOptions
+import dev.myair.ClaudeSessionVirtualFile
 import dev.myair.store.OpenTab
 import java.nio.file.Path
 

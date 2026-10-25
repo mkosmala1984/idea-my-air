@@ -16,15 +16,15 @@
     <fileIconProvider order="first" implementation="dev.myair.ClaudeSessionFileIconProvider"/>
     <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>
     <editorTabTitleProvider implementation="dev.myair.ClaudeSessionTabTitleProvider"/>
-    <postStartupActivity implementation="dev.myair.TabsSyncStartup"/>
+    <postStartupActivity implementation="dev.myair.tabs.TabsSyncStartup"/>
   </extensions>
 
   <applicationListeners>
-    <listener class="dev.myair.SeenOnActivation" topic="com.intellij.openapi.application.ApplicationActivationListener"/>
+    <listener class="dev.myair.tabs.SeenOnActivation" topic="com.intellij.openapi.application.ApplicationActivationListener"/>
   </applicationListeners>
 
   <projectListeners>
-    <listener class="dev.myair.TabsSyncListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    <listener class="dev.myair.tabs.TabsSyncListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
   </projectListeners>
 
   <actions>

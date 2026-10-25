@@ -6,6 +6,7 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import dev.myair.store.IdeTabs
 import dev.myair.store.OpenTab
+import dev.myair.tabs.TabsSync
 
 /** Lists the session tabs of every IDE running this plugin and brings the chosen one to the front. */
 class FocusClaudeSessionAction : DumbAwareAction() {
