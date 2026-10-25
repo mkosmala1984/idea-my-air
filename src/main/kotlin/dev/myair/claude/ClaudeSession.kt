@@ -9,6 +9,7 @@ import java.time.Instant
  */
 data class ClaudeSession(
     val id: String, val cwd: Path, val title: String, val lastMessage: Instant, val changedFiles: List<Path>, val prompts: List<String>,
+    val brief: Brief? = null,
 ) {
     /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
     fun matches(query: String): Boolean =
