@@ -10,6 +10,7 @@ import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.claude.ClaudeHomeWatcher
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.ClaudeSessionScanner
+import dev.myair.claude.DesktopSessionReader
 import dev.myair.claude.LiveSession
 import dev.myair.claude.LiveSessionRegistry
 import dev.myair.folders.ChangeSource
@@ -31,6 +32,7 @@ class ClaudeSessionsService : Disposable {
     private val claudeHome = Path.of(System.getProperty("user.home"), ".claude")
     private val scanner = ClaudeSessionScanner(claudeHome.resolve("projects"))
     private val registry = LiveSessionRegistry(claudeHome.resolve("sessions"))
+    private val desktop = DesktopSessionReader(Path.of(checkNotNull(System.getenv("LOCALAPPDATA")) { "LOCALAPPDATA is not set" }, "Claude-Data"))
     private val structure = StructureStore(Path.of(System.getProperty("user.home"), ".my-air", "structure.json"))
     private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
     private val board = BoardWriter(structure.file.parent)
@@ -90,7 +92,7 @@ class ClaudeSessionsService : Disposable {
             val (scanned, current) = try {
                 // With briefs turned off nothing downstream sees them: rows, tree, tooltips and the board.
                 val briefs = MyAirSettings.getInstance().briefs
-                inProjects(scanner.scan().map { if (briefs) it else it.copy(brief = null) }) to registry.read()
+                inProjects(scanner.scan(desktop.read()).map { if (briefs) it else it.copy(brief = null) }) to registry.read()
             } catch (e: Throwable) {
                 thisLogger().error("Claude session refresh failed", e)
                 return@execute

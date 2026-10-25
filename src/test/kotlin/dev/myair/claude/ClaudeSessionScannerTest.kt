@@ -52,6 +52,30 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
+    fun `a session Claude Desktop runs is marked, and the folder Desktop started it in is its project, else its cwd`() {
+        write("s1", user("\"prompt\""))
+        val scanner = ClaudeSessionScanner(dir)
+        val main = Path.of("E:\\dev\\projects\\main")
+        assertEquals(main to true, scanner.scan(mapOf("s1" to main)).single().let { it.project to it.desktop })
+        assertEquals(Path.of("E:\\dev\\projects\\rtm-cloud") to false, scanner.scan().single().let { it.project to it.desktop })
+    }
+
+    private fun environment(vararg dirs: String, sidechain: Boolean = false) =
+        """{"parentUuid":"p","isSidechain":$sidechain,"attachment":{"type":"environment","snapshot":{"workingDirectory":"E:\\dev\\projects\\rtm-cloud",""" +
+            """"additionalWorkingDirectories":[${dirs.joinToString(",") { "\"${it.replace("\\", "\\\\")}\"" }}]}},"type":"attachment",$cwdLine,"sessionId":"s1"}"""
+
+    @Test
+    fun `added directories come from the latest environment snapshot of the main conversation, without the cwd`() {
+        val file = write("s1", user("\"prompt\""), environment("E:\\dev\\projects\\rtm-cloud", "E:\\plans"))
+        val scanner = ClaudeSessionScanner(dir)
+        assertEquals(listOf(Path.of("E:\\plans")), scanner.scan().single().addedDirs)
+        file.appendText(environment("E:\\other", sidechain = true) + "\n")
+        assertEquals(listOf(Path.of("E:\\plans")), scanner.scan().single().addedDirs)
+        file.appendText(environment() + "\n")
+        assertEquals(emptyList(), scanner.scan().single().addedDirs)
+    }
+
+    @Test
     fun `first human prompt is the title, skipping meta, harness blocks and tool results`() {
         val s = parse(write("s1",
             user("\"<command-name>/foo</command-name>\""),

@@ -313,6 +313,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             is ClaudeSession -> ClaudeSessionOpener.open(project, item)
             is BriefGoal -> ClaudeSessionOpener.open(project, item.session)
             is BriefTaskRow -> ClaudeSessionOpener.open(project, item.session)
+            is AddedDir -> ClaudeSessionOpener.open(project, item.session)
             is ChangedFile -> {
                 val file = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(item.path)
                 if (file == null) Messages.showErrorDialog(project, "File no longer exists:\n${item.path}", "Cannot Open File")

@@ -24,6 +24,11 @@ class BriefTaskRow(val session: ClaudeSession, val index: Int, val task: BriefTa
     override fun toString() = "task ${session.id} $index"
 }
 
+/** A directory [session] may use besides its cwd, below its brief. */
+class AddedDir(val session: ClaudeSession, val path: Path) {
+    override fun toString() = "dir ${session.id} $path"
+}
+
 /** The fixed last folder of Folders mode: every session not filed in a user folder, grouped by project. */
 object UnfiledSessions {
     override fun toString() = "sessions"
@@ -110,6 +115,7 @@ private fun sessionNode(session: ClaudeSession) = node(
     session,
     listOfNotNull(session.brief?.goal?.let { node(BriefGoal(session, it)) }) +
         session.brief?.tasks.orEmpty().mapIndexed { i, task -> node(BriefTaskRow(session, i, task)) } +
+        session.addedDirs.map { node(AddedDir(session, it)) } +
         session.changedFiles.map { node(ChangedFile(it, session.cwd)) },
 )
 

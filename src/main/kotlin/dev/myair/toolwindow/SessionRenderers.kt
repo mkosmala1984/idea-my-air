@@ -60,6 +60,7 @@ private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: Live
         null -> {}
     }
     if (settled) append("  settled", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+    if (item.desktop) append("  Desktop", SimpleTextAttributes.GRAYED_ATTRIBUTES)
     if (showProject) append("  ${item.cwd.fileName ?: item.cwd}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
 }
 
@@ -112,6 +113,10 @@ class SessionRenderer(
                 TaskStatus.IN_PROGRESS -> SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
                 TaskStatus.PENDING -> SimpleTextAttributes.REGULAR_ATTRIBUTES
             })
+            is AddedDir -> {
+                icon = AllIcons.Nodes.Folder
+                append(item.path.toString(), SimpleTextAttributes.GRAYED_ATTRIBUTES)
+            }
             is ChangedFile -> {
                 icon = FileTypeManager.getInstance().getFileTypeByFileName(item.path.fileName.toString()).icon
                 // Files inside the session's directory read relative to it; anything else keeps its full path.
