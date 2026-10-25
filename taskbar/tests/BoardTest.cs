@@ -9,12 +9,12 @@ public class BoardTest
     public void Reads_the_board_the_plugin_writes()
     {
         // Verbatim from TaskbarBoardTest.kt, which checks that the plugin writes exactly this.
-        const string json = """{"sessions":[{"id":"a","title":"Fix tray","project":"my-air","status":"IDLE","lastMessage":1700000000000,"unread":true},""" +
+        const string json = """{"sessions":[{"id":"a","title":"Fix tray","project":"my-air","status":"IDLE","lastMessage":1700000000000,"unread":true,"activity":"map statuses"},""" +
                             """{"id":"b","title":"New session","status":"NEEDS_INPUT","waitingFor":"permission","unread":false}],"recent":""" +
                             """[{"id":"c","title":"Old work","project":"tulip","lastMessage":1690000000000}]}""";
         Assert.Equal(
             [
-                new BoardSession("a", "Fix tray", SessionStatus.Idle, true, "my-air", LastMessage: 1700000000000),
+                new BoardSession("a", "Fix tray", SessionStatus.Idle, true, "my-air", LastMessage: 1700000000000, Activity: "map statuses"),
                 new BoardSession("b", "New session", SessionStatus.NeedsInput, false, WaitingFor: "permission"),
             ],
             Board.ParseBoard(json).Sessions);
@@ -74,6 +74,8 @@ public class BoardTest
         Assert.Equal("my-air · finished just now", Board.Detail(Session(SessionStatus.Idle, unread: true), 1_000));
         Assert.Equal("my-air", Board.Detail(Session(SessionStatus.Working), 720_000));
         Assert.Equal("new session", Board.Detail(new BoardSession("n", "New session", SessionStatus.Working, false), 0));
+        Assert.Equal("my-air · map statuses", Board.Detail(Session(SessionStatus.Working) with { Activity = "map statuses" }, 0));
+        Assert.Equal("my-air · finished 12 min ago · map statuses", Board.Detail(Session(SessionStatus.Idle, unread: true) with { Activity = "map statuses" }, 720_000));
     }
 
     [Fact]
