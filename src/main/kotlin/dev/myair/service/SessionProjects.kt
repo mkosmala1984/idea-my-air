@@ -3,6 +3,7 @@ package dev.myair.service
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.isAtOrUnder
 import java.nio.file.Path
+import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.readText
@@ -19,10 +20,11 @@ fun inProjects(sessions: List<ClaudeSession>): List<ClaudeSession> {
 
 /**
  * The linked worktrees of the main checkout [root], as git keeps them: `.git/worktrees/<name>/gitdir` names the worktree's
- * `.git` file. A directory that is no repository, or is itself a linked worktree (`.git` is a file), has none.
+ * `.git` file. A directory that is no repository, or is itself a linked worktree (`.git` is a file), has none. An admin
+ * directory without `gitdir` (a worktree half removed, or still being added) is none either: `git worktree list` skips it.
  */
 fun gitWorktrees(root: Path): List<Path> {
     val admin = root.resolve(".git").resolve("worktrees")
     if (!admin.isDirectory()) return emptyList()
-    return admin.listDirectoryEntries().map { Path.of(it.resolve("gitdir").readText().trim()).parent }
+    return admin.listDirectoryEntries().map { it.resolve("gitdir") }.filter { it.exists() }.map { Path.of(it.readText().trim()).parent }
 }

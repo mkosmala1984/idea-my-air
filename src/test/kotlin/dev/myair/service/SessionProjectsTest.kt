@@ -41,4 +41,12 @@ class SessionProjectsTest {
         app.resolve(".git/worktrees").toFile().deleteRecursively()
         assertEquals(listOf(app, worktree), inProjects(listOf(session(app), session(worktree))).map { it.project })
     }
+
+    @Test
+    fun `an admin directory without gitdir, as a half-removed worktree leaves it, is no worktree`() {
+        val worktree = root.resolve("elsewhere/b")
+        val app = repo(root.resolve("app"), worktree)
+        app.resolve(".git/worktrees/gone").createDirectories().resolve("index").writeText("")
+        assertEquals(listOf(app, app), inProjects(listOf(session(app), session(worktree))).map { it.project })
+    }
 }
