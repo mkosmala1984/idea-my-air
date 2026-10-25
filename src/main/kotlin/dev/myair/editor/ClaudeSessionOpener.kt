@@ -20,11 +20,13 @@ fun projectBase(project: Project): Path = Path.of(checkNotNull(project.basePath)
 
 /** Opening a session goes where it already runs, since two `claude` processes on one id would append to one transcript. */
 object ClaudeSessionOpener {
-    fun open(project: Project, session: ClaudeSession) {
+    /** [switchToWindow]: a session running outside every IDE tab gets its window brought to the front without asking. */
+    fun open(project: Project, session: ClaudeSession, switchToWindow: Boolean = false) {
         val tab = SessionHosts.findTab(session.id)
         if (tab != null) return SessionHosts.focus(tab)
         if (TabsSync.getInstance().focusElsewhere(session.id)) return
         val live = ClaudeSessionsService.getInstance().live[session.id]
+        if (live != null && switchToWindow) hostElsewhere(live, session)?.let { return SessionHosts.bringToFront(it) }
         if (live != null && !confirmRunningElsewhere(project, session, live)) return
         if (!session.cwd.isDirectory()) {
             Messages.showErrorDialog(project, "Session directory no longer exists:\n${session.cwd}", "Cannot Resume Session")
@@ -39,7 +41,7 @@ object ClaudeSessionOpener {
      * to open a second process.
      */
     private fun confirmRunningElsewhere(project: Project, session: ClaudeSession, live: LiveSession): Boolean {
-        val host = SessionHosts.hostWindow(live.pid, session.cwd)?.takeIf { it.pid != ProcessHandle.current().pid() }
+        val host = hostElsewhere(live, session)
         val where = host?.let { "in ${it.executable} (\"${it.title}\")" } ?: "outside an editor tab of this IDE"
         val message = "\"${session.title}\" is already running $where: claude pid ${live.pid}, started from ${live.entrypoint}.\n" +
             "Opening it here starts a second process that writes to the same transcript."
@@ -51,6 +53,10 @@ object ClaudeSessionOpener {
             else -> false
         }
     }
+
+    /** The window of the program running [live], when that program is not this IDE. */
+    private fun hostElsewhere(live: LiveSession, session: ClaudeSession) =
+        SessionHosts.hostWindow(live.pid, session.cwd)?.takeIf { it.pid != ProcessHandle.current().pid() }
 
     fun startNew(project: Project, cwd: Path = projectBase(project), id: String = UUID.randomUUID().toString()) {
         openTab(project, ClaudeSessionVirtualFile(id, cwd, NEW_SESSION_TITLE, listOf("--session-id", id)))

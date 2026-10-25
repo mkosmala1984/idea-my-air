@@ -29,7 +29,7 @@ class SeenTest {
 
     @Test
     fun `running sessions not seen yet are marked at their last message, others are left alone`() {
-        val live = mapOf("a" to LiveSession(1, "cli", SessionStatus.IDLE, null), "b" to LiveSession(2, "cli", SessionStatus.IDLE, null))
+        val live = mapOf("a" to LiveSession(1, "cli", SessionStatus.IDLE, null, Instant.EPOCH), "b" to LiveSession(2, "cli", SessionStatus.IDLE, null, Instant.EPOCH))
         assertEquals(mapOf("b" to 200L), firstSight(sessions, live, mapOf("a" to 10L)))
         assertEquals(emptyMap(), firstSight(sessions, emptyMap(), emptyMap()))
     }
