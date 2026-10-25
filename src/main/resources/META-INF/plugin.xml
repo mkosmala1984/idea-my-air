@@ -28,16 +28,16 @@
   </projectListeners>
 
   <actions>
-    <action id="dev.myair.NewClaudeSession" class="dev.myair.NewClaudeSessionAction" text="New Claude Session"
+    <action id="dev.myair.NewClaudeSession" class="dev.myair.actions.NewClaudeSessionAction" text="New Claude Session"
             description="Start claude in the project directory in an editor tab" icon="AllIcons.General.Add">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
-    <action id="dev.myair.NewClaudeSessionInWorktree" class="dev.myair.NewClaudeSessionInWorktreeAction"
+    <action id="dev.myair.NewClaudeSessionInWorktree" class="dev.myair.actions.NewClaudeSessionInWorktreeAction"
             text="New Claude Session in Worktree..." icon="AllIcons.Vcs.Branch"
             description="Create a worktree on a new branch off a chosen branch and start claude in it in an editor tab">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
-    <action id="dev.myair.FocusClaudeSession" class="dev.myair.FocusClaudeSessionAction" text="Focus Claude Session..."
+    <action id="dev.myair.FocusClaudeSession" class="dev.myair.actions.FocusClaudeSessionAction" text="Focus Claude Session..."
             description="Switch to the window and tab of a Claude session open in any IDE">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>

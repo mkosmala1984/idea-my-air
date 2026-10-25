@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.actions
 
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -13,6 +13,7 @@ import com.intellij.openapi.ui.popup.ListSeparator
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.ui.awt.RelativePoint
+import dev.myair.MyAirSettings
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.projectBase
 import java.awt.Point
