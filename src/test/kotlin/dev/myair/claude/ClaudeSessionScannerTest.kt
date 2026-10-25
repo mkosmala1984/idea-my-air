@@ -90,6 +90,27 @@ class ClaudeSessionScannerTest {
         assertEquals("claude-sonnet-5-5" to "max", scanner.scan().single().let { it.model to it.effort })
     }
 
+    private fun published(id: String, title: String, sidechain: Boolean = false, url: String? = "https://claude.ai/artifact/$id") =
+        """{"parentUuid":"p","isSidechain":$sidechain,"type":"user","message":{"role":"user","content":[{"tool_use_id":"t","type":"tool_result","content":"Published"}]},""" +
+            """"toolUseResult":{${url?.let { "\"url\":\"$it\"," }.orEmpty()}"path":"C:\\x\\$id.html","artifact_id":"$id","title":"$title","updated":false},$cwdLine,"sessionId":"s1","timestamp":"2026-10-24T10:02:00Z"}"""
+
+    @Test
+    fun `artifacts are the published ones of the main conversation, one per id with its latest title`() {
+        val file = write("s1", user("\"prompt\""), published("a", "Plan"), published("c", "Aside", sidechain = true))
+        val scanner = ClaudeSessionScanner(dir)
+        assertEquals(listOf("a" to "Plan"), scanner.scan().single().artifacts.map { it.id to it.title })
+        file.appendText(published("b", "Board") + "\n" + published("a", "Plan v2") + "\n")
+        val artifacts = scanner.scan().single().artifacts
+        assertEquals(listOf("a" to "Plan v2", "b" to "Board"), artifacts.map { it.id to it.title })
+        assertEquals(Artifact("b", "Board", "https://claude.ai/artifact/b", Path.of("C:\\x\\b.html")), artifacts[1])
+    }
+
+    @Test
+    fun `an artifact result without a url fails`() {
+        val file = write("s1", user("\"prompt\""), published("a", "Plan", url = null))
+        assertFailsWith<IllegalStateException> { parse(file) }
+    }
+
     @Test
     fun `first human prompt is the title, skipping meta, harness blocks and tool results`() {
         val s = parse(write("s1",
