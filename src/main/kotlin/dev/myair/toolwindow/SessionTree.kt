@@ -1,5 +1,6 @@
 package dev.myair.toolwindow
 
+import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
 import dev.myair.folders.Folder
 import dev.myair.folders.SessionFolders
@@ -11,6 +12,16 @@ import javax.swing.tree.TreePath
 /** A file a session's agent wrote or edited; toString() is the node id TreeState keeps the selection by. */
 class ChangedFile(val path: Path, val cwd: Path) {
     override fun toString() = path.toString()
+}
+
+/** The goal of [session]'s brief, the first of its children; toString() is the TreeState id. */
+class BriefGoal(val session: ClaudeSession, val text: String) {
+    override fun toString() = "goal ${session.id}"
+}
+
+/** Task [index] of [session]'s brief, below the goal. */
+class BriefTaskRow(val session: ClaudeSession, val index: Int, val task: BriefTask) {
+    override fun toString() = "task ${session.id} $index"
 }
 
 /** The fixed last folder of Folders mode: every session not filed in a user folder, grouped by project. */
@@ -95,6 +106,11 @@ fun projectName(project: Path) = (project.fileName ?: project).toString()
 
 private fun projectNodes(sessions: List<ClaudeSession>) = sessions.groupBy { it.cwd }.map { (cwd, group) -> node(cwd, group.map(::sessionNode)) }
 
-private fun sessionNode(session: ClaudeSession) = node(session, session.changedFiles.map { node(ChangedFile(it, session.cwd)) })
+private fun sessionNode(session: ClaudeSession) = node(
+    session,
+    listOfNotNull(session.brief?.goal?.let { node(BriefGoal(session, it)) }) +
+        session.brief?.tasks.orEmpty().mapIndexed { i, task -> node(BriefTaskRow(session, i, task)) } +
+        session.changedFiles.map { node(ChangedFile(it, session.cwd)) },
+)
 
 private fun node(item: Any?, children: List<DefaultMutableTreeNode> = emptyList()) = DefaultMutableTreeNode(item).apply { children.forEach(::add) }

@@ -5,6 +5,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.util.Disposer
+import dev.myair.MyAirSettings
 import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.claude.ClaudeHomeWatcher
 import dev.myair.claude.ClaudeSession
@@ -87,7 +88,9 @@ class ClaudeSessionsService : Disposable {
         // Nobody reads the Future, so an exception would vanish with it and freeze the list; log it as an IDE error instead.
         refresher.execute {
             val (scanned, current) = try {
-                scanner.scan() to registry.read()
+                // With briefs turned off nothing downstream sees them: rows, tree, tooltips and the board.
+                val briefs = MyAirSettings.getInstance().briefs
+                scanner.scan().map { if (briefs) it else it.copy(brief = null) } to registry.read()
             } catch (e: Throwable) {
                 thisLogger().error("Claude session refresh failed", e)
                 return@execute
@@ -132,12 +135,6 @@ class ClaudeSessionsService : Disposable {
         val before = unread
         unread = board.update(sessions, live, settled)
         return unread != before
-    }
-
-    /** Called on the EDT after the user applied My Air settings: what the panels and the board show may depend on them. */
-    fun settingsChanged() {
-        updateBoard(sessions, live, pins.settled)
-        listeners.forEach { it() }
     }
 
     /** Applies [op] to the folders as they are on disk now and shows the result in every panel of this IDE. */
