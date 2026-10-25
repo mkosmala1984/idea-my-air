@@ -31,10 +31,10 @@ import javax.swing.JPanel
 import kotlin.io.path.exists
 
 /**
- * The environment, brief, files, outputs, artifacts, background tasks and git changes of the session in the selected session tab of [project]'s window.
- * Follows tab selection and every service change, which also carries a tab's switch to another session (`/clear`); a
- * selected file that is no session tab keeps the session shown while its tab stays open, so an output opened from here
- * does not empty the pane.
+ * The environment, brief, files, outputs, artifacts, background tasks and git changes of the session in the selected
+ * session tab of [project]'s window. Follows tab selection and every service change, which also carries a tab's switch
+ * to another session (`/clear`); a selected file that is no session tab keeps the session shown while its tab stays
+ * open, so an output opened from here does not empty the pane.
  */
 class SessionContextPanel(private val project: Project, parent: Disposable) : JPanel(BorderLayout()) {
     private val service = ClaudeSessionsService.getInstance()
@@ -170,7 +170,10 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
     }
 
-    /** A row per file of [files], named by [label], opening it in the editor; [FILES_SHOWN] of them until Show more, kept by [key]. */
+    /**
+     * A row per file of [files], named by [label], opening it in the editor; [FILES_SHOWN] of them until Show more, which
+     * is kept by [key].
+     */
     private fun Panel.files(key: String, files: List<Path>, label: (Path) -> String) {
         val all = key in fullLists
         for (file in if (all) files else files.take(FILES_SHOWN)) row {
