@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.actions
 
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent

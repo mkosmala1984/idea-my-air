@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.actions
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
