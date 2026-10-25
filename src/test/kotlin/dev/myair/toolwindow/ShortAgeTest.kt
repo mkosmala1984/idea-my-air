@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.toolwindow
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test

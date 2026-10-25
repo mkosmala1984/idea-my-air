@@ -11,7 +11,7 @@
 
   <extensions defaultExtensionNs="com.intellij">
     <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"
-                factoryClass="dev.myair.SessionsToolWindowFactory"/>
+                factoryClass="dev.myair.toolwindow.SessionsToolWindowFactory"/>
     <fileEditorProvider implementation="dev.myair.editor.ClaudeSessionEditorProvider"/>
     <fileIconProvider order="first" implementation="dev.myair.editor.ClaudeSessionFileIconProvider"/>
     <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>

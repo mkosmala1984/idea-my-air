@@ -1,0 +1,85 @@
+package dev.myair.toolwindow
+
+import com.intellij.icons.AllIcons
+import com.intellij.openapi.fileTypes.FileTypeManager
+import com.intellij.ui.ColoredListCellRenderer
+import com.intellij.ui.ColoredTreeCellRenderer
+import com.intellij.ui.SimpleColoredComponent
+import com.intellij.ui.SimpleTextAttributes
+import dev.myair.claude.ClaudeSession
+import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
+import dev.myair.editor.UNREAD_ICON
+import dev.myair.editor.icon
+import dev.myair.folders.Folder
+import java.nio.file.Path
+import javax.swing.JList
+import javax.swing.JTree
+import javax.swing.tree.DefaultMutableTreeNode
+
+/** A session's row in the tree and in the pinned list: title, status icon and label, settled mark, optionally its project; [SessionTrailer] adds the age. */
+private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: LiveSession?, settled: Boolean, unread: Boolean, showProject: Boolean) {
+    // A session without a live process is greyed out, so the running ones stand out in a long list.
+    append(item.title, if (live == null) SimpleTextAttributes.GRAYED_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
+    live?.status?.let { icon = it.icon }
+    when (live?.status) {
+        SessionStatus.WORKING -> append("  working", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+        SessionStatus.NEEDS_INPUT -> append("  needs input" + (live.waitingFor?.let { ": $it" } ?: ""), SimpleTextAttributes.ERROR_ATTRIBUTES)
+        SessionStatus.IDLE -> if (unread) {
+            icon = UNREAD_ICON
+            append("  unread reply", SimpleTextAttributes.LINK_ATTRIBUTES)
+        } else {
+            append("  waiting for prompt", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+        }
+        null -> {}
+    }
+    if (settled) append("  settled", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+    if (showProject) append("  ${item.cwd.fileName ?: item.cwd}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+}
+
+/** Sessions from every project, so each row names its project; a row without a process is there because it is pinned. */
+class PinnedRenderer(
+    private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
+) : ColoredListCellRenderer<ClaudeSession>() {
+    override fun customizeCellRenderer(list: JList<out ClaudeSession>, value: ClaudeSession, index: Int, selected: Boolean, hasFocus: Boolean) {
+        val live = liveOf(value)
+        appendSession(value, live, settled(value), unread(value), showProject = true)
+        if (live == null) icon = AllIcons.General.Pin_tab
+    }
+}
+
+class SessionRenderer(
+    private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
+) : ColoredTreeCellRenderer() {
+    override fun customizeCellRenderer(
+        tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean,
+    ) {
+        val node = value as DefaultMutableTreeNode
+        when (val item = node.userObject) {
+            is Folder -> {
+                icon = if (item.project == null) AllIcons.Nodes.Folder else AllIcons.Nodes.Module
+                append(item.name)
+                item.project?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
+            }
+            UnfiledSessions -> {
+                icon = AllIcons.Actions.ListFiles
+                append(item.toString(), SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+            }
+            is Path -> {
+                icon = AllIcons.Nodes.Folder
+                append(item.fileName?.toString() ?: item.toString())
+                append("  $item", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+            }
+            // In a user folder the project is no longer the parent node, so the row names it, unless the folder is bound to it.
+            is ClaudeSession -> appendSession(
+                item, liveOf(item), settled(item), unread(item),
+                showProject = ((node.parent as DefaultMutableTreeNode).userObject as? Folder)?.let { it.project != item.cwd.toString() } ?: false,
+            )
+            is ChangedFile -> {
+                icon = FileTypeManager.getInstance().getFileTypeByFileName(item.path.fileName.toString()).icon
+                // Files inside the session's directory read relative to it; anything else keeps its full path.
+                append(if (item.path.startsWith(item.cwd)) item.cwd.relativize(item.path).toString() else item.path.toString())
+            }
+        }
+    }
+}

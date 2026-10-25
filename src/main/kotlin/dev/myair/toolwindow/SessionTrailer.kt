@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.toolwindow
 
 import com.intellij.ide.ui.UISettings
 import com.intellij.ui.SimpleTextAttributes
