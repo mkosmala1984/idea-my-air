@@ -23,8 +23,9 @@ import kotlin.io.path.nameWithoutExtension
 class ClaudeSessionScanner(private val projectsDir: Path) {
     private val cache = HashMap<Path, Transcript>()
 
+    /** [desktopProjects]: the folder Claude Desktop started each of its sessions in, by session id ([DesktopSessionReader]). */
     @Synchronized
-    fun scan(): List<ClaudeSession> {
+    fun scan(desktopProjects: Map<String, Path> = emptyMap()): List<ClaudeSession> {
         val files = projectsDir.listDirectoryEntries().filter { it.isDirectory() }
             .flatMap { dir -> dir.listDirectoryEntries().filter { it.extension == "jsonl" } }
         cache.keys.retainAll(files.toSet())
@@ -34,7 +35,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             val known = cache[file]?.takeIf { size >= it.offset }
             val transcript = if (known != null && known.offset == size) known else read(file, known ?: Transcript.EMPTY)
             cache[file] = transcript
-            transcript.toSession(file)
+            transcript.toSession(file, desktopProjects[file.nameWithoutExtension])
         }.sortedByDescending { it.lastMessage }
     }
 
@@ -42,17 +43,21 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
     data class Transcript(
         val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val prompts: List<String>,
         val changedFiles: List<String>, val lastMessage: Instant?, val brief: Brief?, val briefCalls: Map<String, BriefCall>,
+        val addedDirs: List<String>,
     ) {
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
-        fun toSession(file: Path): ClaudeSession? {
+        fun toSession(file: Path, desktopProject: Path? = null): ClaudeSession? {
             val title = customTitle ?: aiTitle ?: prompts.firstOrNull()?.lineSequence()?.first()?.take(80) ?: return null
             val cwd = Path.of(checkNotNull(cwd) { "titled session without cwd: $file" })
             val lastMessage = checkNotNull(lastMessage) { "titled session without a message: $file" }
-            return ClaudeSession(file.nameWithoutExtension, cwd, title, lastMessage, changedFiles.map(Path::of), prompts, brief)
+            return ClaudeSession(
+                file.nameWithoutExtension, cwd, title, lastMessage, changedFiles.map(Path::of), prompts, brief, desktopProject ?: cwd,
+                desktop = desktopProject != null, addedDirs = addedDirs.map(Path::of).filter { it != cwd },
+            )
         }
 
         companion object {
-            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, emptyMap())
+            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList())
         }
     }
 
@@ -84,6 +89,9 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         private val BRIEF_TOOL_USE = Regex("\"name\":\"(${BRIEF_TOOL.pattern})\",\"input\"")
         private const val TOOL_RESULT = "\"type\":\"tool_result\""
 
+        /** The attachment `claude` writes with the session's environment: cwd, worktree, the directories added to it. */
+        private const val ENVIRONMENT = "\"attachment\":{\"type\":\"environment\",\"snapshot\":"
+
         fun parse(file: Path): ClaudeSession? = read(file, Transcript.EMPTY).toSession(file)
 
         /** Continues [from] with the complete lines after its offset; a line still being written is left for the next read. */
@@ -96,7 +104,14 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             var lastMessage = from.lastMessage
             var brief = from.brief
             val briefCalls = LinkedHashMap(from.briefCalls)
+            var addedDirs = from.addedDirs
             val offset = forEachCompleteLine(file, from.offset) { line ->
+                // Outside the `when` below: the line also carries a cwd.
+                if (ENVIRONMENT in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
+                    val snapshot = o.getAsJsonObject("attachment").getAsJsonObject("snapshot")
+                    addedDirs = checkNotNull(snapshot.getAsJsonArray("additionalWorkingDirectories")) { "environment without additionalWorkingDirectories: $file" }
+                        .map { it.asString }
+                }
                 if (MESSAGE_HINTS.any { it in line }) messageTime(line)?.let { lastMessage = it }
                 if (ASSISTANT in line && BRIEF_TOOL_USE.containsMatchIn(line)) json(line).takeIf { it["isSidechain"]?.asBoolean != true }
                     ?.let { o -> toolUses(o).filter { BRIEF_TOOL.matches(it["name"].asString) } }
@@ -122,7 +137,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                     }
                 }
             }
-            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls)
+            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs)
         }
 
         /**

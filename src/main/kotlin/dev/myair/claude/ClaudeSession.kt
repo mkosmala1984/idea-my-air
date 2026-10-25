@@ -7,11 +7,13 @@ import java.time.Instant
 /**
  * [lastMessage] is the time of the latest message of the conversation, not of the file: resuming a session appends lines
  * too. [changedFiles] are the files the agent wrote or edited, in the order it first touched them; [prompts] the first human prompts.
- * [project] is the main checkout when [cwd] is in one of its linked worktrees (`inProjects`), else [cwd].
+ * [project] is the main checkout when [cwd] is in one of its linked worktrees (`inProjects`), else the folder Claude
+ * Desktop started the session in ([DesktopSessionReader]), else [cwd]. [desktop]: Claude Desktop runs the session.
+ * [addedDirs] are the directories the session may use besides [cwd], as its latest environment snapshot lists them.
  */
 data class ClaudeSession(
     val id: String, val cwd: Path, val title: String, val lastMessage: Instant, val changedFiles: List<Path>, val prompts: List<String>,
-    val brief: Brief? = null, val project: Path = cwd,
+    val brief: Brief? = null, val project: Path = cwd, val desktop: Boolean = false, val addedDirs: List<Path> = emptyList(),
 ) {
     /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
     fun matches(query: String): Boolean =
