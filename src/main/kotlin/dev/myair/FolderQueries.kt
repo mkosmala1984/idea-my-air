@@ -30,18 +30,16 @@ fun findSessions(
     val from = since?.let { timeBound(it, now, end = false) }
     val to = until?.let { timeBound(it, now, end = true) }
     require(folder == null || unfiled != true) { "folder and unfiled=true exclude each other" }
-    val inFolder = folder?.let { path ->
-        requireNotNull(structure.findByPath(path)) { "no folder '$path'" }.subtree().flatMap { it.items }.map { it.id }.toSet()
-    }
-    val filed = structure.all().flatMap { it.items }.map { it.id }.toSet()
+    val inFolder = folder?.let { path -> requireNotNull(structure.findByPath(path)) { "no folder '$path'" }.subtree().map { it.id }.toSet() }
     val size = limit ?: DEFAULT_LIMIT
     require(size in 1..MAX_LIMIT) { "limit $size outside 1..$MAX_LIMIT" }
     val skip = offset ?: 0
     require(skip >= 0) { "negative offset $skip" }
     val matches = sessions.sortedByDescending { it.lastMessage }.filter { session ->
         val at = session.lastMessage
+        val place = structure.placeOf(session)
         (from == null || at >= from) && (to == null || at <= to) && (query == null || session.matches(query)) &&
-            (inFolder == null || session.id in inFolder) && (unfiled == null || unfiled == (session.id !in filed))
+            (inFolder == null || place in inFolder) && (unfiled == null || unfiled == (place == null))
     }
     return SessionPage(matches.size, skip, matches.drop(skip).take(size))
 }
@@ -78,7 +76,7 @@ fun SessionPage.toJson(structure: SessionFolders, zone: ZoneId): String = gson.t
                 "title" to session.title,
                 "project" to session.cwd.toString(),
                 "lastMessage" to session.lastMessage.atZone(zone).toOffsetDateTime().toString(),
-                "folder" to structure.folderOf(session.id)?.let(structure::pathOf),
+                "folder" to structure.placeOf(session)?.let(structure::pathOf),
                 "prompts" to session.prompts.map { it.take(PROMPT_CHARS) },
                 "changedFiles" to session.changedFiles.size,
             )
@@ -86,10 +84,14 @@ fun SessionPage.toJson(structure: SessionFolders, zone: ZoneId): String = gson.t
     ),
 )
 
-/** The folder tree in the user's order, each folder by path with the ids of the sessions filed directly in it. */
+/**
+ * The folder tree in the user's order, each folder by path with the ids of the sessions filed directly in it and the
+ * project directory it is bound to, whose sessions filed nowhere else it holds too.
+ */
 fun SessionFolders.treeJson(): String {
-    fun node(folder: Folder, prefix: String): Map<String, Any> = linkedMapOf(
+    fun node(folder: Folder, prefix: String): Map<String, Any?> = linkedMapOf(
         "path" to prefix + folder.name,
+        "project" to folder.project,
         "sessions" to folder.items.map { it.id },
         "folders" to folder.folders.map { node(it, "$prefix${folder.name}/") },
     )

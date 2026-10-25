@@ -9,8 +9,13 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 
-/** A user folder of Folders mode; toString() is the node id TreeState keeps expansion and selection by. */
-data class Folder(val id: String, val name: String, val folders: List<Folder> = emptyList(), val items: List<Item> = emptyList()) {
+/**
+ * A user folder of Folders mode; toString() is the node id TreeState keeps expansion and selection by. A folder bound to a
+ * [project] directory also holds that project's sessions filed nowhere else.
+ */
+data class Folder(
+    val id: String, val name: String, val folders: List<Folder> = emptyList(), val items: List<Item> = emptyList(), val project: String? = null,
+) {
     override fun toString() = id
 
     /** This folder and every folder below it. */
@@ -22,7 +27,7 @@ data class Item(val type: String, val id: String)
 
 /**
  * The user's folder tree, in the order the user arranged it. A session is filed in at most one folder; one filed nowhere
- * belongs to the fixed `sessions` folder. Operations naming a folder that no longer exists change nothing, because another
+ * belongs to the folder bound to its project, else to the fixed `sessions` folder. Operations naming a folder that no longer exists change nothing, because another
  * IDE may have deleted it; every other broken invariant throws.
  */
 data class SessionFolders(val folders: List<Folder> = emptyList()) {
@@ -32,6 +37,9 @@ data class SessionFolders(val folders: List<Folder> = emptyList()) {
         val items = all.flatMap { it.items }
         items.forEach { require(it.type == SESSION) { "unknown item type '${it.type}'" } }
         require(items.map { it.id }.duplicates().isEmpty()) { "sessions filed twice: ${items.map { it.id }.duplicates()}" }
+        val projects = all.mapNotNull { it.project }
+        projects.forEach { require(it.isNotBlank()) { "blank project in ${all.filter { f -> f.project == it }.map { f -> f.id }}" } }
+        require(projects.duplicates().isEmpty()) { "projects bound twice: ${projects.duplicates()}" }
         (sequenceOf(folders) + all.asSequence().map { it.folders }).forEach { siblings ->
             siblings.forEach { require(it.name.isNotBlank() && it.name == it.name.trim() && '/' !in it.name) { "bad folder name '${it.name}'" } }
             require(siblings.map { it.name.lowercase() }.duplicates().isEmpty()) { "duplicate folder names among ${siblings.map { it.name }}" }
@@ -43,6 +51,15 @@ data class SessionFolders(val folders: List<Folder> = emptyList()) {
     fun find(id: String) = all().firstOrNull { it.id == id }
 
     fun folderOf(sessionId: String) = all().firstOrNull { folder -> folder.items.any { it.id == sessionId } }?.id
+
+    /**
+     * The folder bound to [cwd], comparing paths as text: the project rows under `sessions` are grouped by hash, and the
+     * IDE's paths hash with case though they equal without it, so two spellings of a directory are two rows that bind separately.
+     */
+    fun projectFolder(cwd: Path) = all().firstOrNull { it.project == cwd.toString() }
+
+    /** Where the session shows: the folder it is filed in, else the folder bound to its project, else null for `sessions`. */
+    fun placeOf(session: ClaudeSession) = folderOf(session.id) ?: projectFolder(session.cwd)?.id
 
     /** The folder at [path], names joined by `/` and matched ignoring case like sibling names are, or null. */
     fun findByPath(path: String): Folder? {
@@ -71,14 +88,14 @@ data class SessionFolders(val folders: List<Folder> = emptyList()) {
     fun nameTaken(parentId: String?, name: String, except: String? = null) =
         children(parentId).any { it.id != except && it.name.equals(name.trim(), true) }
 
-    fun createFolder(parentId: String?, id: String, name: String): SessionFolders {
+    fun createFolder(parentId: String?, id: String, name: String, project: String? = null): SessionFolders {
         if (parentId != null && find(parentId) == null) return this
-        return withChildren(parentId) { it + Folder(id, name) }
+        return withChildren(parentId) { it + Folder(id, name, project = project) }
     }
 
     fun rename(id: String, name: String) = if (find(id) == null) this else edit(id) { it.copy(name = name) }
 
-    /** Removes the folder and its subtree; the sessions filed there go back to `sessions`. */
+    /** Removes the folder and its subtree; the sessions filed there, and the projects bound there, go back to `sessions`. */
     fun delete(id: String) = if (find(id) == null) this else SessionFolders(folders.without(id))
 
     /** Moves the folder under [parentId] (top level for null) to position [index] among that parent's children as they are before the move. */
@@ -121,13 +138,14 @@ data class SessionFolders(val folders: List<Folder> = emptyList()) {
 
     companion object {
         const val SESSION = "session"
-        private const val VERSION = 1
+        /** Version 2 added [Folder.project]; a version 1 file reads as a structure without bound projects. */
+        private const val VERSION = 2
 
         /** Reads `structure.json`, throwing on anything it does not know rather than skipping it. */
         fun parse(text: String): SessionFolders {
             val root = JsonParser.parseString(text).asJsonObject
             val version = root.field("version").asInt
-            require(version == VERSION) { "unsupported structure version $version" }
+            require(version in 1..VERSION) { "unsupported structure version $version" }
             return SessionFolders(root.field("folders").asJsonArray.map { folder(it.asJsonObject) })
         }
 
@@ -136,6 +154,8 @@ data class SessionFolders(val folders: List<Folder> = emptyList()) {
             json.field("name").asString,
             json.field("folders").asJsonArray.map { folder(it.asJsonObject) },
             json.field("items").asJsonArray.map { it.asJsonObject.let { item -> Item(item.field("type").asString, item.field("id").asString) } },
+            // Written only on bound folders, since Gson leaves out nulls.
+            json.get("project")?.asString,
         )
 
         private fun JsonObject.field(name: String): JsonElement = checkNotNull(get(name)) { "missing '$name' in $this" }

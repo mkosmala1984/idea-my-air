@@ -102,11 +102,28 @@ class SessionFoldersTest {
     }
 
     @Test
+    fun `a project binds to one folder, which holds its sessions filed nowhere else`() {
+        val bound = tree.createFolder("tf", "app", "app", project = Path.of("/app").toString()).assign("s2", "fix")
+        fun at(id: String) = bound.placeOf(ClaudeSession(id, Path.of("/app"), id, java.time.Instant.EPOCH, emptyList(), emptyList()))
+        assertEquals("app", at("s1"))
+        assertEquals("fix", at("s2"))
+        assertEquals(bound, SessionFolders.parse(bound.toJson()))
+        assertThrows<IllegalArgumentException> { bound.createFolder(null, "x", "x", project = Path.of("/app").toString()) }
+        assertEquals("x", bound.createFolder(null, "x", "x", project = Path.of("/APP").toString()).projectFolder(Path.of("/APP"))?.id)
+        assertNull(bound.delete("tf").placeOf(ClaudeSession("s1", Path.of("/app"), "s1", java.time.Instant.EPOCH, emptyList(), emptyList())))
+    }
+
+    @Test
+    fun `a version 1 file reads as folders without projects`() {
+        assertEquals(SessionFolders().createFolder(null, "a", "a"), SessionFolders.parse("""{"version":1,"folders":[{"id":"a","name":"a","folders":[],"items":[]}]}"""))
+    }
+
+    @Test
     fun `a malformed file throws rather than being skipped or repaired`() {
         val folder = """{"id":"a","name":"a","folders":[],"items":[]}"""
         listOf(
             """{"folders":[]}""",
-            """{"version":2,"folders":[]}""",
+            """{"version":3,"folders":[]}""",
             """{"version":1,"folders":[{"id":"a","name":"a","folders":[]}]}""",
             """{"version":1,"folders":[{"id":"a","name":"a","folders":[],"items":[{"type":"jira","id":"PW-1"}]}]}""",
             """{"version":1,"folders":[$folder,$folder]}""",

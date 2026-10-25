@@ -53,6 +53,20 @@ class FolderQueriesTest {
     }
 
     @Test
+    fun `a session in its bound project's folder counts as filed there`() {
+        val bound = structure.createFolder("rtm", "tf", "testflo", project = Path.of("/testflo").toString())
+        fun ids(folder: String? = null, unfiled: Boolean? = null) =
+            findSessions(sessions, bound, now, null, null, null, folder, unfiled, null, null).sessions.map { it.id }
+        assertEquals(listOf("tf"), ids(folder = "rtm/testflo"))
+        assertEquals(listOf("tf", "fix", "old"), ids(folder = "rtm"))
+        assertEquals(listOf("new"), ids(unfiled = true))
+        val page = findSessions(sessions, bound, now, null, null, "testflo", null, null, null, null)
+        assertEquals("rtm/testflo", JsonParser.parseString(page.toJson(bound, zone)).asJsonObject.getAsJsonArray("sessions")[0].asJsonObject["folder"].asString)
+        val folder = JsonParser.parseString(bound.treeJson()).asJsonArray[0].asJsonObject.getAsJsonArray("folders")[1].asJsonObject
+        assertEquals(Path.of("/testflo").toString(), folder["project"].asString)
+    }
+
+    @Test
     fun `pages count every match, default to 50 and refuse more than 100`() {
         val page = findSessions(sessions, structure, now, null, null, null, null, null, 1, 2)
         assertEquals(4, page.total)
