@@ -8,6 +8,7 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
+import com.intellij.ui.RowIcon
 import dev.myair.claude.SessionStatus
 import dev.myair.claude.isAtOrUnder
 import dev.myair.service.ClaudeSessionsService
@@ -46,8 +47,14 @@ class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {
 fun tabTitle(title: String, sessionProject: Path, ideBase: Path) =
     if (sessionProject.isAtOrUnder(ideBase.toString())) title else "[${sessionProject.fileName ?: sessionProject}] $title"
 
-/** The tab icon shows the session's status, as the rows of the Claude Sessions tool window do. */
+/**
+ * The tab icon shows the session's status, as the rows of the Claude Sessions tool window do, followed by a branch icon
+ * when the session runs in a worktree, that is outside its project directory (as `presetOf` tells).
+ */
 class ClaudeSessionFileIconProvider : FileIconProvider, DumbAware {
     override fun getIcon(file: VirtualFile, flags: Int, project: Project?): Icon? =
-        (file as? ClaudeSessionVirtualFile)?.let { if (it.unread) UNREAD_ICON else it.status?.icon ?: AllIcons.Toolwindows.ToolWindowMessages }
+        (file as? ClaudeSessionVirtualFile)?.let {
+            val status = if (it.unread) UNREAD_ICON else it.status?.icon ?: AllIcons.Toolwindows.ToolWindowMessages
+            if (it.cwd == it.project) status else RowIcon(status, AllIcons.Vcs.Branch)
+        }
 }
