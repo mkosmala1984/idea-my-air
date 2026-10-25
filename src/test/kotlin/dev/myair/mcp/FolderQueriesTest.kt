@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.mcp
 
 import com.google.gson.JsonParser
 import dev.myair.claude.ClaudeSession
