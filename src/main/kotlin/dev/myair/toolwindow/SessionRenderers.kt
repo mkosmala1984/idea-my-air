@@ -119,8 +119,7 @@ class SessionRenderer(
             }
             is ChangedFile -> {
                 icon = FileTypeManager.getInstance().getFileTypeByFileName(item.path.fileName.toString()).icon
-                // Files inside the session's directory read relative to it; anything else keeps its full path.
-                append(if (item.path.startsWith(item.cwd)) item.cwd.relativize(item.path).toString() else item.path.toString())
+                append(fileLabel(item.path, item.cwd))
             }
         }
     }
