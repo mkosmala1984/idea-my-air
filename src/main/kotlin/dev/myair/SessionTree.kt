@@ -1,6 +1,8 @@
 package dev.myair
 
 import dev.myair.claude.ClaudeSession
+import dev.myair.folders.Folder
+import dev.myair.folders.SessionFolders
 import java.nio.file.Path
 import java.util.UUID
 import javax.swing.tree.DefaultMutableTreeNode

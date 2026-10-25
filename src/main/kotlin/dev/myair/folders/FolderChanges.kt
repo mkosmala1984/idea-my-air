@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.folders
 
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject

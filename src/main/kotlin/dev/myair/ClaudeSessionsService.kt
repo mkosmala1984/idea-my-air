@@ -13,6 +13,10 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.claude.ClaudeSessionScanner
 import dev.myair.claude.LiveSession
 import dev.myair.claude.LiveSessionRegistry
+import dev.myair.folders.ChangeSource
+import dev.myair.folders.SessionFolders
+import dev.myair.folders.StructureHistory
+import dev.myair.folders.StructureStore
 import dev.myair.store.PinStore
 import dev.myair.store.Pins
 import dev.myair.store.SeenStore

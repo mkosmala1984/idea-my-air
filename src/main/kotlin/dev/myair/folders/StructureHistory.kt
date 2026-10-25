@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.folders
 
 import java.nio.file.Files
 import java.nio.file.Path
