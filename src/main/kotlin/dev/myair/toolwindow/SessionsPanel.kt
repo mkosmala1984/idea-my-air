@@ -12,7 +12,6 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.KeepPopupOnPerform
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.actionSystem.ToggleAction
-import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbAwareAction
@@ -40,7 +39,6 @@ import com.intellij.util.ui.StatusText
 import com.intellij.util.ui.tree.TreeUtil
 import dev.myair.claude.ClaudeSession
 import dev.myair.editor.ClaudeSessionOpener
-import dev.myair.editor.FolderTarget
 import dev.myair.folders.Folder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.pinnedSessions
@@ -207,10 +205,6 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         }
         ages.start()
         Disposer.register(toolWindow.disposable) { ages.stop() }
-        // A rebuild clears the selection before restoring it, so only a real selection moves the target.
-        tree.addTreeSelectionListener {
-            if (foldersMode) tree.selectionPath?.let { project.service<FolderTarget>().folderId = targetFolder(it) }
-        }
         service.subscribe(toolWindow.disposable) {
             renderPinned()
             updateTree()

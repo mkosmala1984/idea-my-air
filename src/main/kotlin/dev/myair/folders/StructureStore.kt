@@ -11,7 +11,7 @@ enum class ChangeSource {
     /** A tree action or drop. */
     UI,
 
-    /** A new session filed in the target folder, or a `/clear` carrying its folder over. */
+    /** A `/clear` carrying its folder over. */
     AUTO,
 
     /** An agent's change list. */

@@ -1,13 +1,10 @@
 package dev.myair.editor
 
-import com.intellij.openapi.components.Service
-import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
-import dev.myair.folders.ChangeSource
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
 import dev.myair.tabs.SessionHosts
@@ -61,19 +58,10 @@ object ClaudeSessionOpener {
     /** The session belongs to [project]: [cwd] is its base or one of its worktrees. */
     fun startNew(project: Project, cwd: Path = projectBase(project), id: String = UUID.randomUUID().toString()) {
         openTab(project, ClaudeSessionVirtualFile(id, cwd, projectBase(project), NEW_SESSION_TITLE, listOf("--session-id", id)))
-        val service = ClaudeSessionsService.getInstance()
-        val target = project.service<FolderTarget>().folderId
-        if (target != null && service.foldersError == null) service.updateFolders(ChangeSource.AUTO) { it.assign(id, target) }
     }
 
     private fun openTab(project: Project, file: ClaudeSessionVirtualFile) {
         ClaudeSessionsService.getInstance() // starts tracking which session each tab shows
         FileEditorManager.getInstance(project).openFile(file, true)
     }
-}
-
-/** The folder new sessions of this project window go to: set by the last selection in Folders mode, none until then. */
-@Service(Service.Level.PROJECT)
-class FolderTarget {
-    var folderId: String? = null
 }
