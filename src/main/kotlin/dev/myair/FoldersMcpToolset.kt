@@ -22,7 +22,7 @@ class FoldersMcpToolset : McpToolset {
     @McpDescription(
         "Finds Claude Code sessions of the user, newest first, one page at a time. All filters are optional and combine. " +
         "Each session has id, title, project (the directory claude ran in), lastMessage (when its latest message was written), folder (its path in the user's " +
-        "folders, null when unfiled), its first human prompts (cut short) and the number of files it changed. The result " +
+        "folders, from filing or from its project being bound to a folder; null when unfiled), its first human prompts (cut short) and the number of files it changed. The result " +
         "has total, the number of all matches: fetch the next page with offset until it is covered.",
     )
     suspend fun my_air_sessions_find(
@@ -46,7 +46,11 @@ class FoldersMcpToolset : McpToolset {
     }
 
     @McpTool
-    @McpDescription("The user's folder tree in their order: each folder's path, the ids of sessions filed directly in it, and its subfolders.")
+    @McpDescription(
+        "The user's folder tree in their order: each folder's path, the project directory it is bound to (null for most), " +
+            "the ids of sessions filed directly in it, and its subfolders. A bound folder also holds every session of its " +
+            "project not filed in another folder.",
+    )
     suspend fun my_air_folders_get(): String = withFolders { _, folders -> folders.treeJson() }
 
     @McpTool
@@ -57,15 +61,19 @@ class FoldersMcpToolset : McpToolset {
         "sessions return to the unfiled list. Folders are addressed by path, names joined by /, matched ignoring case. " +
         "changes is a JSON array applied in order, each change seeing the result of the previous ones: " +
         "{\"op\":\"create\",\"path\":\"rtm/fixes\"} (the parent must exist), " +
+        "{\"op\":\"create\",\"path\":\"rtm/my-air\",\"project\":\"E:\\\\dev\\\\my-air\"} (a folder bound to a project directory, as " +
+        "my_air_sessions_find spells it: it holds that project's sessions filed in no other folder, new ones too; a project binds to one folder; " +
+        "deleting the folder unbinds it), " +
         "{\"op\":\"rename\",\"path\":\"rtm/fixes\",\"name\":\"bugs\"}, " +
         "{\"op\":\"move\",\"path\":\"rtm/fixes\",\"to\":\"testflo\",\"index\":0} (to null is the top level; index optional, default last), " +
         "{\"op\":\"delete\",\"path\":\"rtm/fixes\"} (its sessions become unfiled), " +
-        "{\"op\":\"assign\",\"session\":\"<id>\",\"path\":\"rtm/fixes\"} (path null makes the session unfiled). " +
+        "{\"op\":\"assign\",\"session\":\"<id>\",\"path\":\"rtm/fixes\"} (path null takes it out of its folder; a session of a bound project then shows in that project's folder). " +
         "Returns the folder tree after the change.",
     )
     suspend fun my_air_folders_apply(@McpDescription("The JSON array of changes.") changes: String): String = withFolders { service, _ ->
         val scanned = service.sessions.map { it.id }.toSet()
-        service.updateFolders(ChangeSource.MCP) { FolderChanges.apply(it, changes, scanned) }
+        val projects = service.sessions.map { it.cwd.toString() }.toSet()
+        service.updateFolders(ChangeSource.MCP) { FolderChanges.apply(it, changes, scanned, projects) }
         service.folders.treeJson()
     }
 

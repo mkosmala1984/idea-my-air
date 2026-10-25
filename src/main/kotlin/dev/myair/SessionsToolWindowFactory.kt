@@ -334,7 +334,10 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
     private fun deleteFolder() {
         val folder = selectedFolder()!!
         val count = service.folders.sessionCount(folder.id)
-        val message = "Delete \"${folder.name}\" and its subfolders?" + if (count > 0) "\n$count session(s) filed there go back to \"sessions\"." else ""
+        val projects = folder.subtree().mapNotNull { it.project }.toList()
+        val message = "Delete \"${folder.name}\" and its subfolders?" +
+            (if (count > 0) "\n$count session(s) filed there go back to \"sessions\"." else "") +
+            (if (projects.isNotEmpty()) "\nThe other sessions of ${projects.joinToString()} go back to \"sessions\"." else "")
         if (Messages.showYesNoDialog(project, message, "Delete Folder", Messages.getQuestionIcon()) != Messages.YES) return
         service.updateFolders(ChangeSource.UI) { it.delete(folder.id) }
     }
@@ -412,7 +415,7 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
         }
     }
 
-    /** Drags sessions (one or many) or a single folder within the tree; nothing crosses to other components. */
+    /** Drags sessions (one or many), a single folder or a single project within the tree; nothing crosses to other components. */
     private inner class FolderDrop : TransferHandler() {
         private var dragged = emptyList<Any>()
 
@@ -422,7 +425,7 @@ private class SessionsPanel(private val project: Project, toolWindow: ToolWindow
             val items = tree.selectionPaths.orEmpty().map { (it.lastPathComponent as DefaultMutableTreeNode).userObject }
             dragged = when {
                 items.isNotEmpty() && items.all { it is ClaudeSession } -> items
-                items.size == 1 && items[0] is Folder -> items
+                items.size == 1 && (items[0] is Folder || items[0] is Path) -> items
                 else -> return null
             }
             return StringSelection(dragged.joinToString("\n"))
@@ -569,8 +572,9 @@ private class SessionRenderer(
         val node = value as DefaultMutableTreeNode
         when (val item = node.userObject) {
             is Folder -> {
-                icon = AllIcons.Nodes.Folder
+                icon = if (item.project == null) AllIcons.Nodes.Folder else AllIcons.Nodes.Module
                 append(item.name)
+                item.project?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
             }
             UnfiledSessions -> {
                 icon = AllIcons.Actions.ListFiles
@@ -581,8 +585,11 @@ private class SessionRenderer(
                 append(item.fileName?.toString() ?: item.toString())
                 append("  $item", SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
-            // In a user folder the project is no longer the parent node, so the row names it.
-            is ClaudeSession -> appendSession(item, liveOf(item), settled(item), unread(item), showProject = (node.parent as DefaultMutableTreeNode).userObject is Folder)
+            // In a user folder the project is no longer the parent node, so the row names it, unless the folder is bound to it.
+            is ClaudeSession -> appendSession(
+                item, liveOf(item), settled(item), unread(item),
+                showProject = ((node.parent as DefaultMutableTreeNode).userObject as? Folder)?.let { it.project != item.cwd.toString() } ?: false,
+            )
             is ChangedFile -> {
                 icon = FileTypeManager.getInstance().getFileTypeByFileName(item.path.fileName.toString()).icon
                 // Files inside the session's directory read relative to it; anything else keeps its full path.

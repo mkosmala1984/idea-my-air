@@ -9,19 +9,22 @@ import java.util.UUID
 /**
  * An agent's change list: a JSON array of `{"op": ...}` objects addressing folders by path, applied in order, each on
  * the result of the one before. Unlike the tree, where a missing folder means another IDE deleted it, here an unknown
- * path, session or field is the agent's mistake: it throws [IllegalArgumentException] naming the change, and since
+ * path, session, project or field is the agent's mistake: it throws [IllegalArgumentException] naming the change, and since
  * nothing is written until the whole list applied, no change lands.
  */
 object FolderChanges {
     private val FIELDS = mapOf(
-        "create" to setOf("path"),
+        "create" to setOf("path", "project"),
         "rename" to setOf("path", "name"),
         "move" to setOf("path", "to", "index"),
         "delete" to setOf("path"),
         "assign" to setOf("session", "path"),
     )
 
-    fun apply(structure: SessionFolders, changes: String, scanned: Set<String>, newId: () -> String = { UUID.randomUUID().toString() }): SessionFolders {
+    /** [scanned] holds the session ids and [projects] the project directories, as `my_air_sessions_find` gives them. */
+    fun apply(
+        structure: SessionFolders, changes: String, scanned: Set<String>, projects: Set<String>, newId: () -> String = { UUID.randomUUID().toString() },
+    ): SessionFolders {
         val list = try {
             JsonParser.parseString(changes)
         } catch (e: JsonParseException) {
@@ -30,14 +33,14 @@ object FolderChanges {
         require(list.isJsonArray) { "changes must be a JSON array, got $list" }
         return list.asJsonArray.withIndex().fold(structure) { folders, (i, change) ->
             try {
-                applyOne(folders, change, scanned, newId)
+                applyOne(folders, change, scanned, projects, newId)
             } catch (e: IllegalArgumentException) {
                 throw IllegalArgumentException("change ${i + 1} $change: ${e.message}", e)
             }
         }
     }
 
-    private fun applyOne(folders: SessionFolders, element: JsonElement, scanned: Set<String>, newId: () -> String): SessionFolders {
+    private fun applyOne(folders: SessionFolders, element: JsonElement, scanned: Set<String>, projects: Set<String>, newId: () -> String): SessionFolders {
         require(element.isJsonObject) { "not an object" }
         val change = element.asJsonObject
         val op = change.string("op")
@@ -49,7 +52,10 @@ object FolderChanges {
                 val parent = path.substringBeforeLast('/', "").takeIf { it.isNotEmpty() }?.let { folders.at(it).id }
                 val name = path.substringAfterLast('/')
                 require(!folders.nameTaken(parent, name)) { "'$path' already exists" }
-                folders.createFolder(parent, newId(), name)
+                val project = change.get("project")?.let { change.string("project") }
+                require(project == null || project in projects) { "no project '$project'" }
+                require(project == null || folders.all().none { it.project == project }) { "project '$project' is bound already" }
+                folders.createFolder(parent, newId(), name, project)
             }
             "rename" -> folders.rename(folders.at(change.string("path")).id, change.string("name"))
             "move" -> {

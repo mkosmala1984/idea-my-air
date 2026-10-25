@@ -16,7 +16,7 @@ class FolderChangesTest {
 
     private var ids = 0
     private fun apply(changes: String, structure: SessionFolders = tree) =
-        FolderChanges.apply(structure, changes, scanned = setOf("s1", "s2"), newId = { "new${++ids}" })
+        FolderChanges.apply(structure, changes, scanned = setOf("s1", "s2"), projects = setOf("/app"), newId = { "new${++ids}" })
 
     private fun SessionFolders.names(path: String? = null) = (path?.let { findByPath(it)!!.folders } ?: folders).map { it.name }
 
@@ -32,6 +32,15 @@ class FolderChangesTest {
         assertEquals(listOf("rtm", "testflo", "experiments"), result.names())
         assertEquals("experiments/spikes", result.pathOf(result.folderOf("s2")!!))
         assertEquals("rtm/bugs", result.pathOf(result.folderOf("s1")!!))
+    }
+
+    @Test
+    fun `a created folder binds to a known project once`() {
+        val result = apply("""[{"op":"create","path":"rtm/app","project":"/app"}]""")
+        assertEquals("/app", result.findByPath("rtm/app")!!.project)
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":"/nowhere"}]""") }
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":"/app"}]""", result) }
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":null}]""") }
     }
 
     @Test
