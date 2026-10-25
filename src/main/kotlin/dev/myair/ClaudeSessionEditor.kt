@@ -62,7 +62,7 @@ class ClaudeSessionFileIconProvider : FileIconProvider, DumbAware {
 
 val SessionStatus.icon: Icon
     get() = when (this) {
-        SessionStatus.WORKING -> AllIcons.Actions.Execute
+        SessionStatus.WORKING -> AllIcons.Actions.MoreHorizontal
         SessionStatus.NEEDS_INPUT -> AllIcons.General.Warning
         SessionStatus.IDLE -> AllIcons.Actions.Checked
     }
