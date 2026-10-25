@@ -134,6 +134,16 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
+    fun `a session is within some days while its last message is less than that many days old`() {
+        val now = Instant.parse("2026-10-25T12:00:00Z")
+        fun at(time: String) = ClaudeSession("s1", Path.of("/p"), "t", Instant.parse(time), emptyList(), emptyList())
+        assertTrue(at("2026-10-22T12:00:01Z").isWithin(3, now))
+        assertFalse(at("2026-10-22T12:00:00Z").isWithin(3, now))
+        assertTrue(at("2026-10-22T12:00:00Z").isWithin(7, now))
+        assertFalse(at("2026-09-25T12:00:00Z").isWithin(30, now))
+    }
+
+    @Test
     fun `scan lists top-level transcripts only, latest message first, and picks up appended lines`() {
         val a = write("a", user("\"A\"", at = "2026-10-24T10:00:00Z"))
         val b = write("b", user("\"B\"", at = "2026-10-24T11:00:00Z"))

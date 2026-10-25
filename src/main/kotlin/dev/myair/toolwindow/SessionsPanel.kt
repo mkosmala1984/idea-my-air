@@ -51,6 +51,7 @@ import java.awt.Point
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import java.awt.event.MouseEvent
+import java.time.Instant
 import javax.swing.DropMode
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -64,6 +65,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private val service = ClaudeSessionsService.getInstance()
     private var foldersMode = PropertiesComponent.getInstance().getBoolean(FOLDERS_MODE)
     private var showSettled = PropertiesComponent.getInstance().getBoolean(SHOW_SETTLED)
+    /** The tree hides sessions whose last message is this many days old or older; 0 hides none. */
+    private var maxAgeDays = PropertiesComponent.getInstance().getInt(MAX_AGE_DAYS, 0)
     private var shown: List<Any?> = emptyList()
     private val tree = DropLineTree().apply {
         isRootVisible = false
@@ -166,7 +169,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val options = DefaultActionGroup("View Options", true).apply {
             templatePresentation.icon = AllIcons.Actions.Properties
             addAll(
-                mode, showAll, Separator.getInstance(),
+                mode, showAll, Separator.create("Hide Sessions Older Than"),
+                MaxAge(3), MaxAge(7), MaxAge(14), MaxAge(30), Separator.getInstance(),
                 FontSize("Increase Font Size") { it + 1 }, FontSize("Decrease Font Size") { it - 1 }, FontSize("Reset Font Size") { 0 },
                 Separator.getInstance(), refresh,
             )
@@ -196,9 +200,9 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         toolbar = top
         onOpen(tree, tree.trailer, ::openSelected)
         onOpen(pinned, pinned.trailer) { pinned.selectedValue?.let { ClaudeSessionOpener.open(project, it) } != null }
-        // Ages change with time alone, while the service notifies only on changes.
+        // Ages change with time alone, while the service notifies only on changes; with [maxAgeDays] they also drop sessions.
         val ages = Timer(60_000) {
-            tree.repaint()
+            updateTree()
             pinned.repaint()
         }
         ages.start()
@@ -207,10 +211,9 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         tree.addTreeSelectionListener {
             if (foldersMode) tree.selectionPath?.let { project.service<FolderTarget>().folderId = targetFolder(it) }
         }
-        // Statuses alone only repaint, which keeps expansion and selection; anything else rebuilds the model.
         service.subscribe(toolWindow.disposable) {
             renderPinned()
-            if (snapshot() != shown) render() else tree.repaint()
+            updateTree()
         }
         renderPinned()
         render()
@@ -252,6 +255,17 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         }
     }
 
+    /** Sets [maxAgeDays] to [days]; choosing the selected one again shows sessions of every age. */
+    private inner class MaxAge(private val days: Int) : ToggleAction("$days Days"), DumbAware {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+        override fun isSelected(e: AnActionEvent) = maxAgeDays == days
+        override fun setSelected(e: AnActionEvent, state: Boolean) {
+            maxAgeDays = if (state) days else 0
+            PropertiesComponent.getInstance().setValue(MAX_AGE_DAYS, maxAgeDays, 0)
+            render()
+        }
+    }
+
     /** Double-click and Enter on [component] run [open]; a double-click on a [trailer] button does not. */
     private fun onOpen(component: JComponent, trailer: SessionTrailer, open: () -> Boolean) {
         object : DoubleClickListener() {
@@ -273,9 +287,19 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         pinned.selectedIndices = items.indices.filter { items[it].id in selected }.toIntArray()
     }
 
-    private fun snapshot() = listOf(service.loaded, foldersMode, showSettled, service.sessions, service.pins.settled, service.folders, service.foldersError)
+    /** Statuses alone only repaint, which keeps expansion and selection; anything else rebuilds the model. */
+    private fun updateTree() = if (snapshot() != shown) render() else tree.repaint()
+
+    private fun snapshot() = listOf(service.loaded, foldersMode, showSettled, treeSessions(), service.pins.settled, service.folders, service.foldersError)
 
     private fun shownSessions() = service.pins.shown(service.sessions, showSettled)
+
+    /** [shownSessions] less those older than [maxAgeDays]; the list above keeps them, as it holds running and pinned ones. */
+    private fun treeSessions(): List<ClaudeSession> {
+        if (maxAgeDays == 0) return shownSessions()
+        val now = Instant.now()
+        return shownSessions().filter { it.isWithin(maxAgeDays, now) }
+    }
 
     private fun isSettled(session: ClaudeSession) = session.id in service.pins.settled
 
@@ -319,8 +343,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         tree.model = DefaultTreeModel(
             when {
                 error != null -> DefaultMutableTreeNode()
-                foldersMode -> foldersTree(service.folders, shownSessions(), query)
-                else -> projectsTree(shownSessions().filter { it.matches(query) })
+                foldersMode -> foldersTree(service.folders, treeSessions(), query)
+                else -> projectsTree(treeSessions().filter { it.matches(query) })
             },
         )
         if (query.isNotEmpty()) TreeUtil.expandAll(tree) else state.applyTo(tree)
@@ -329,6 +353,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     companion object {
         private const val FOLDERS_MODE = "dev.myair.foldersMode"
         private const val SHOW_SETTLED = "dev.myair.showSettled"
+        private const val MAX_AGE_DAYS = "dev.myair.maxAgeDays"
         /** Points added to the label font, in [FONT_SIZES]. */
         private const val FONT_SIZE = "dev.myair.fontSize"
         private val FONT_SIZES = -4..12

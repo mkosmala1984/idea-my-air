@@ -1,6 +1,7 @@
 package dev.myair.claude
 
 import java.nio.file.Path
+import java.time.Duration
 import java.time.Instant
 
 /**
@@ -15,6 +16,9 @@ data class ClaudeSession(
     /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
     fun matches(query: String): Boolean =
         query.split(' ').filter { it.isNotEmpty() }.all { title.contains(it, true) || cwd.toString().contains(it, true) }
+
+    /** Whether the last message came less than [days] days before [now]. */
+    fun isWithin(days: Int, now: Instant): Boolean = lastMessage > now.minus(Duration.ofDays(days.toLong()))
 
     /** TreeState matches nodes by toString(), so a session keeps its selection while its title and time change. */
     override fun toString() = id
