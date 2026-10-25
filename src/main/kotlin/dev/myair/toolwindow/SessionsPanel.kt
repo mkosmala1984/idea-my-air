@@ -12,14 +12,11 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.KeepPopupOnPerform
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.actionSystem.ToggleAction
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.util.Disposer
-import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.ui.popup.IconButton
 import com.intellij.ui.DocumentAdapter
@@ -66,6 +63,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private val service = ClaudeSessionsService.getInstance()
     private var foldersMode = PropertiesComponent.getInstance().getBoolean(FOLDERS_MODE)
     private var showSettled = PropertiesComponent.getInstance().getBoolean(SHOW_SETTLED)
+    private var showContext = PropertiesComponent.getInstance().getBoolean(SHOW_CONTEXT, true)
     /** The tree hides sessions whose last message is this many days old or older; 0 hides none. */
     private var maxAgeDays = PropertiesComponent.getInstance().getInt(MAX_AGE_DAYS, 0)
     private var shown: List<Any?> = emptyList()
@@ -111,10 +109,21 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             },
             trailerButtons,
         )
-        setContent(OnePixelSplitter(true, "dev.myair.pinnedSplitter", 0.25f).apply {
-            firstComponent = ScrollPaneFactory.createScrollPane(pinned)
-            secondComponent = ScrollPaneFactory.createScrollPane(tree)
-        })
+        val treePane = ScrollPaneFactory.createScrollPane(tree)
+        val contextPane = ScrollPaneFactory.createScrollPane(SessionContextPanel(project, toolWindow.disposable), true)
+        val contextSplitter = OnePixelSplitter(true, "dev.myair.contextSplitter", 0.3f)
+        val splitter = OnePixelSplitter(true, "dev.myair.pinnedSplitter", 0.25f).apply { firstComponent = ScrollPaneFactory.createScrollPane(pinned) }
+        // The tree moves between the two splitters; the inner one lets it go first, or it would not take it back.
+        fun layoutContext() {
+            contextSplitter.secondComponent = null
+            if (showContext) {
+                contextSplitter.firstComponent = contextPane
+                contextSplitter.secondComponent = treePane
+            }
+            splitter.secondComponent = if (showContext) contextSplitter else treePane
+        }
+        layoutContext()
+        setContent(splitter)
         applyFontSize()
         val refresh = object : DumbAwareAction("Refresh", null, AllIcons.Actions.Refresh) {
             override fun actionPerformed(e: AnActionEvent) = service.refresh()
@@ -136,6 +145,15 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 PropertiesComponent.getInstance().setValue(SHOW_SETTLED, state)
                 renderPinned()
                 render()
+            }
+        }
+        val context = object : ToggleAction("Show Session Context", "Show the environment, outputs and changes of the selected session tab", AllIcons.Actions.Preview), DumbAware {
+            override fun getActionUpdateThread() = ActionUpdateThread.EDT
+            override fun isSelected(e: AnActionEvent) = showContext
+            override fun setSelected(e: AnActionEvent, state: Boolean) {
+                showContext = state
+                PropertiesComponent.getInstance().setValue(SHOW_CONTEXT, state, true)
+                layoutContext()
             }
         }
         val editing = FolderEditing(project, tree, service)
@@ -180,7 +198,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val options = DefaultActionGroup("View Options", true).apply {
             templatePresentation.icon = AllIcons.Actions.Properties
             addAll(
-                mode, showAll, Separator.create("Hide Sessions Older Than"),
+                mode, showAll, context, Separator.create("Hide Sessions Older Than"),
                 MaxAge(3), MaxAge(7), MaxAge(14), MaxAge(30), Separator.getInstance(),
                 FontSize("Increase Font Size") { it + 1 }, FontSize("Decrease Font Size") { it - 1 }, FontSize("Reset Font Size") { 0 },
                 Separator.getInstance(), refresh,
@@ -321,11 +339,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             is BriefGoal -> ClaudeSessionOpener.open(project, item.session)
             is BriefTaskRow -> ClaudeSessionOpener.open(project, item.session)
             is AddedDir -> ClaudeSessionOpener.open(project, item.session)
-            is ChangedFile -> {
-                val file = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(item.path)
-                if (file == null) Messages.showErrorDialog(project, "File no longer exists:\n${item.path}", "Cannot Open File")
-                else FileEditorManager.getInstance(project).openFile(file, true)
-            }
+            is ChangedFile -> openFile(project, item.path)
             else -> if (tree.isExpanded(path)) tree.collapsePath(path) else tree.expandPath(path)
         }
         return true
@@ -361,6 +375,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     companion object {
         private const val FOLDERS_MODE = "dev.myair.foldersMode"
         private const val SHOW_SETTLED = "dev.myair.showSettled"
+        private const val SHOW_CONTEXT = "dev.myair.showContext"
         private const val MAX_AGE_DAYS = "dev.myair.maxAgeDays"
         /** Points added to the label font, in [FONT_SIZES]. */
         private const val FONT_SIZE = "dev.myair.fontSize"
