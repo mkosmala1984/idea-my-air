@@ -172,6 +172,85 @@ class ClaudeSessionScannerTest {
         assertEquals(listOf(Path.of("C:\\a.kt"), Path.of("C:\\b.kt"), Path.of("C:\\n.ipynb")), next.toSession(file)!!.changedFiles)
     }
 
+    private fun briefCall(id: String, goal: String, tasks: String) =
+        assistant("""{"type":"tool_use","id":"$id","name":"mcp__idea__my_air_set_brief","input":{"goal":"$goal","tasks":"${tasks.replace("\"", "\\\"")}","projectPath":"E:\\dev"}}""")
+
+    private fun planCall(id: String, input: String) =
+        assistant("""{"type":"tool_use","id":"$id","name":"mcp__ccd_turn__update_plan","input":$input}""")
+
+    private fun result(id: String, error: Boolean = false) =
+        user("""[{"tool_use_id":"$id","type":"tool_result","content":"ok"${if (error) ""","is_error":true""" else ""}}]""")
+
+    @Test
+    fun `the brief is the last call of the brief tool that succeeded`() {
+        val s = parse(write("s1",
+            user("\"prompt\""),
+            briefCall("t1", "Old goal", """[]"""), result("t1"),
+            briefCall("t2", "Migrate AGC", """[{"content":"export","status":"completed"},{"content":"map statuses","status":"in_progress"},{"content":"e2e","status":"pending"}]"""),
+            result("t2"),
+        ))!!
+        assertEquals(
+            Brief("Migrate AGC", listOf(BriefTask("export", TaskStatus.COMPLETED), BriefTask("map statuses", TaskStatus.IN_PROGRESS), BriefTask("e2e", TaskStatus.PENDING))),
+            s.brief,
+        )
+    }
+
+    @Test
+    fun `a call the tool rejected leaves the previous brief`() {
+        val s = parse(write("s1",
+            user("\"prompt\""),
+            briefCall("t1", "Goal", """[]"""), result("t1"),
+            briefCall("t2", "Bad", """[{"content":"x","status":"done"}]"""), result("t2", error = true),
+        ))!!
+        assertEquals(Brief("Goal", emptyList()), s.brief)
+    }
+
+    @Test
+    fun `a call counts once its result is read, also in a later incremental read`() {
+        val file = write("s1", user("\"prompt\""), briefCall("t1", "Goal", """[]"""))
+        val first = ClaudeSessionScanner.read(file, ClaudeSessionScanner.Transcript.EMPTY)
+        assertNull(first.toSession(file)!!.brief)
+
+        file.appendText(result("t1") + "\n")
+        assertEquals(Brief("Goal", emptyList()), ClaudeSessionScanner.read(file, first).toSession(file)!!.brief)
+    }
+
+    @Test
+    fun `a Claude Desktop plan gives tasks without a goal, and the later of plan and brief wins`() {
+        val file = write("s1",
+            user("\"prompt\""),
+            briefCall("t1", "Goal", """[]"""), result("t1"),
+            planCall("t2", """{"items":[{"content":"run e2e","status":"in_progress"},{"content":"analyse","status":"pending"}],"scope":"continuation"}"""), result("t2"),
+        )
+        assertEquals(Brief(null, listOf(BriefTask("run e2e", TaskStatus.IN_PROGRESS), BriefTask("analyse", TaskStatus.PENDING))), parse(file)!!.brief)
+    }
+
+    @Test
+    fun `a plan moves on by advance and by numbered done and start steps`() {
+        val plan = """{"items":[{"content":"a","status":"in_progress"},{"content":"b","status":"pending"},{"content":"c","status":"pending"},{"content":"d","status":"pending"}]}"""
+        val advanced = write("s1", user("\"prompt\""), planCall("t1", plan), result("t1"), planCall("t2", """{"advance":true}"""), result("t2"))
+        assertEquals(listOf(TaskStatus.COMPLETED, TaskStatus.IN_PROGRESS, TaskStatus.PENDING, TaskStatus.PENDING), parse(advanced)!!.brief!!.tasks.map { it.status })
+
+        val numbered = write("s2", user("\"prompt\""), planCall("t1", plan), result("t1"), planCall("t2", """{"done":[1,2],"start":4}"""), result("t2"))
+        assertEquals(listOf(TaskStatus.COMPLETED, TaskStatus.COMPLETED, TaskStatus.PENDING, TaskStatus.IN_PROGRESS), parse(numbered)!!.brief!!.tasks.map { it.status })
+    }
+
+    @Test
+    fun `a subagent's brief call is not the session's`() {
+        val s = parse(write("s1",
+            user("\"prompt\""),
+            briefCall("t1", "Sub", """[]""").replace(""""isSidechain":false""", """"isSidechain":true"""), result("t1"),
+        ))!!
+        assertNull(s.brief)
+    }
+
+    @Test
+    fun `an accepted call with an unknown task status fails loudly`() {
+        assertFailsWith<IllegalArgumentException> {
+            parse(write("s1", user("\"prompt\""), briefCall("t1", "Goal", """[{"content":"x","status":"done"}]"""), result("t1")))
+        }
+    }
+
     @Test
     fun `a line still being written is read only once it is complete`() {
         val file = write("s1", user("\"prompt\""))
