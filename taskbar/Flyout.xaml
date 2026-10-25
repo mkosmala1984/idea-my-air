@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:MyAir.Taskbar"
     Title="Claude sessions"
-    Width="356"
+    Width="400"
     SizeToContent="Height"
     WindowStyle="None"
     ResizeMode="NoResize"
@@ -14,7 +14,7 @@
     ShowActivated="False"
     Topmost="True"
     FontFamily="Segoe UI Variable Text, Segoe UI"
-    FontSize="13"
+    FontSize="15"
     Foreground="{DynamicResource Text}"
     TextOptions.TextFormattingMode="Display">
     <Window.Resources>
@@ -44,7 +44,7 @@
         <DataTemplate DataType="{x:Type local:FlyoutHeader}">
             <StackPanel Margin="18,10,16,4" Orientation="Horizontal">
                 <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{Binding Dot}" />
-                <TextBlock Margin="6,0,0,0" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Secondary}" Text="{Binding Label}" />
+                <TextBlock Margin="6,0,0,0" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource Secondary}" Text="{Binding Label}" />
             </StackPanel>
         </DataTemplate>
 
@@ -60,13 +60,13 @@
                         <RowDefinition />
                     </Grid.RowDefinitions>
                     <TextBlock FontWeight="SemiBold" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="1" Margin="12,0,0,0" FontSize="12" Foreground="{DynamicResource Secondary}" Text="{Binding Time}" />
+                    <TextBlock Grid.Column="1" Margin="12,0,0,0" FontSize="13.5" Foreground="{DynamicResource Secondary}" Text="{Binding Time}" />
                     <Ellipse Grid.RowSpan="2" Grid.Column="1" Width="8" Height="8" Margin="12,0,2,0" VerticalAlignment="Center"
                              Fill="{DynamicResource UnreadDot}" Visibility="{Binding DotVisibility}" />
                     <StackPanel Grid.Row="1" Margin="0,1,0,0" Orientation="Horizontal">
-                        <TextBlock FontSize="12" Foreground="{DynamicResource Secondary}" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock FontSize="13.5" Foreground="{DynamicResource Secondary}" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
                         <Border Margin="6,0,0,0" Padding="6,0" CornerRadius="9" Background="{DynamicResource ChipBack}" Visibility="{Binding ChipVisibility}">
-                            <TextBlock FontSize="11.5" Foreground="{DynamicResource ChipText}" Text="{Binding Chip}" />
+                            <TextBlock FontSize="13" Foreground="{DynamicResource ChipText}" Text="{Binding Chip}" />
                         </Border>
                     </StackPanel>
                 </Grid>
@@ -84,12 +84,12 @@
         <Border BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="8" Background="{DynamicResource Background}">
             <StackPanel>
                 <DockPanel Margin="16,14,16,4">
-                    <TextBlock x:Name="Summary" DockPanel.Dock="Right" VerticalAlignment="Bottom" FontSize="12" Foreground="{DynamicResource Secondary}" />
-                    <TextBlock FontFamily="Segoe UI Variable Display, Segoe UI" FontSize="14" FontWeight="SemiBold" Text="Claude sessions" />
+                    <TextBlock x:Name="Summary" DockPanel.Dock="Right" VerticalAlignment="Bottom" FontSize="13.5" Foreground="{DynamicResource Secondary}" />
+                    <TextBlock FontFamily="Segoe UI Variable Display, Segoe UI" FontSize="16" FontWeight="SemiBold" Text="Claude sessions" />
                 </DockPanel>
                 <ItemsControl x:Name="Items" Margin="0,0,0,6" Focusable="False" KeyboardNavigation.DirectionalNavigation="Contained" />
                 <Border Padding="16,9,16,11" Background="{DynamicResource Footer}" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" CornerRadius="0,0,7,7">
-                    <TextBlock x:Name="FooterText" FontSize="12" Foreground="{DynamicResource Secondary}" />
+                    <TextBlock x:Name="FooterText" FontSize="13.5" Foreground="{DynamicResource Secondary}" />
                 </Border>
             </StackPanel>
         </Border>
