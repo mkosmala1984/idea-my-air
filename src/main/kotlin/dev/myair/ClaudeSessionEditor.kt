@@ -28,6 +28,8 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import dev.myair.folders.ChangeSource
+import dev.myair.tabs.SessionHosts
+import dev.myair.tabs.TabsSync
 import org.jetbrains.plugins.terminal.LocalTerminalDirectRunner
 import org.jetbrains.plugins.terminal.ShellStartupOptions
 import org.jetbrains.plugins.terminal.ShellTerminalWidget
