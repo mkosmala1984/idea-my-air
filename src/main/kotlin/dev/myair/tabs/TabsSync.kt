@@ -14,9 +14,9 @@ import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.IdeFrame
-import dev.myair.ClaudeSessionOpener
 import dev.myair.ClaudeSessionsService
-import dev.myair.projectBase
+import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.projectBase
 import dev.myair.store.IdeTabs
 import dev.myair.store.TabStore
 import java.nio.file.Path

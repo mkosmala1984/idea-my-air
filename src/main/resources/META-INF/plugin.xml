@@ -12,10 +12,10 @@
   <extensions defaultExtensionNs="com.intellij">
     <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"
                 factoryClass="dev.myair.SessionsToolWindowFactory"/>
-    <fileEditorProvider implementation="dev.myair.ClaudeSessionEditorProvider"/>
-    <fileIconProvider order="first" implementation="dev.myair.ClaudeSessionFileIconProvider"/>
+    <fileEditorProvider implementation="dev.myair.editor.ClaudeSessionEditorProvider"/>
+    <fileIconProvider order="first" implementation="dev.myair.editor.ClaudeSessionFileIconProvider"/>
     <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>
-    <editorTabTitleProvider implementation="dev.myair.ClaudeSessionTabTitleProvider"/>
+    <editorTabTitleProvider implementation="dev.myair.editor.ClaudeSessionTabTitleProvider"/>
     <postStartupActivity implementation="dev.myair.tabs.TabsSyncStartup"/>
   </extensions>
 
