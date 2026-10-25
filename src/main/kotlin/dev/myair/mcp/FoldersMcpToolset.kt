@@ -52,8 +52,8 @@ class FoldersMcpToolset : McpToolset {
     @McpTool
     @McpDescription(
         "The user's folder tree in their order: each folder's path, the project directory it is bound to (null for most), " +
-            "the ids of sessions filed directly in it, and its subfolders. A bound folder also holds every session of its " +
-            "project not filed in another folder.",
+            "the ids of sessions filed directly in it, and its subfolders. A bound folder also holds every session run in its " +
+            "project directory or a directory below it (worktrees included) not filed in another folder; the most specific binding wins.",
     )
     suspend fun my_air_folders_get(): String = withFolders { _, folders -> folders.treeJson() }
 
