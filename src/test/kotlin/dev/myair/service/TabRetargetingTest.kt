@@ -1,15 +1,15 @@
-package dev.myair
+package dev.myair.service
 
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
-class ClaudeSessionsServiceTest {
+class TabRetargetingTest {
     private fun live(pid: Long) = LiveSession(pid, "cli", SessionStatus.IDLE, null)
 
     private fun retarget(pid: Long?, live: Map<String, LiveSession>, titles: Map<String, String> = emptyMap()) =
-        ClaudeSessionsService.retarget("old", "Old title", pid, live, titles)
+        retarget("old", "Old title", pid, live, titles)
 
     @Test
     fun `a tab whose process is unknown or unregistered keeps its session`() {
@@ -24,7 +24,7 @@ class ClaudeSessionsServiceTest {
 
     @Test
     fun `a switched-to session without a transcript yet is a new session`() {
-        assertEquals("new" to ClaudeSessionsService.NEW_SESSION_TITLE, retarget(42, mapOf("new" to live(42))))
+        assertEquals("new" to NEW_SESSION_TITLE, retarget(42, mapOf("new" to live(42))))
     }
 
     @Test

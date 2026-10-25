@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.service
 
 import com.google.gson.Gson
 import dev.myair.claude.ClaudeSession
@@ -18,7 +18,7 @@ data class BoardSession(
 /**
  * Every session with a running process, for `~/.my-air/taskbar/board.json`: waiting for the user first, then idle, then
  * working; newest first within a group, as [sessions] arrive. A process whose session has no transcript yet comes last
- * in its group, titled [ClaudeSessionsService.NEW_SESSION_TITLE]. [seen] is [SeenStore.read].
+ * in its group, titled [NEW_SESSION_TITLE]. [seen] is [SeenStore.read].
  */
 fun boardSessions(sessions: List<ClaudeSession>, live: Map<String, LiveSession>, seen: Map<String, Long>): List<BoardSession> {
     val scanned = sessions.mapNotNull { s ->
@@ -29,7 +29,7 @@ fun boardSessions(sessions: List<ClaudeSession>, live: Map<String, LiveSession>,
         }
     }
     val unscanned = (live.keys - sessions.map { it.id }.toSet()).map { id ->
-        live.getValue(id).let { BoardSession(id, ClaudeSessionsService.NEW_SESSION_TITLE, null, it.status, it.waitingFor, null, false) }
+        live.getValue(id).let { BoardSession(id, NEW_SESSION_TITLE, null, it.status, it.waitingFor, null, false) }
     }
     return (scanned + unscanned).sortedBy {
         when (it.status) {

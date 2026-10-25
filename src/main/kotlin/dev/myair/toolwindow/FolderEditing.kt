@@ -6,9 +6,9 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.InputValidatorEx
 import com.intellij.openapi.ui.Messages
-import dev.myair.ClaudeSessionsService
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.Folder
+import dev.myair.service.ClaudeSessionsService
 import java.util.UUID
 import javax.swing.Icon
 import javax.swing.JTree
