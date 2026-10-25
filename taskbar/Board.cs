@@ -88,10 +88,16 @@ public static class Board
         _ => throw new ArgumentOutOfRangeException(nameof(group), group, null),
     };
 
-    /** The second line of a row: the project, for an unread reply when it came, and what the session is doing. */
-    public static string Detail(BoardSession s, long nowMs)
+    /** The first line of a row: the title, after the project in brackets when [projectInTitle] and the project is known. */
+    public static string Title(BoardSession s, bool projectInTitle) => projectInTitle && s.Project is { } project ? $"[{project}] {s.Title}" : s.Title;
+
+    /**
+     * The second line of a row: the project unless the title names it ([projectInTitle]), for an unread reply when it
+     * came, and what the session is doing.
+     */
+    public static string Detail(BoardSession s, long nowMs, bool projectInTitle = false)
     {
-        var parts = new List<string> { s.Project ?? "new session" };
+        var parts = projectInTitle ? new List<string>() : [s.Project ?? "new session"];
         if (s.Unread && s.LastMessage is { } at)
         {
             var ago = Ago(at, nowMs);

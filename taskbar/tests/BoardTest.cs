@@ -79,6 +79,17 @@ public class BoardTest
     }
 
     [Fact]
+    public void The_bubble_names_the_project_before_the_title_and_not_again_below()
+    {
+        var finished = Session(SessionStatus.Idle, unread: true) with { Activity = "map statuses" };
+        Assert.Equal("[my-air] t", Board.Title(finished, projectInTitle: true));
+        Assert.Equal("finished 12 min ago · map statuses", Board.Detail(finished, 720_000, projectInTitle: true));
+        Assert.Equal("t", Board.Title(finished, projectInTitle: false));
+        var unscanned = new BoardSession("n", "New session", SessionStatus.NeedsInput, false);
+        Assert.Equal(("New session", ""), (Board.Title(unscanned, true), Board.Detail(unscanned, 0, true)));
+    }
+
+    [Fact]
     public void The_header_counts_what_needs_the_user_and_says_why_a_list_is_empty()
     {
         var sessions = new[] { Session(SessionStatus.NeedsInput), Session(SessionStatus.Idle, unread: true), Session(SessionStatus.Idle), Session(SessionStatus.Working) };

@@ -12,8 +12,11 @@ public sealed record FlyoutRow(string Id, string Title, string Time, string Deta
 /** What the flyout and the bubble share: top-level windows above the widget (inside the taskbar they would be clipped). */
 public static class Popup
 {
-    /** A header and rows for each of [groups] that [board] has sessions in; header dots come from [resources]. */
-    public static List<object> Items(BoardFile board, IEnumerable<Group> groups, ResourceDictionary resources)
+    /**
+     * A header and rows for each of [groups] that [board] has sessions in; header dots come from [resources]. With
+     * [projectInTitle] a session's project leads its title instead of its second line.
+     */
+    public static List<object> Items(BoardFile board, IEnumerable<Group> groups, ResourceDictionary resources, bool projectInTitle = false)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var items = new List<object>();
@@ -22,9 +25,9 @@ public static class Popup
             var rows = group == Group.Recent
                 ? board.Recent.Select(r => new FlyoutRow(r.Id, r.Title, Board.Ago(r.LastMessage, now), r.Project, null, Visibility.Collapsed, Visibility.Collapsed)).ToList()
                 : board.Sessions.Where(s => Board.GroupOf(s) == group).Select(s => new FlyoutRow(
-                    s.Id, s.Title,
+                    s.Id, Board.Title(s, projectInTitle),
                     group == Group.Unread || s.LastMessage is not { } at ? "" : Board.Ago(at, now),
-                    Board.Detail(s, now),
+                    Board.Detail(s, now, projectInTitle),
                     s.WaitingFor, s.WaitingFor is null ? Visibility.Collapsed : Visibility.Visible,
                     group == Group.Unread ? Visibility.Visible : Visibility.Collapsed)).ToList();
             if (rows.Count == 0) continue;
