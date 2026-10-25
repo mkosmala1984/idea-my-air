@@ -7,6 +7,9 @@ import kotlin.io.path.exists
 /** A git repository as the worktree popup needs it. */
 data class GitRepo(val mainRoot: Path, val branches: List<String>, val default: String)
 
+/** [branch]: the checked-out branch, or `detached at <sha7>`; [added] and [removed]: lines changed since HEAD. */
+data class GitState(val branch: String, val added: Int, val removed: Int)
+
 /** Runs the `git` on PATH; any exit code outside `ok` throws with git's stderr. */
 object Git {
     fun run(dir: Path, vararg args: String, input: String? = null, ok: Set<Int> = setOf(0)): String {
@@ -31,6 +34,19 @@ object Git {
         val originHead = run(root, "for-each-ref", "--format=%(symref:short)", "refs/remotes/origin/HEAD").trim().ifEmpty { null }
         return GitRepo(root, local + remote, defaultBranch(run(root, "remote").lines().filter { it.isNotEmpty() }, originHead, local))
     }
+
+    /** The branch of [dir] and its uncommitted changes to tracked files; null outside a work tree. */
+    fun state(dir: Path): GitState? {
+        if (run(dir, "rev-parse", "--is-inside-work-tree", ok = setOf(0, 128)).trim() != "true") return null
+        val branch = run(dir, "branch", "--show-current").trim().ifEmpty { "detached at " + run(dir, "rev-parse", "--short=7", "HEAD").trim() }
+        // A repository without commits has no HEAD to diff against.
+        if (run(dir, "rev-parse", "--verify", "-q", "HEAD", ok = setOf(0, 1)).isBlank()) return GitState(branch, 0, 0)
+        val counts = run(dir, "diff", "HEAD", "--numstat").lines().filter { it.isNotEmpty() }.map { it.split('\t') }
+        return GitState(branch, counts.sumOf { lines(it[0]) }, counts.sumOf { lines(it[1]) })
+    }
+
+    /** A `--numstat` count; a binary file has `-` for both. */
+    private fun lines(count: String) = if (count == "-") 0 else count.toInt()
 
     /** A new [branch] off [base] checked out at [path]; `--no-track` keeps a remote base from becoming its upstream. */
     fun addWorktree(mainRoot: Path, path: Path, branch: String, base: String) {
