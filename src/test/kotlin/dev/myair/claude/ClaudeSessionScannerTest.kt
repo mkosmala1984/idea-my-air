@@ -105,6 +105,54 @@ class ClaudeSessionScannerTest {
         assertEquals(Artifact("b", "Board", "https://claude.ai/artifact/b", Path.of("C:\\x\\b.html")), artifacts[1])
     }
 
+    private fun call(id: String, name: String, input: String, sidechain: Boolean = false) =
+        """{"parentUuid":"p","isSidechain":$sidechain,"message":{"role":"assistant","content":[{"type":"tool_use","id":"$id","name":"$name","input":$input}]},"type":"assistant",$cwdLine,"sessionId":"s1","timestamp":"2026-10-24T10:00:00Z"}"""
+
+    private fun result(id: String, toolUseResult: String, sidechain: Boolean = false) =
+        """{"parentUuid":"p","isSidechain":$sidechain,"type":"user","message":{"role":"user","content":[{"tool_use_id":"$id","type":"tool_result","content":"ok"}]},""" +
+            """"toolUseResult":$toolUseResult,$cwdLine,"sessionId":"s1","timestamp":"2026-10-24T10:02:00Z"}"""
+
+    private fun notification(taskId: String, status: String?) =
+        """{"type":"queue-operation","operation":"enqueue","timestamp":"2026-10-24T10:03:00Z","sessionId":"s1","content":"<task-notification>\n<task-id>$taskId</task-id>\n<tool-use-id>x</tool-use-id>\n""" +
+            """${status?.let { "<status>$it</status>\\n" }.orEmpty()}<summary>done</summary>\n</task-notification>"}"""
+
+    @Test
+    fun `background tasks are the launched ones of the main conversation without a final notification`() {
+        val file = write("s1", user("\"prompt\""),
+            call("t1", "Bash", """{"command":"gradlew runIde","description":"Run the sandbox","run_in_background":true}"""),
+            result("t1", """{"stdout":"","stderr":"","backgroundTaskId":"b1"}"""),
+            call("t2", "Bash", """{"command":"git status"}"""),
+            result("t2", """{"stdout":"clean","stderr":""}"""),
+            call("t3", "Agent", """{"description":"Review","prompt":"p"}"""),
+            result("t3", """{"isAsync":true,"status":"async_launched","agentId":"a1","description":"Final review","prompt":"p"}"""),
+            call("t4", "Monitor", """{"command":"tail -f log","description":"errors in log","timeout_ms":1000}"""),
+            result("t4", """{"taskId":"m1","timeoutMs":1000,"persistent":false}"""),
+            call("t5", "Bash", """{"command":"sleep 9","run_in_background":true}""", sidechain = true),
+            result("t5", """{"stdout":"","stderr":"","backgroundTaskId":"b2"}""", sidechain = true),
+        )
+        val scanner = ClaudeSessionScanner(dir)
+        assertEquals(
+            listOf(
+                BackgroundTask("b1", BackgroundTask.Kind.SHELL, "Run the sandbox"),
+                BackgroundTask("a1", BackgroundTask.Kind.AGENT, "Final review"),
+                BackgroundTask("m1", BackgroundTask.Kind.MONITOR, "errors in log"),
+            ),
+            scanner.scan().single().background,
+        )
+        // A monitor's event carries no status; a final notification does, whatever it is.
+        file.appendText(notification("m1", null) + "\n" + notification("b1", "completed") + "\n" + notification("a1", "killed") + "\n")
+        assertEquals(listOf("m1"), scanner.scan().single().background.map { it.id })
+    }
+
+    @Test
+    fun `a background shell without a description is named by its command`() {
+        val file = write("s1", user("\"prompt\""),
+            call("t1", "PowerShell", """{"command":"Start-Sleep 60\nGet-Date","run_in_background":true}"""),
+            result("t1", """{"stdout":"","stderr":"","backgroundTaskId":"b1"}"""),
+        )
+        assertEquals(listOf("Start-Sleep 60"), parse(file)!!.background.map { it.description })
+    }
+
     @Test
     fun `an artifact result without a url fails`() {
         val file = write("s1", user("\"prompt\""), published("a", "Plan", url = null))

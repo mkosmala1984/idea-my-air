@@ -19,6 +19,7 @@ import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.ui.JBUI
 import dev.myair.actions.Git
 import dev.myair.actions.GitState
+import dev.myair.claude.BackgroundTask
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.service.ClaudeSessionsService
 import java.awt.BorderLayout
@@ -27,7 +28,7 @@ import javax.swing.JPanel
 import kotlin.io.path.exists
 
 /**
- * The environment, outputs, artifacts and git changes of the session in the selected session tab of [project]'s window.
+ * The environment, outputs, artifacts, background tasks and git changes of the session in the selected session tab of [project]'s window.
  * Follows tab selection and every service change, which also carries a tab's switch to another session (`/clear`).
  */
 class SessionContextPanel(private val project: Project, parent: Disposable) : JPanel(BorderLayout()) {
@@ -72,7 +73,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val content = when {
             id == null -> panel { row { comment("No session tab selected") } }
             session == null -> panel { row { comment("Starting...") } }
-            else -> content(contextOf(session, session.cwd.exists(), git?.getOrNull()))
+            else -> content(contextOf(session, session.cwd.exists(), session.id in service.live, git?.getOrNull()))
         }
         removeAll()
         add(content, BorderLayout.NORTH)
@@ -120,6 +121,12 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 link(artifact.title) { BrowserUtil.browse(artifact.url) }.applyToComponent { toolTipText = artifact.url }
             }
         }
+        if (context.background.isNotEmpty()) section("Background") {
+            for (task in context.background) row {
+                icon(BACKGROUND_ICONS.getValue(task.kind))
+                label(task.description)
+            }
+        }
         val failure = git?.exceptionOrNull()
         if (failure != null) section("Changes") { row { comment(failure.message.orEmpty()) } }
         else context.git?.let { git ->
@@ -141,6 +148,10 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     companion object {
         private const val OUTPUTS_SHOWN = 5
+        private val BACKGROUND_ICONS = mapOf(
+            BackgroundTask.Kind.SHELL to AllIcons.Nodes.Console, BackgroundTask.Kind.MONITOR to AllIcons.Actions.Show,
+            BackgroundTask.Kind.AGENT to AllIcons.Actions.Execute, BackgroundTask.Kind.WORKFLOW to AllIcons.Actions.RunAll,
+        )
     }
 }
 

@@ -12,11 +12,14 @@ import java.time.Instant
  * [addedDirs] are the directories the session may use besides [cwd], as its latest environment snapshot lists them.
  * [model] and [effort]: what the latest reply of the model ran with; null before the first one.
  * [artifacts]: the artifacts the main conversation published, in the order first published.
+ * [background]: the tasks the main conversation sent to the background and no notification has ended yet; they end
+ * with their process too, which the transcript does not record.
  */
 data class ClaudeSession(
     val id: String, val cwd: Path, val title: String, val lastMessage: Instant, val changedFiles: List<Path>, val prompts: List<String>,
     val brief: Brief? = null, val project: Path = cwd, val desktop: Boolean = false, val addedDirs: List<Path> = emptyList(),
     val model: String? = null, val effort: String? = null, val artifacts: List<Artifact> = emptyList(),
+    val background: List<BackgroundTask> = emptyList(),
 ) {
     /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
     fun matches(query: String): Boolean =
@@ -31,6 +34,11 @@ data class ClaudeSession(
 
 /** An artifact as its latest publish named it; [path] is the local file published. */
 data class Artifact(val id: String, val title: String, val url: String, val path: Path)
+
+/** A shell command, monitor, agent or workflow running in the background; [id] is the one its notifications name. */
+data class BackgroundTask(val id: String, val kind: Kind, val description: String) {
+    enum class Kind { SHELL, MONITOR, AGENT, WORKFLOW }
+}
 
 /** Whether this path is [dir] or a directory below it, comparing as text: see [dev.myair.folders.SessionFolders.projectFolder]. */
 fun Path.isAtOrUnder(dir: String): Boolean {
