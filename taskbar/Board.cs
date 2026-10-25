@@ -59,6 +59,13 @@ public static class Board
         _ => throw new ArgumentOutOfRangeException(nameof(s), s.Status, null),
     };
 
+    /**
+     * Sessions of [after] that need the user and did not in [before], in the same group: those that started waiting for
+     * input and those whose reply the user has not read yet. A reply finished in a tab the user looks at is never unread.
+     */
+    public static IReadOnlyList<BoardSession> Arrivals(IReadOnlyList<BoardSession> before, IReadOnlyList<BoardSession> after) =>
+        after.Where(s => GroupOf(s) is Group.NeedsInput or Group.Unread && !before.Any(b => b.Id == s.Id && GroupOf(b) == GroupOf(s))).ToList();
+
     public static int Count(IReadOnlyList<BoardSession> sessions, Group group) => sessions.Count(s => GroupOf(s) == group);
 
     /** Running sessions, idle and read, that not even "Recent" lists: the footer counts them. */

@@ -90,6 +90,20 @@ public class BoardTest
     }
 
     [Fact]
+    public void A_session_is_announced_when_it_starts_to_need_input_or_finishes_unread()
+    {
+        BoardSession S(string id, SessionStatus status, bool unread = false) => new(id, id, status, unread);
+        var before = new[] { S("ask", SessionStatus.Working), S("done", SessionStatus.Working), S("seen", SessionStatus.Working), S("waits", SessionStatus.NeedsInput), S("read", SessionStatus.Idle, true), S("gone", SessionStatus.Working) };
+        var after = new[]
+        {
+            S("ask", SessionStatus.NeedsInput), S("done", SessionStatus.Idle, true), S("seen", SessionStatus.Idle), S("waits", SessionStatus.NeedsInput),
+            S("read", SessionStatus.Idle, true), S("new", SessionStatus.NeedsInput), S("started", SessionStatus.Working),
+        };
+        Assert.Equal(["ask", "done", "new"], Board.Arrivals(before, after).Select(s => s.Id));
+        Assert.Empty(Board.Arrivals(after, after));
+    }
+
+    [Fact]
     public void The_footer_counts_idle_sessions_that_not_even_Recent_lists()
     {
         var idle = new BoardSession("i", "t", SessionStatus.Idle, false);
