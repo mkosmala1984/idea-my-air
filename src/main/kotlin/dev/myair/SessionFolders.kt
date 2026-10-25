@@ -5,6 +5,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import dev.myair.claude.ClaudeSession
+import dev.myair.store.writeAtomically
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists

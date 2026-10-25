@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.store
 
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
