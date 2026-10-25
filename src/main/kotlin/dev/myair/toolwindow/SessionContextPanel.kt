@@ -21,6 +21,7 @@ import com.intellij.util.ui.JBUI
 import dev.myair.actions.Git
 import dev.myair.actions.GitState
 import dev.myair.claude.BackgroundTask
+import dev.myair.claude.TaskStatus
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.service.ClaudeSessionsService
 import java.awt.BorderLayout
@@ -30,7 +31,7 @@ import javax.swing.JPanel
 import kotlin.io.path.exists
 
 /**
- * The environment, outputs, artifacts, background tasks and git changes of the session in the selected session tab of [project]'s window.
+ * The environment, brief, files, outputs, artifacts, background tasks and git changes of the session in the selected session tab of [project]'s window.
  * Follows tab selection and every service change, which also carries a tab's switch to another session (`/clear`); a
  * selected file that is no session tab keeps the session shown while its tab stays open, so an output opened from here
  * does not empty the pane.
@@ -47,7 +48,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     private var reads = 0
     private val gitReader = AppExecutorUtil.createBoundedApplicationPoolExecutor("Session context git", 1)
     private val expanded = HashMap<String, Boolean>()
-    private var allOutputs = false
+    /** The file lists showing all their rows, by section; the others show [FILES_SHOWN]. */
+    private val fullLists = HashSet<String>()
 
     init {
         border = JBUI.Borders.empty(4, 8)
@@ -68,7 +70,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         if (id != shownId) {
             git = null
             readFor = null
-            allOutputs = false
+            fullLists.clear()
         }
         shownTab = tab
         shownId = id
@@ -124,19 +126,25 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 comment(dir.toString())
             }
         }
-        if (context.outputs.isNotEmpty()) section("Outputs") {
-            val shown = if (allOutputs) context.outputs else context.outputs.take(OUTPUTS_SHOWN)
-            for (file in shown) row {
-                icon(FileTypeManager.getInstance().getFileTypeByFileName(file.fileName.toString()).icon ?: AllIcons.FileTypes.Any_type)
-                link(file.fileName.toString()) { openFile(project, file) }.applyToComponent { toolTipText = file.toString() }
-            }
-            if (context.outputs.size > OUTPUTS_SHOWN) row {
-                link(if (allOutputs) "Show less" else "Show more") {
-                    allOutputs = !allOutputs
-                    render()
+        context.brief?.let { brief ->
+            section("Brief") {
+                brief.goal?.let { goal ->
+                    row {
+                        icon(AllIcons.Actions.IntentionBulb)
+                        text(goal)
+                    }
+                }
+                for (task in brief.tasks) row {
+                    when (task.status) {
+                        TaskStatus.COMPLETED -> comment(task.line())
+                        TaskStatus.IN_PROGRESS -> label(task.line()).bold()
+                        TaskStatus.PENDING -> label(task.line())
+                    }
                 }
             }
         }
+        if (context.outputs.isNotEmpty()) section("Outputs") { files("Outputs", context.outputs) { it.fileName.toString() } }
+        if (context.files.isNotEmpty()) section("Files") { files("Files", context.files) { fileLabel(it, context.cwd) } }
         if (context.artifacts.isNotEmpty()) section("Artifacts") {
             for (artifact in context.artifacts) row {
                 icon(AllIcons.General.Web)
@@ -162,6 +170,21 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
     }
 
+    /** A row per file of [files], named by [label], opening it in the editor; [FILES_SHOWN] of them until Show more, kept by [key]. */
+    private fun Panel.files(key: String, files: List<Path>, label: (Path) -> String) {
+        val all = key in fullLists
+        for (file in if (all) files else files.take(FILES_SHOWN)) row {
+            icon(FileTypeManager.getInstance().getFileTypeByFileName(file.fileName.toString()).icon ?: AllIcons.FileTypes.Any_type)
+            link(label(file)) { openFile(project, file) }.applyToComponent { toolTipText = file.toString() }
+        }
+        if (files.size > FILES_SHOWN) row {
+            link(if (all) "Show less" else "Show more (${files.size})") {
+                if (all) fullLists -= key else fullLists += key
+                render()
+            }
+        }
+    }
+
     /** A collapsible group that stays collapsed or expanded across renders. */
     private fun Panel.section(title: String, init: Panel.() -> Unit) = collapsibleGroup(title, init = init).apply {
         expanded = this@SessionContextPanel.expanded[title] ?: true
@@ -169,7 +192,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     }
 
     companion object {
-        private const val OUTPUTS_SHOWN = 5
+        private const val FILES_SHOWN = 5
         private val BACKGROUND_ICONS = mapOf(
             BackgroundTask.Kind.SHELL to AllIcons.Nodes.Console, BackgroundTask.Kind.MONITOR to AllIcons.Actions.Show,
             BackgroundTask.Kind.AGENT to AllIcons.Actions.Execute, BackgroundTask.Kind.WORKFLOW to AllIcons.Actions.RunAll,

@@ -1,6 +1,9 @@
 package dev.myair.toolwindow
 
 import dev.myair.claude.BackgroundTask
+import dev.myair.claude.Brief
+import dev.myair.claude.BriefTask
+import dev.myair.claude.TaskStatus
 import dev.myair.claude.ClaudeSession
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -35,5 +38,20 @@ class SessionContextTest {
         val session = session(main).copy(background = listOf(task))
         assertEquals(listOf(task), contextOf(session, cwdExists = true, live = true, git = null).background)
         assertEquals(emptyList(), contextOf(session, cwdExists = true, live = false, git = null).background)
+    }
+
+    @Test
+    fun `files are all the files written, first touch first, and the brief is the session's`() {
+        val written = listOf(main.resolve("src/A.kt"), main.resolve("docs/p.md"))
+        val brief = Brief("Ship it", listOf(BriefTask("Write tests", TaskStatus.COMPLETED)))
+        val context = contextOf(session(main, written).copy(brief = brief), cwdExists = true, live = false, git = null)
+        assertEquals(written, context.files)
+        assertEquals(brief, context.brief)
+    }
+
+    @Test
+    fun `a file inside the session's folder reads relative to it, any other by its full path`() {
+        assertEquals(Path.of("src/A.kt").toString(), fileLabel(main.resolve("src/A.kt"), main))
+        assertEquals(Path.of("C:/tmp/x.md").toString(), fileLabel(Path.of("C:/tmp/x.md"), main))
     }
 }
