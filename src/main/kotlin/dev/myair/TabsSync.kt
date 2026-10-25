@@ -14,6 +14,8 @@ import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.IdeFrame
+import dev.myair.store.IdeTabs
+import dev.myair.store.TabStore
 import java.nio.file.Path
 
 /** This IDE's side of [TabStore]: publishes its session tabs and shows a tab when another IDE asks. */

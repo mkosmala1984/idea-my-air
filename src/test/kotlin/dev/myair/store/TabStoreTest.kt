@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.store
 
 import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.WinBase

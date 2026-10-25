@@ -50,6 +50,8 @@ import com.intellij.util.ui.tree.TreeUtil
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
+import dev.myair.store.Pins
+import dev.myair.store.pinnedSessions
 import java.awt.BorderLayout
 import java.awt.CardLayout
 import java.awt.Component

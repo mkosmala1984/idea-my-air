@@ -13,6 +13,7 @@ import com.sun.jna.platform.win32.WinUser
 import com.sun.jna.ptr.IntByReference
 import com.sun.jna.win32.StdCallLibrary
 import com.sun.jna.win32.W32APIOptions
+import dev.myair.store.OpenTab
 import java.nio.file.Path
 
 /** An editor tab showing a session, in any project window of this IDE. */

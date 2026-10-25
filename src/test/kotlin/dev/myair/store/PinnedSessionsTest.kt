@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.store
 
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession

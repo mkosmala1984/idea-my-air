@@ -13,6 +13,13 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.claude.ClaudeSessionScanner
 import dev.myair.claude.LiveSession
 import dev.myair.claude.LiveSessionRegistry
+import dev.myair.store.PinStore
+import dev.myair.store.Pins
+import dev.myair.store.SeenStore
+import dev.myair.store.firstSight
+import dev.myair.store.newToUser
+import dev.myair.store.pinnedSessions
+import dev.myair.store.writeAtomically
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createDirectories
