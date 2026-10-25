@@ -46,5 +46,12 @@
       <add-to-group group-id="ToolsMenu" anchor="last"/>
       <keyboard-shortcut keymap="$default" first-keystroke="alt shift K"/>
     </action>
+    <group id="dev.myair.MainToolbar">
+      <reference ref="dev.myair.NewClaudeSession"/>
+      <reference ref="dev.myair.NewClaudeSessionInWorktree"/>
+      <group id="dev.myair.Presets" class="dev.myair.actions.PresetsGroup"/>
+      <separator/>
+      <add-to-group group-id="MainToolbarRight" anchor="first"/>
+    </group>
   </actions>
 </idea-plugin>
