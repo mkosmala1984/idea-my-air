@@ -35,13 +35,17 @@ object Git {
         return GitRepo(root, local + remote, defaultBranch(run(root, "remote").lines().filter { it.isNotEmpty() }, originHead, local))
     }
 
-    /** The branch of [dir] and its uncommitted changes to tracked files; null outside a work tree. */
+    /**
+     * The branch of [dir] and its uncommitted changes to tracked files; null when neither [dir] nor a folder above it has
+     * a `.git`. Any other failure throws: git's exit code 128 means every kind of fatal error, not only "no repository".
+     */
     fun state(dir: Path): GitState? {
-        if (run(dir, "rev-parse", "--is-inside-work-tree", ok = setOf(0, 128)).trim() != "true") return null
+        if (generateSequence(dir.toAbsolutePath()) { it.parent }.none { it.resolve(".git").exists() }) return null
+        check(run(dir, "rev-parse", "--is-inside-work-tree").trim() == "true") { "$dir is not in a work tree" }
         val branch = run(dir, "branch", "--show-current").trim().ifEmpty { "detached at " + run(dir, "rev-parse", "--short=7", "HEAD").trim() }
         // A repository without commits has no HEAD to diff against.
         if (run(dir, "rev-parse", "--verify", "-q", "HEAD", ok = setOf(0, 1)).isBlank()) return GitState(branch, 0, 0)
-        val counts = run(dir, "diff", "HEAD", "--numstat").lines().filter { it.isNotEmpty() }.map { it.split('\t') }
+        val counts = run(dir, "--no-optional-locks", "diff", "HEAD", "--numstat").lines().filter { it.isNotEmpty() }.map { it.split('\t') }
         return GitState(branch, counts.sumOf { lines(it[0]) }, counts.sumOf { lines(it[1]) })
     }
 
