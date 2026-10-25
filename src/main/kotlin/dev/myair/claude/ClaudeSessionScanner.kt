@@ -45,6 +45,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val prompts: List<String>,
         val changedFiles: List<String>, val lastMessage: Instant?, val brief: Brief?, val briefCalls: Map<String, BriefCall>,
         val addedDirs: List<String>, val model: String?, val effort: String?, val artifacts: Map<String, Artifact>,
+        val shellCalls: Map<String, ShellCall>, val background: Map<String, BackgroundTask>,
     ) {
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
         fun toSession(file: Path, desktopProject: Path? = null): ClaudeSession? {
@@ -54,12 +55,12 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             return ClaudeSession(
                 file.nameWithoutExtension, cwd, title, lastMessage, changedFiles.map(Path::of), prompts, brief, desktopProject ?: cwd,
                 desktop = desktopProject != null, addedDirs = addedDirs.map(Path::of).filter { it != cwd }, model = model, effort = effort,
-                artifacts = artifacts.values.toList(),
+                artifacts = artifacts.values.toList(), background = background.values.toList(),
             )
         }
 
         companion object {
-            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList(), null, null, emptyMap())
+            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList(), null, null, emptyMap(), emptyMap(), emptyMap())
         }
     }
 
@@ -68,6 +69,9 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
      * are all written before their results, so the transcript keeps them by id.
      */
     data class BriefCall(val id: String, val tool: String, val input: JsonObject)
+
+    /** A shell or monitor call whose result has not said yet whether it went to the background. */
+    data class ShellCall(val kind: BackgroundTask.Kind, val description: String?)
 
     companion object {
         private const val CUSTOM_TITLE = "{\"type\":\"custom-title\""
@@ -92,10 +96,22 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         private val BRIEF_TOOL_USE = Regex("\"name\":\"(${BRIEF_TOOL.pattern})\",\"input\"")
         private const val TOOL_RESULT = "\"type\":\"tool_result\""
 
-        /** The attachment `claude` writes with the session's environment: cwd, worktree, the directories added to it. */
+        private const val MONITOR = "Monitor"
+
+        /** Calls that may run in the background and name it only in their input; agents and workflows name it in their result. */
+        private val SHELL_TOOLS = setOf("Bash", "PowerShell", MONITOR)
+        private val SHELL_TOOL_USE = Regex("\"name\":\"(${SHELL_TOOLS.joinToString("|")})\",\"input\"")
+        private const val ASYNC_LAUNCHED = "\"status\":\"async_launched\""
+
+        /** The line `claude` writes when a notification is queued for the conversation, before the model reads it. */
+        private const val ENQUEUE = "{\"type\":\"queue-operation\",\"operation\":\"enqueue\""
+        private const val TASK_NOTIFICATION = "<task-notification>"
+        private val FINAL_NOTIFICATION = Regex("<task-id>([^<]+)</task-id>[\\s\\S]*<status>[a-z_]+</status>")
+
         /** In the `toolUseResult` of an Artifact publish, which names the artifact's url, title and local file. */
         private const val ARTIFACT = "\"artifact_id\":"
 
+        /** The attachment `claude` writes with the session's environment: cwd, worktree, the directories added to it. */
         private const val ENVIRONMENT = "\"attachment\":{\"type\":\"environment\",\"snapshot\":"
 
         fun parse(file: Path): ClaudeSession? = read(file, Transcript.EMPTY).toSession(file)
@@ -115,6 +131,9 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             var effort = from.effort
             // A republished artifact keeps the position of its first publish.
             val artifacts = LinkedHashMap(from.artifacts)
+            // By tool_use id: shell and monitor calls whose result has not told yet whether they went to the background.
+            val shellCalls = HashMap(from.shellCalls)
+            val background = LinkedHashMap(from.background)
             val offset = forEachCompleteLine(file, from.offset) { line ->
                 // Outside the `when` below: the line also carries a cwd.
                 if (ENVIRONMENT in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
@@ -125,6 +144,37 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                 if (ARTIFACT in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.getAsJsonObject("toolUseResult")?.let { r ->
                     fun field(name: String) = checkNotNull(r[name]?.asString) { "artifact result without $name: $file" }
                     artifacts[field("artifact_id")] = Artifact(field("artifact_id"), field("title"), field("url"), Path.of(field("path")))
+                }
+                if (ASSISTANT in line && SHELL_TOOL_USE.containsMatchIn(line)) json(line).takeIf { it["isSidechain"]?.asBoolean != true }
+                    ?.let { o -> toolUses(o).filter { it["name"].asString in SHELL_TOOLS } }
+                    ?.forEach { use ->
+                        val input = use.getAsJsonObject("input")
+                        val kind = if (use["name"].asString == MONITOR) BackgroundTask.Kind.MONITOR else BackgroundTask.Kind.SHELL
+                        // A shell call may come without a description; its command's first line names it then. A call
+                        // the tool rejects may have neither, and never runs.
+                        shellCalls[use["id"].asString] = ShellCall(kind, input["description"]?.asString ?: input["command"]?.asString?.lineSequence()?.first())
+                    }
+                if (TOOL_RESULT in line && (shellCalls.keys.any { "\"$it\"" in line } || ASYNC_LAUNCHED in line)) json(line)
+                    .takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
+                        val result = o["toolUseResult"] as? JsonObject
+                        o.getAsJsonObject("message").getAsJsonArray("content").map { it.asJsonObject }
+                            .filter { it["type"].asString == "tool_result" }
+                            .forEach { item ->
+                                val call = shellCalls.remove(item["tool_use_id"].asString)
+                                val task = when {
+                                    result == null -> null
+                                    call != null -> (result["backgroundTaskId"] ?: result["taskId"].takeIf { call.kind == BackgroundTask.Kind.MONITOR })
+                                        ?.let { BackgroundTask(it.asString, call.kind, checkNotNull(call.description) { "background task without a description: $file" }) }
+                                    result["status"]?.asString != "async_launched" -> null
+                                    result.has("agentId") -> BackgroundTask(result["agentId"].asString, BackgroundTask.Kind.AGENT, result["description"].asString)
+                                    else -> BackgroundTask(result["taskId"].asString, BackgroundTask.Kind.WORKFLOW, result["summary"].asString)
+                                }
+                                if (task != null) background[task.id] = task
+                            }
+                    }
+                if (line.startsWith(ENQUEUE) && TASK_NOTIFICATION in line) {
+                    // A monitor's events carry no status; the notification that ends a task does.
+                    FINAL_NOTIFICATION.find(json(line)["content"].asString)?.let { background.remove(it.groupValues[1]) }
                 }
                 if (MESSAGE_HINTS.any { it in line }) message(line)?.let {
                     lastMessage = it.time
@@ -155,7 +205,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                     }
                 }
             }
-            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs, model, effort, artifacts)
+            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs, model, effort, artifacts, shellCalls, background)
         }
 
         /** A message of the main conversation: its [time], and for a reply of the model the [model] and [effort] it ran with. */
