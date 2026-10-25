@@ -75,6 +75,21 @@ class ClaudeSessionScannerTest {
         assertEquals(emptyList(), scanner.scan().single().addedDirs)
     }
 
+    private fun reply(model: String, effort: String?, sidechain: Boolean = false) =
+        """{"parentUuid":"p","isSidechain":$sidechain,"message":{"model":"$model","type":"message","role":"assistant","content":[]},""" +
+            """"type":"assistant",${effort?.let { "\"effort\":\"$it\"," }.orEmpty()}$cwdLine,"sessionId":"s1","timestamp":"2026-10-24T10:01:00Z"}"""
+
+    @Test
+    fun `model and effort are the latest reply's of the main conversation, not a subagent's nor claude's own error replies`() {
+        val file = write("s1", user("\"prompt\""))
+        val scanner = ClaudeSessionScanner(dir)
+        assertEquals(null to null, scanner.scan().single().let { it.model to it.effort })
+        file.appendText(reply("claude-opus-5-5", "high") + "\n" + reply("claude-haiku-5-5", "low", sidechain = true) + "\n")
+        assertEquals("claude-opus-5-5" to "high", scanner.scan().single().let { it.model to it.effort })
+        file.appendText(reply("<synthetic>", null) + "\n" + reply("claude-sonnet-5-5", "max") + "\n")
+        assertEquals("claude-sonnet-5-5" to "max", scanner.scan().single().let { it.model to it.effort })
+    }
+
     @Test
     fun `first human prompt is the title, skipping meta, harness blocks and tool results`() {
         val s = parse(write("s1",

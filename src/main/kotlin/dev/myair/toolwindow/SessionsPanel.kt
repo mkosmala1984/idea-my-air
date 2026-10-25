@@ -37,6 +37,9 @@ import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.StatusText
 import com.intellij.util.ui.tree.TreeUtil
+import dev.myair.actions.PresetsGroup
+import dev.myair.actions.SameSettingsAction
+import dev.myair.actions.SaveAsPresetAction
 import dev.myair.claude.ClaudeSession
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.folders.Folder
@@ -141,7 +144,14 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val delete = FolderAction("Delete Folder...", AllIcons.Actions.GC, ::foldersMode, { canEditFolders() && editing.selectedFolder() != null }, editing::deleteFolder)
         delete.registerCustomShortcutSet(CommonShortcuts.getDelete(), tree)
         val inTree = { tree.selectionPaths.orEmpty().mapNotNull { (it.lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession } }
-        PopupHandler.installPopupMenu(tree, DefaultActionGroup(pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), newFolder, rename, delete), "ClaudeSessionsPopup")
+        PopupHandler.installPopupMenu(
+            tree,
+            DefaultActionGroup(
+                pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree),
+                Separator.getInstance(), newFolder, rename, delete,
+            ),
+            "ClaudeSessionsPopup",
+        )
         // A plain list keeps its selection on a right click, so the row under the pointer is selected first.
         val remove = object : DumbAwareAction("Remove from List", "Unpin; a running session comes back when it waits for you again", AllIcons.General.Remove) {
             override fun getActionUpdateThread() = ActionUpdateThread.EDT
@@ -154,7 +164,10 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             }
         }
         remove.registerCustomShortcutSet(CommonShortcuts.getDelete(), pinned)
-        val pinnedPopup = DefaultActionGroup(pinAction(service) { pinned.selectedValuesList }, settleAction(service) { pinned.selectedValuesList }, remove)
+        val inList = { pinned.selectedValuesList }
+        val pinnedPopup = DefaultActionGroup(
+            pinAction(service, inList), settleAction(service, inList), remove, Separator.getInstance(), SameSettingsAction(inList), SaveAsPresetAction(inList),
+        )
         pinned.addMouseListener(object : PopupHandler() {
             override fun invokePopup(comp: Component, x: Int, y: Int) {
                 val row = pinned.locationToIndex(Point(x, y))
@@ -180,7 +193,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         fun bar(place: String, vararg actions: AnAction) =
             ActionManager.getInstance().createActionToolbar(place, DefaultActionGroup(*actions), true).apply { targetComponent = tree }.component
         val actions = JPanel(BorderLayout()).apply {
-            add(bar("ClaudeSessions", newSession, newSessionInWorktree, newFolder), BorderLayout.CENTER)
+            add(bar("ClaudeSessions", newSession, newSessionInWorktree, PresetsGroup(), newFolder), BorderLayout.CENTER)
             add(bar("ClaudeSessionsView", options, search), BorderLayout.EAST)
         }
         val close = InplaceButton(IconButton("Close Search", AllIcons.Actions.Close, AllIcons.Actions.CloseHovered)) { showSearch(false) }

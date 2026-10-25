@@ -10,10 +10,12 @@ import java.time.Instant
  * [project] is the main checkout when [cwd] is in one of its linked worktrees (`inProjects`), else the folder Claude
  * Desktop started the session in ([DesktopSessionReader]), else [cwd]. [desktop]: Claude Desktop runs the session.
  * [addedDirs] are the directories the session may use besides [cwd], as its latest environment snapshot lists them.
+ * [model] and [effort]: what the latest reply of the model ran with; null before the first one.
  */
 data class ClaudeSession(
     val id: String, val cwd: Path, val title: String, val lastMessage: Instant, val changedFiles: List<Path>, val prompts: List<String>,
     val brief: Brief? = null, val project: Path = cwd, val desktop: Boolean = false, val addedDirs: List<Path> = emptyList(),
+    val model: String? = null, val effort: String? = null,
 ) {
     /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
     fun matches(query: String): Boolean =

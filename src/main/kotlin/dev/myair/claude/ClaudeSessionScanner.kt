@@ -3,6 +3,7 @@ package dev.myair.claude
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 import java.nio.channels.FileChannel
@@ -43,7 +44,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
     data class Transcript(
         val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val prompts: List<String>,
         val changedFiles: List<String>, val lastMessage: Instant?, val brief: Brief?, val briefCalls: Map<String, BriefCall>,
-        val addedDirs: List<String>,
+        val addedDirs: List<String>, val model: String?, val effort: String?,
     ) {
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
         fun toSession(file: Path, desktopProject: Path? = null): ClaudeSession? {
@@ -52,12 +53,12 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             val lastMessage = checkNotNull(lastMessage) { "titled session without a message: $file" }
             return ClaudeSession(
                 file.nameWithoutExtension, cwd, title, lastMessage, changedFiles.map(Path::of), prompts, brief, desktopProject ?: cwd,
-                desktop = desktopProject != null, addedDirs = addedDirs.map(Path::of).filter { it != cwd },
+                desktop = desktopProject != null, addedDirs = addedDirs.map(Path::of).filter { it != cwd }, model = model, effort = effort,
             )
         }
 
         companion object {
-            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList())
+            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList(), null, null)
         }
     }
 
@@ -75,6 +76,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         /** Human prompts kept per session: enough for an agent to judge what the session was about. */
         const val PROMPTS = 3
         private const val ASSISTANT = "\"type\":\"assistant\""
+        private const val SYNTHETIC = "<synthetic>"
 
         /** Substrings of every line [messageTime] may accept; they only spare parsing the lines that cannot be messages. */
         private val MESSAGE_HINTS = listOf("\"type\":\"user\"", ASSISTANT, "\"subtype\":\"local_command\"")
@@ -105,6 +107,8 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             var brief = from.brief
             val briefCalls = LinkedHashMap(from.briefCalls)
             var addedDirs = from.addedDirs
+            var model = from.model
+            var effort = from.effort
             val offset = forEachCompleteLine(file, from.offset) { line ->
                 // Outside the `when` below: the line also carries a cwd.
                 if (ENVIRONMENT in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
@@ -112,7 +116,11 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                     addedDirs = checkNotNull(snapshot.getAsJsonArray("additionalWorkingDirectories")) { "environment without additionalWorkingDirectories: $file" }
                         .map { it.asString }
                 }
-                if (MESSAGE_HINTS.any { it in line }) messageTime(line)?.let { lastMessage = it }
+                if (MESSAGE_HINTS.any { it in line }) message(line)?.let {
+                    lastMessage = it.time
+                    model = it.model ?: model
+                    effort = it.effort ?: effort
+                }
                 if (ASSISTANT in line && BRIEF_TOOL_USE.containsMatchIn(line)) json(line).takeIf { it["isSidechain"]?.asBoolean != true }
                     ?.let { o -> toolUses(o).filter { BRIEF_TOOL.matches(it["name"].asString) } }
                     ?.forEach { briefCalls[it["id"].asString] = BriefCall(it["id"].asString, it["name"].asString, it.getAsJsonObject("input")) }
@@ -137,18 +145,23 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                     }
                 }
             }
-            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs)
+            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs, model, effort)
         }
 
+        /** A message of the main conversation: its [time], and for a reply of the model the [model] and [effort] it ran with. */
+        private class Message(val time: Instant, val model: String?, val effort: String?)
+
         /**
-         * The time of [line] when it is a message of the main conversation: a human or assistant one, or a slash command
-         * run; null for anything else. Reads only top-level fields, skipping message bodies without building them.
+         * [line] as a message of the main conversation: a human or assistant one, or a slash command run; null for anything
+         * else. Reads only top-level fields and the model inside the body, skipping the rest without building it.
          */
-        private fun messageTime(line: String): Instant? {
+        private fun message(line: String): Message? {
             var type: String? = null
             var subtype: String? = null
             var timestamp: String? = null
             var aside = false
+            var model: String? = null
+            var effort: String? = null
             JsonReader(StringReader(line)).use { reader ->
                 reader.beginObject()
                 while (reader.hasNext()) when (reader.nextName()) {
@@ -156,11 +169,20 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                     "subtype" -> subtype = reader.nextString()
                     "timestamp" -> timestamp = reader.nextString()
                     "isMeta", "isSidechain" -> aside = reader.nextBoolean() || aside
+                    "effort" -> effort = reader.nextString()
+                    "message" -> if (reader.peek() != JsonToken.BEGIN_OBJECT) reader.skipValue() else {
+                        reader.beginObject()
+                        while (reader.hasNext()) if (reader.nextName() == "model") model = reader.nextString() else reader.skipValue()
+                        reader.endObject()
+                    }
                     else -> reader.skipValue()
                 }
             }
             val message = type == "user" || type == "assistant" || type == "system" && subtype == "local_command"
-            return if (message && !aside) Instant.parse(checkNotNull(timestamp) { "message without timestamp: ${line.take(200)}" }) else null
+            if (!message || aside) return null
+            val time = Instant.parse(checkNotNull(timestamp) { "message without timestamp: ${line.take(200)}" })
+            // `claude` writes its own error replies as the model `<synthetic>`.
+            return if (type == "assistant" && model != SYNTHETIC) Message(time, model, effort) else Message(time, null, null)
         }
 
         /** Paths from the edit tool calls of one assistant message; a notebook edit names its file `notebook_path`. */

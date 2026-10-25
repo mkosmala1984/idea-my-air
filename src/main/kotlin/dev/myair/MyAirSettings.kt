@@ -11,7 +11,13 @@ import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.ui.dsl.builder.COLUMNS_LARGE
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
+import dev.myair.actions.PresetsEditor
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.store.Preset
+import dev.myair.store.PresetStore
+import com.intellij.ui.JBColor
+import javax.swing.JLabel
+import com.intellij.ui.dsl.builder.Align
 import com.intellij.ui.dsl.builder.columns
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.dsl.builder.toNonNullableProperty
@@ -51,6 +57,31 @@ class MyAirConfigurable : BoundConfigurable("My Air") {
             checkBox("Session briefs: let agents describe their goal and tasks (my_air_set_brief) and show them")
                 .bindSelected(MyAirSettings.getInstance().state::briefs)
                 .comment("Briefs show or hide at once. The IDE's MCP server lists its tools when the IDE starts, so the tool itself appears or goes away after a restart.")
+        }
+        val presets = PresetsEditor()
+        // What the file held at reset; null when it is broken, which leaves it to be fixed by hand.
+        var saved: List<Preset>? = null
+        lateinit var broken: JLabel
+        group("Session Configurations") {
+            row { broken = label("").applyToComponent { foreground = JBColor.RED }.component }
+            row {
+                cell(presets.component).align(Align.FILL)
+                    .comment("Started from the toolbar of Claude Sessions. Kept in ${PresetStore.INSTANCE.file}, shared by every IDE.")
+            }.resizableRow()
+        }
+        onReset {
+            val read = PresetStore.INSTANCE.read()
+            saved = read.getOrNull()
+            presets.presets = saved.orEmpty()
+            presets.component.isVisible = saved != null
+            broken.text = read.exceptionOrNull()?.let { "Fix ${PresetStore.INSTANCE.file} by hand: ${it.message}" }.orEmpty()
+        }
+        onIsModified { saved != null && presets.presets != saved }
+        onApply {
+            if (saved != null) {
+                PresetStore.INSTANCE.write(presets.presets)
+                saved = presets.presets
+            }
         }
         onApply { ClaudeSessionsService.getInstance().refresh() }
     }

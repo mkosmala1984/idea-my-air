@@ -17,12 +17,10 @@ import dev.myair.MyAirSettings
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.projectBase
 import java.awt.Point
+import java.nio.file.Path
 import java.util.UUID
 
-/**
- * Starts a session in a new worktree: a branch `worktree-<id>` off a base picked from a popup, checked out in the
- * worktrees directory of [MyAirSettings], with the `.worktreeinclude` files of the main checkout copied in.
- */
+/** Starts a session in a new worktree of the project's repository, off a base picked from a popup. */
 class NewClaudeSessionInWorktreeAction : DumbAwareAction() {
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
@@ -30,56 +28,67 @@ class NewClaudeSessionInWorktreeAction : DumbAwareAction() {
         e.presentation.isEnabled = e.project?.basePath != null
     }
 
-    override fun actionPerformed(e: AnActionEvent) {
-        val project = e.project!!
-        // A toolbar's data context points at its target component (the tree), so the popup goes under the button instead.
-        val button = e.inputEvent?.component?.takeIf { e.isFromActionToolbar }
-        val where = if (button != null) RelativePoint(button, Point(0, button.height)) else JBPopupFactory.getInstance().guessBestPopupLocation(e.dataContext)
-        background(project, "Reading branches", { Git.repo(projectBase(project)) }) { repo ->
-            val recent = PropertiesComponent.getInstance(project).getList(RECENT_BASES).orEmpty()
-            val choices = baseChoices(repo.branches, repo.default, recent)
-            val step = object : BaseListPopupStep<String>("Base Branch for New Worktree", choices.items) {
-                override fun isSpeedSearchEnabled() = true
-                override fun getDefaultOptionIndex() = choices.selected
-                override fun getSeparatorAbove(value: String) = when (choices.items.indexOf(value)) {
-                    choices.restStart -> ListSeparator()
-                    choices.recentStart -> ListSeparator("Recent")
-                    else -> null
-                }
-                override fun onChosen(selectedValue: String, finalChoice: Boolean): PopupStep<*>? =
-                    doFinalStep { create(project, repo, recent, selectedValue) }
-            }
-            JBPopupFactory.getInstance().createListPopup(step).show(where)
-        }
-    }
-
-    private fun create(project: Project, repo: GitRepo, recent: List<String>, base: String) {
-        val id = UUID.randomUUID().toString()
-        val name = id.take(8)
-        val path = worktreePath(repo.mainRoot, MyAirSettings.getInstance().worktreesDir, name)
-        background(project, "Creating worktree", {
-            Git.addWorktree(repo.mainRoot, path, "worktree-$name", base)
-            copyIncluded(repo.mainRoot, path, Git.includedFiles(repo.mainRoot))
-        }) {
-            PropertiesComponent.getInstance(project).setList(RECENT_BASES, pushRecent(recent, base, repo.branches))
-            ClaudeSessionOpener.startNew(project, path, id)
-        }
-    }
-
-    /** Runs [work] off the EDT, then [done] with its result on the EDT; a failure shows its message. */
-    private fun <T> background(project: Project, title: String, work: () -> T, done: (T) -> Unit) =
-        object : Task.Backgroundable(project, title) {
-            private var result: Result<T>? = null
-            override fun run(indicator: ProgressIndicator) {
-                result = Result.success(work())
-            }
-            override fun onSuccess() = done(result!!.getOrThrow())
-            override fun onThrowable(error: Throwable) {
-                Messages.showErrorDialog(project, error.message, title)
-            }
-        }.queue()
-
-    private companion object {
-        const val RECENT_BASES = "dev.myair.worktreeBases"
-    }
+    override fun actionPerformed(e: AnActionEvent) = startInWorktree(e.project!!, projectBase(e.project!!), null, emptyList(), popupPoint(e))
 }
+
+/** Under the toolbar button [e] came from; a toolbar's data context points at its target component (the tree), not the button. */
+fun popupPoint(e: AnActionEvent): RelativePoint {
+    val button = e.inputEvent?.component?.takeIf { e.isFromActionToolbar }
+    return if (button != null) RelativePoint(button, Point(0, button.height)) else JBPopupFactory.getInstance().guessBestPopupLocation(e.dataContext)
+}
+
+/**
+ * Starts `claude` with [args] in a new worktree of the repository of [dir]: a branch `worktree-<id>` off [base], or off
+ * a base picked from a popup at [where] when [base] is null, checked out in the worktrees directory of [MyAirSettings],
+ * with the `.worktreeinclude` files of the main checkout copied in. The session belongs to [dir].
+ */
+fun startInWorktree(project: Project, dir: Path, base: String?, args: List<String>, where: RelativePoint) =
+    background(project, "Reading branches", { Git.repo(dir) }) { repo ->
+        val properties = PropertiesComponent.getInstance()
+        val key = "$RECENT_BASES:${repo.mainRoot}"
+        val recent = properties.getList(key).orEmpty()
+        fun create(base: String) {
+            val id = UUID.randomUUID().toString()
+            val name = id.take(8)
+            val path = worktreePath(repo.mainRoot, MyAirSettings.getInstance().worktreesDir, name)
+            background(project, "Creating worktree", {
+                Git.addWorktree(repo.mainRoot, path, "worktree-$name", base)
+                copyIncluded(repo.mainRoot, path, Git.includedFiles(repo.mainRoot))
+            }) {
+                properties.setList(key, pushRecent(recent, base, repo.branches))
+                ClaudeSessionOpener.startNew(project, dir, path, id, args)
+            }
+        }
+        if (base != null) {
+            if (base in repo.branches) create(base) else Messages.showErrorDialog(project, "Branch $base is not in ${repo.mainRoot}.", "Cannot Create Worktree")
+            return@background
+        }
+        val choices = baseChoices(repo.branches, repo.default, recent)
+        val step = object : BaseListPopupStep<String>("Base Branch for New Worktree", choices.items) {
+            override fun isSpeedSearchEnabled() = true
+            override fun getDefaultOptionIndex() = choices.selected
+            override fun getSeparatorAbove(value: String) = when (choices.items.indexOf(value)) {
+                choices.restStart -> ListSeparator()
+                choices.recentStart -> ListSeparator("Recent")
+                else -> null
+            }
+            override fun onChosen(selectedValue: String, finalChoice: Boolean): PopupStep<*>? = doFinalStep { create(selectedValue) }
+        }
+        JBPopupFactory.getInstance().createListPopup(step).show(where)
+    }
+
+/** Runs [work] off the EDT, then [done] with its result on the EDT; a failure shows its message. */
+private fun <T> background(project: Project, title: String, work: () -> T, done: (T) -> Unit) =
+    object : Task.Backgroundable(project, title) {
+        private var result: Result<T>? = null
+        override fun run(indicator: ProgressIndicator) {
+            result = Result.success(work())
+        }
+        override fun onSuccess() = done(result!!.getOrThrow())
+        override fun onThrowable(error: Throwable) {
+            Messages.showErrorDialog(project, error.message, title)
+        }
+    }.queue()
+
+/** Recent bases per repository, in the application's properties: a preset may start sessions in any repository. */
+private const val RECENT_BASES = "dev.myair.worktreeBases"
