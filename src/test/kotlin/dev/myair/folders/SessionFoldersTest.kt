@@ -115,6 +115,22 @@ class SessionFoldersTest {
     }
 
     @Test
+    fun `a bound folder holds the sessions of directories under its project, the most specific binding winning`() {
+        val app = Path.of("/app")
+        val worktree = app.resolve(".claude/worktrees/a5bbab5e")
+        val bound = tree.createFolder(null, "app", "app", project = app.toString())
+        fun at(structure: SessionFolders, cwd: Path) = structure.placeOf(ClaudeSession("s", cwd, "s", java.time.Instant.EPOCH, emptyList(), emptyList()))
+        assertEquals("app", at(bound, worktree))
+        assertEquals("app", at(bound, worktree.resolve("taskbar")))
+        assertNull(at(bound, Path.of("/application")))
+        assertNull(at(bound, Path.of("/")))
+        assertEquals("wt", at(bound.createFolder(null, "wt", "wt", project = worktree.toString()), worktree))
+        assertEquals("wt", at(SessionFolders().createFolder(null, "wt", "wt", project = worktree.toString()).createFolder(null, "app", "app", project = app.toString()), worktree))
+        val outside = ClaudeSession("s", Path.of("/worktrees/a5bbab5e"), "s", java.time.Instant.EPOCH, emptyList(), emptyList(), project = app)
+        assertEquals("app", bound.placeOf(outside))
+    }
+
+    @Test
     fun `a version 1 file reads as folders without projects`() {
         assertEquals(SessionFolders().createFolder(null, "a", "a"), SessionFolders.parse("""{"version":1,"folders":[{"id":"a","name":"a","folders":[],"items":[]}]}"""))
     }

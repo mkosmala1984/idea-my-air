@@ -5,6 +5,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import dev.myair.claude.ClaudeSession
+import dev.myair.claude.isAtOrUnder
 import java.nio.file.Path
 
 /**
@@ -51,13 +52,18 @@ data class SessionFolders(val folders: List<Folder> = emptyList()) {
     fun folderOf(sessionId: String) = all().firstOrNull { folder -> folder.items.any { it.id == sessionId } }?.id
 
     /**
-     * The folder bound to [cwd], comparing paths as text: the project rows under `sessions` are grouped by hash, and the
-     * IDE's paths hash with case though they equal without it, so two spellings of a directory are two rows that bind separately.
+     * The folder bound to [cwd] or to the nearest directory above it, so a project's folder also holds the sessions of its
+     * worktrees (`.claude/worktrees/<name>`) and subdirectories. Paths compare as text: the project rows under `sessions`
+     * are grouped by hash, and the IDE's paths hash with case though they equal without it, so two spellings of a
+     * directory are two rows that bind separately.
      */
-    fun projectFolder(cwd: Path) = all().firstOrNull { it.project == cwd.toString() }
+    fun projectFolder(cwd: Path) = all().filter { it.project != null && cwd.isAtOrUnder(it.project) }.maxByOrNull { it.project!!.length }
 
-    /** Where the session shows: the folder it is filed in, else the folder bound to its project, else null for `sessions`. */
-    fun placeOf(session: ClaudeSession) = folderOf(session.id) ?: projectFolder(session.cwd)?.id
+    /**
+     * Where the session shows: the folder it is filed in, else the folder bound to its [ClaudeSession.project], else null
+     * for `sessions`.
+     */
+    fun placeOf(session: ClaudeSession) = folderOf(session.id) ?: projectFolder(session.project)?.id
 
     /** The folder at [path], names joined by `/` and matched ignoring case like sibling names are, or null. */
     fun findByPath(path: String): Folder? {

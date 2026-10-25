@@ -139,4 +139,15 @@ class SessionTreeTest {
         assertNull(dropChange(bound, listOf(sessions[1]), unfiled, -1))
         assertEquals(null, dropChange(bound, listOf(sessions[0]), unfiled, -1)!!.change(bound).placeOf(sessions[0]))
     }
+
+    @Test
+    fun `sessions in a project's worktrees join its bound folder and stay under sessions while it is unbound`() {
+        val worktree = Path.of("/tf/.claude/worktrees/a5bbab5e")
+        val all = listOf(session("s4", worktree.toString(), 4)) + sessions
+        assertEquals("rtm(fix, s3, s1), empty, sessions($worktree(s4), ${Path.of("/tf")}(s2))", shape(foldersTree(structure, all, "")))
+        val bound = structure.createFolder(null, "p", "tf", project = Path.of("/tf").toString())
+        val root = foldersTree(bound, all, "")
+        assertEquals("rtm(fix, s3, s1), empty, p(s4, s2), sessions", shape(root))
+        assertNull(dropChange(bound, listOf(all.first()), TreePath(arrayOf(root, root.lastChild)), -1))
+    }
 }

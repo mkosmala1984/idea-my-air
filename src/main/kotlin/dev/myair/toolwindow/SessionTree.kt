@@ -67,7 +67,7 @@ fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, ch
     val moved = dragged.singleOrNull()?.takeIf { it is Folder || it is Path } ?: run {
         if (target.isRoot) return null
         val folderId = targetFolder(path)
-        if (folderId == null && dragged.any { structure.projectFolder((it as ClaudeSession).cwd) != null }) return null
+        if (folderId == null && dragged.any { structure.projectFolder((it as ClaudeSession).project) != null }) return null
         val home = generateSequence(path) { it.parentPath }
             .first { (it.lastPathComponent as DefaultMutableTreeNode).userObject.let { item -> item is Folder || item == UnfiledSessions } }
         return Drop({ dragged.fold(it) { folders, session -> folders.assign((session as ClaudeSession).id, folderId) } }, home, -1)

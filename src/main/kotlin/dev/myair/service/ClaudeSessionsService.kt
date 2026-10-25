@@ -90,7 +90,7 @@ class ClaudeSessionsService : Disposable {
             val (scanned, current) = try {
                 // With briefs turned off nothing downstream sees them: rows, tree, tooltips and the board.
                 val briefs = MyAirSettings.getInstance().briefs
-                scanner.scan().map { if (briefs) it else it.copy(brief = null) } to registry.read()
+                inProjects(scanner.scan().map { if (briefs) it else it.copy(brief = null) }) to registry.read()
             } catch (e: Throwable) {
                 thisLogger().error("Claude session refresh failed", e)
                 return@execute
