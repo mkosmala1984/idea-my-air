@@ -206,6 +206,17 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
+    fun `parallel calls written before their results each count by their own result`() {
+        val s = parse(write("s1",
+            user("\"prompt\""),
+            briefCall("t1", "Goal", """[]"""),
+            briefCall("t2", "Bad", """[]"""),
+            result("t1"), result("t2", error = true),
+        ))!!
+        assertEquals(Brief("Goal", emptyList()), s.brief)
+    }
+
+    @Test
     fun `a call counts once its result is read, also in a later incremental read`() {
         val file = write("s1", user("\"prompt\""), briefCall("t1", "Goal", """[]"""))
         val first = ClaudeSessionScanner.read(file, ClaudeSessionScanner.Transcript.EMPTY)

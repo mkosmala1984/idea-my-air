@@ -41,7 +41,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
     /** What a transcript says up to [offset], the byte after its last complete line. */
     data class Transcript(
         val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val prompts: List<String>,
-        val changedFiles: List<String>, val lastMessage: Instant?, val brief: Brief?, val briefCall: BriefCall?,
+        val changedFiles: List<String>, val lastMessage: Instant?, val brief: Brief?, val briefCalls: Map<String, BriefCall>,
     ) {
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
         fun toSession(file: Path): ClaudeSession? {
@@ -52,11 +52,14 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         }
 
         companion object {
-            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, null)
+            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, emptyMap())
         }
     }
 
-    /** A brief or plan call whose result is not read yet: it counts only if the tool accepted it. */
+    /**
+     * A brief or plan call whose result is not read yet: it counts only if the tool accepted it. Calls made in one message
+     * are all written before their results, so the transcript keeps them by id.
+     */
     data class BriefCall(val id: String, val tool: String, val input: JsonObject)
 
     companion object {
@@ -92,19 +95,19 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
             val changedFiles = LinkedHashSet(from.changedFiles)
             var lastMessage = from.lastMessage
             var brief = from.brief
-            var briefCall = from.briefCall
+            val briefCalls = LinkedHashMap(from.briefCalls)
             val offset = forEachCompleteLine(file, from.offset) { line ->
                 if (MESSAGE_HINTS.any { it in line }) messageTime(line)?.let { lastMessage = it }
                 if (ASSISTANT in line && BRIEF_TOOL_USE.containsMatchIn(line)) json(line).takeIf { it["isSidechain"]?.asBoolean != true }
-                    ?.let { o -> toolUses(o).lastOrNull { BRIEF_TOOL.matches(it["name"].asString) } }
-                    ?.let { briefCall = BriefCall(it["id"].asString, it["name"].asString, it.getAsJsonObject("input")) }
-                briefCall?.takeIf { TOOL_RESULT in line && "\"${it.id}\"" in line }?.let { call ->
-                    val result = json(line).getAsJsonObject("message").getAsJsonArray("content").map { it.asJsonObject }
-                        .firstOrNull { it["type"].asString == "tool_result" && it["tool_use_id"].asString == call.id }
-                    if (result != null) {
-                        if (result["is_error"]?.asBoolean != true) brief = Brief.next(brief, call.tool, call.input)
-                        briefCall = null
-                    }
+                    ?.let { o -> toolUses(o).filter { BRIEF_TOOL.matches(it["name"].asString) } }
+                    ?.forEach { briefCalls[it["id"].asString] = BriefCall(it["id"].asString, it["name"].asString, it.getAsJsonObject("input")) }
+                if (TOOL_RESULT in line && briefCalls.keys.any { "\"$it\"" in line }) {
+                    json(line).getAsJsonObject("message").getAsJsonArray("content").map { it.asJsonObject }
+                        .filter { it["type"].asString == "tool_result" }
+                        .forEach { result ->
+                            val call = briefCalls.remove(result["tool_use_id"].asString) ?: return@forEach
+                            if (result["is_error"]?.asBoolean != true) brief = Brief.next(brief, call.tool, call.input)
+                        }
                 }
                 when {
                     line.startsWith(CUSTOM_TITLE) -> customTitle = json(line)["customTitle"].asString
@@ -119,7 +122,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                     }
                 }
             }
-            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCall)
+            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls)
         }
 
         /**
