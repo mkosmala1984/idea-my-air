@@ -50,6 +50,10 @@ import com.intellij.util.ui.tree.TreeUtil
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
+import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.FolderTarget
+import dev.myair.editor.UNREAD_ICON
+import dev.myair.editor.icon
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.Folder
 import dev.myair.store.Pins

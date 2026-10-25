@@ -13,6 +13,7 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.claude.ClaudeSessionScanner
 import dev.myair.claude.LiveSession
 import dev.myair.claude.LiveSessionRegistry
+import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.StructureHistory
