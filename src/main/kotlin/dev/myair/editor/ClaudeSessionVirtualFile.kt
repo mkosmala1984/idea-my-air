@@ -9,6 +9,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
 import dev.myair.claude.SessionStatus
+import dev.myair.claude.isAtOrUnder
 import dev.myair.service.ClaudeSessionsService
 import java.nio.file.Path
 import javax.swing.Icon
@@ -16,8 +17,9 @@ import javax.swing.Icon
 /**
  * A tab running `claude <claudeArgs>` in [cwd]. [sessionId] and [title] follow the session the process shows now, which
  * `/clear` or `/resume` can change; [ClaudeSessionsService] updates them by [pid], known once the process has started.
+ * [project] is the session's [dev.myair.claude.ClaudeSession.project], named in the tab title outside that project's window.
  */
-class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, var title: String, val claudeArgs: List<String>) :
+class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, val project: Path, var title: String, val claudeArgs: List<String>) :
     LightVirtualFile(title, FileTypes.PLAIN_TEXT, "") {
     @Volatile
     var pid: Long? = null
@@ -36,8 +38,13 @@ class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, var title: 
 }
 
 class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {
-    override fun getEditorTabTitle(project: Project, file: VirtualFile) = (file as? ClaudeSessionVirtualFile)?.title
+    override fun getEditorTabTitle(project: Project, file: VirtualFile) =
+        (file as? ClaudeSessionVirtualFile)?.let { tabTitle(it.title, it.project, projectBase(project)) }
 }
+
+/** [title], preceded by the name of [sessionProject] in brackets when it is neither [ideBase] nor a folder below it. */
+fun tabTitle(title: String, sessionProject: Path, ideBase: Path) =
+    if (sessionProject.isAtOrUnder(ideBase.toString())) title else "[${sessionProject.fileName ?: sessionProject}] $title"
 
 /** The tab icon shows the session's status, as the rows of the Claude Sessions tool window do. */
 class ClaudeSessionFileIconProvider : FileIconProvider, DumbAware {

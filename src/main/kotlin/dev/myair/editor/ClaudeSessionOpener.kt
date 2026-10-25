@@ -32,7 +32,7 @@ object ClaudeSessionOpener {
             Messages.showErrorDialog(project, "Session directory no longer exists:\n${session.cwd}", "Cannot Resume Session")
             return
         }
-        openTab(project, ClaudeSessionVirtualFile(session.id, session.cwd, session.title, listOf("--resume", session.id)))
+        openTab(project, ClaudeSessionVirtualFile(session.id, session.cwd, session.project, session.title, listOf("--resume", session.id)))
     }
 
     /**
@@ -58,8 +58,9 @@ object ClaudeSessionOpener {
     private fun hostElsewhere(live: LiveSession, session: ClaudeSession) =
         SessionHosts.hostWindow(live.pid, session.cwd)?.takeIf { it.pid != ProcessHandle.current().pid() }
 
+    /** The session belongs to [project]: [cwd] is its base or one of its worktrees. */
     fun startNew(project: Project, cwd: Path = projectBase(project), id: String = UUID.randomUUID().toString()) {
-        openTab(project, ClaudeSessionVirtualFile(id, cwd, NEW_SESSION_TITLE, listOf("--session-id", id)))
+        openTab(project, ClaudeSessionVirtualFile(id, cwd, projectBase(project), NEW_SESSION_TITLE, listOf("--session-id", id)))
         val service = ClaudeSessionsService.getInstance()
         val target = project.service<FolderTarget>().folderId
         if (target != null && service.foldersError == null) service.updateFolders(ChangeSource.AUTO) { it.assign(id, target) }
