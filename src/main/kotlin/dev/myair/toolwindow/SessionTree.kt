@@ -55,6 +55,16 @@ fun foldersTree(structure: SessionFolders, sessions: List<ClaudeSession>, query:
 /** The folder [path] points into, for a new folder or a drop: the nearest user folder above it, none under [UnfiledSessions]. */
 fun targetFolder(path: TreePath): String? = path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>().lastOrNull()?.id
 
+/**
+ * The directory a session started from the node at [path] runs in: a project row's, or for a folder the project bound to
+ * it or to the nearest folder above it; null for any other node.
+ */
+fun nodeDir(path: TreePath): Path? = when (val item = (path.lastPathComponent as DefaultMutableTreeNode).userObject) {
+    is Path -> item
+    is Folder -> path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>().lastOrNull { it.project != null }?.project?.let(Path::of)
+    else -> null
+}
+
 /** A drop as it will happen: the [change], and where the tree shows it: [childIndex] -1 frames [path]'s row, otherwise a line before that child. */
 class Drop(val change: (SessionFolders) -> SessionFolders, val path: TreePath, val childIndex: Int)
 

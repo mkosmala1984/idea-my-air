@@ -111,6 +111,24 @@ class SessionTreeTest {
     }
 
     @Test
+    fun `a project row and a folder in a bound project give a directory for a new session, other nodes none`() {
+        val bound = structure.createFolder("empty", "p", "rtm", project = Path.of("/rtm").toString()).createFolder("p", "sub", "sub")
+        val root = foldersTree(bound, sessions, "")
+        fun pathTo(vararg indices: Int) = TreePath(indices.fold(listOf(root)) { nodes, i -> nodes + nodes.last().getChildAt(i) as DefaultMutableTreeNode }.toTypedArray())
+        assertEquals("rtm(fix, s3, s1), empty(p(sub)), sessions(${Path.of("/tf")}(s2))", shape(root))
+        assertEquals(Path.of("/rtm"), nodeDir(pathTo(1, 0)))
+        assertEquals(Path.of("/rtm"), nodeDir(pathTo(1, 0, 0)))
+        assertEquals(Path.of("/tf"), nodeDir(pathTo(2, 0)))
+        assertNull(nodeDir(pathTo(0)))
+        assertNull(nodeDir(pathTo(0, 1)))
+        assertNull(nodeDir(pathTo(1)))
+        assertNull(nodeDir(pathTo(2)))
+        assertNull(nodeDir(pathTo(2, 0, 0)))
+        val projects = projectsTree(sessions)
+        assertEquals(Path.of("/rtm"), nodeDir(TreePath(arrayOf(projects, projects.getChildAt(0)))))
+    }
+
+    @Test
     fun `a bound project's folder holds its subfolders, then its sessions filed nowhere else, and leaves sessions`() {
         val bound = structure.createFolder("empty", "p", "rtm", project = Path.of("/rtm").toString()).createFolder("p", "sub", "sub")
             .assign("s1", null).assign("s4", "sub")
