@@ -2,15 +2,18 @@ package dev.myair
 
 import com.intellij.ide.impl.ProjectUtil
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationActivationListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.FileEditorManagerEvent
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.wm.IdeFrame
 import java.nio.file.Path
 
 /** This IDE's side of [TabStore]: publishes its session tabs and shows a tab when another IDE asks. */
@@ -72,10 +75,19 @@ class TabsSyncStartup : ProjectActivity {
     }
 }
 
-/** Republishes after the editor manager has applied the change, so openFiles already reflects it. */
+/**
+ * Republishes after the editor manager has applied the change, so openFiles already reflects it. A selected tab is a
+ * session the user looks at, which the taskbar widget no longer shows as unread.
+ */
 class TabsSyncListener : FileEditorManagerListener {
     override fun fileOpened(source: FileEditorManager, file: VirtualFile) = republish()
     override fun fileClosed(source: FileEditorManager, file: VirtualFile) = republish()
+    override fun selectionChanged(event: FileEditorManagerEvent) = ApplicationManager.getApplication().invokeLater { ClaudeSessionsService.getInstance().lookedAt() }
 
     private fun republish() = ApplicationManager.getApplication().invokeLater { TabsSync.getInstance().publish() }
+}
+
+/** Coming back to the IDE shows the selected tab again, so its session counts as seen, as on [TabsSyncListener.selectionChanged]. */
+class SeenOnActivation : ApplicationActivationListener {
+    override fun applicationActivated(ideFrame: IdeFrame) = ApplicationManager.getApplication().invokeLater { ClaudeSessionsService.getInstance().lookedAt() }
 }

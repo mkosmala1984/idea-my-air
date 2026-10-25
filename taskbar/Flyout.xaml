@@ -1,0 +1,97 @@
+<Window
+    x:Class="MyAir.Taskbar.Flyout"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:MyAir.Taskbar"
+    Title="Claude sessions"
+    Width="356"
+    SizeToContent="Height"
+    WindowStyle="None"
+    ResizeMode="NoResize"
+    AllowsTransparency="True"
+    Background="Transparent"
+    ShowInTaskbar="False"
+    ShowActivated="False"
+    Topmost="True"
+    FontFamily="Segoe UI Variable Text, Segoe UI"
+    FontSize="13"
+    Foreground="{DynamicResource Text}"
+    TextOptions.TextFormattingMode="Display">
+    <Window.Resources>
+        <Style x:Key="Row" TargetType="Button">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Margin="6,0" Padding="10,6" CornerRadius="5" Background="Transparent" BorderThickness="2" BorderBrush="Transparent">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource Focus}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate DataType="{x:Type local:FlyoutHeader}">
+            <StackPanel Margin="18,10,16,4" Orientation="Horizontal">
+                <Ellipse Width="7" Height="7" VerticalAlignment="Center" Fill="{Binding Dot}" />
+                <TextBlock Margin="6,0,0,0" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Secondary}" Text="{Binding Label}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type local:FlyoutRow}">
+            <Button Click="OnRowClick" Style="{StaticResource Row}" Tag="{Binding Id}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition />
+                        <RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBlock FontWeight="SemiBold" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Margin="12,0,0,0" FontSize="12" Foreground="{DynamicResource Secondary}" Text="{Binding Time}" />
+                    <Ellipse Grid.RowSpan="2" Grid.Column="1" Width="8" Height="8" Margin="12,0,2,0" VerticalAlignment="Center"
+                             Fill="{DynamicResource UnreadDot}" Visibility="{Binding DotVisibility}" />
+                    <StackPanel Grid.Row="1" Margin="0,1,0,0" Orientation="Horizontal">
+                        <TextBlock FontSize="12" Foreground="{DynamicResource Secondary}" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
+                        <Border Margin="6,0,0,0" Padding="6,0" CornerRadius="9" Background="{DynamicResource ChipBack}" Visibility="{Binding ChipVisibility}">
+                            <TextBlock FontSize="11.5" Foreground="{DynamicResource ChipText}" Text="{Binding Chip}" />
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </DataTemplate>
+    </Window.Resources>
+
+    <!-- The margin leaves room for the shadow. The shadow sits on its own layer: on the card it would blur the text. -->
+    <Grid Margin="8">
+        <Border CornerRadius="8" Background="{DynamicResource Background}">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="18" Direction="270" Opacity="0.18" ShadowDepth="3" Color="Black" />
+            </Border.Effect>
+        </Border>
+        <Border BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="8" Background="{DynamicResource Background}">
+            <StackPanel>
+                <DockPanel Margin="16,14,16,4">
+                    <TextBlock x:Name="Summary" DockPanel.Dock="Right" VerticalAlignment="Bottom" FontSize="12" Foreground="{DynamicResource Secondary}" />
+                    <TextBlock FontFamily="Segoe UI Variable Display, Segoe UI" FontSize="14" FontWeight="SemiBold" Text="Claude sessions" />
+                </DockPanel>
+                <ItemsControl x:Name="Items" Margin="0,0,0,6" Focusable="False" KeyboardNavigation.DirectionalNavigation="Contained" />
+                <Border Padding="16,9,16,11" Background="{DynamicResource Footer}" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" CornerRadius="0,0,7,7">
+                    <TextBlock x:Name="FooterText" FontSize="12" Foreground="{DynamicResource Secondary}" />
+                </Border>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

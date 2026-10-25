@@ -14,11 +14,13 @@ public sealed partial class BoardWatcher
     private readonly string _boardFile;
     private readonly string _idesDir;
     private readonly string _requestsDir;
+    private readonly string _seenDir;
     private readonly Dispatcher _dispatcher;
     private readonly List<FileSystemWatcher> _watchers;
     private readonly DispatcherTimer _timer;
 
     public IReadOnlyList<BoardSession> Board { get; private set; } = [];
+    public IReadOnlyList<RecentSession> Recent { get; private set; } = [];
     public IReadOnlyList<Ide> Ides { get; private set; } = [];
     public event Action? Changed;
 
@@ -27,6 +29,7 @@ public sealed partial class BoardWatcher
         _boardFile = Path.Combine(root, "taskbar", "board.json");
         _idesDir = Directory.CreateDirectory(Path.Combine(root, "ides")).FullName;
         _requestsDir = Path.Combine(root, "requests");
+        _seenDir = Directory.CreateDirectory(Path.Combine(root, "seen")).FullName;
         _dispatcher = dispatcher;
         Directory.CreateDirectory(Path.GetDirectoryName(_boardFile)!);
         // The plugin writes a temp file and renames it into place, which shows up as Renamed, not Changed.
@@ -52,10 +55,11 @@ public sealed partial class BoardWatcher
     {
         var ides = Directory.GetFiles(_idesDir, "*.json").Select(TryRead).OfType<string>().Select(Taskbar.Board.ParseIde)
             .Where(ide => IsAlive(ide.Pid, ide.Started)).ToList();
-        var board = TryRead(_boardFile) is { } text ? Taskbar.Board.ParseBoard(text) : [];
-        // Tabs only steer where a click goes; redrawing on their changes would close an open tooltip for nothing.
-        var redraw = !board.SequenceEqual(Board) || ides.Count != Ides.Count;
-        Board = board;
+        var file = TryRead(_boardFile) is { } text ? Taskbar.Board.ParseBoard(text) : BoardFile.Empty;
+        // Tabs only steer where a click goes; redrawing on their changes would move the flyout's focus for nothing.
+        var redraw = !file.Sessions.SequenceEqual(Board) || !file.Recent.SequenceEqual(Recent) || ides.Count != Ides.Count;
+        Board = file.Sessions;
+        Recent = file.Recent;
         Ides = ides;
         if (redraw) Changed?.Invoke();
     }
@@ -99,6 +103,17 @@ public sealed partial class BoardWatcher
         var temp = Path.Combine(inbox, $"{Guid.NewGuid()}.tmp");
         File.WriteAllText(temp, $$"""{"sessionId":"{{sessionId}}"}""");
         File.Move(temp, Path.ChangeExtension(temp, ".json"));
+        // The IDE marks a session seen when its tab gets focus; one running in a terminal has no tab.
+        MarkSeen(sessionId);
+    }
+
+    /** Writes `seen/<id>` as Seen.kt reads it: the time in epoch ms; the temp name has a dot, which the plugin skips. */
+    private void MarkSeen(string sessionId)
+    {
+        var target = Path.Combine(_seenDir, sessionId);
+        var temp = $"{target}.{Guid.NewGuid()}.tmp";
+        File.WriteAllText(temp, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString());
+        File.Move(temp, target, overwrite: true);
     }
 
     [LibraryImport("user32.dll", SetLastError = true)]

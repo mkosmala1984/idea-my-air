@@ -9,28 +9,32 @@
     Background="Transparent"
     WindowStyle="None">
     <!-- A nearly transparent background, so clicks between the numbers hit the widget rather than the taskbar. -->
-    <!-- Two rows rather than one: a full taskbar leaves little width, and a slot that does not fit is not shown. -->
+    <!-- Rows rather than columns: a full taskbar leaves little width, and a slot that does not fit is not shown. -->
     <Border
         x:Name="Root"
         Padding="4,0"
         Background="#01000000"
         CornerRadius="4"
+        MouseEnter="OnEnter"
+        MouseLeave="OnLeave"
         MouseLeftButtonUp="OnClick"
-        MouseRightButtonUp="OnClick"
-        ToolTipService.InitialShowDelay="200">
+        MouseRightButtonUp="OnRightClick">
         <Grid VerticalAlignment="Center">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
+                <RowDefinition Height="14" />
+                <RowDefinition Height="14" />
+                <RowDefinition Height="14" />
             </Grid.RowDefinitions>
-            <Ellipse Width="8" Height="8" Fill="#FFF5A623" />
-            <TextBlock x:Name="NeedsInput" Grid.Column="1" Margin="4,0,0,0" FontSize="13" FontWeight="SemiBold" />
-            <Ellipse Grid.Row="1" Width="8" Height="8" Fill="#FF4A9EFF" />
-            <TextBlock x:Name="Working" Grid.Row="1" Grid.Column="1" Margin="4,0,0,0" FontSize="13" />
+            <Ellipse Width="7" Height="7" Fill="{DynamicResource NeedsInputDot}" />
+            <TextBlock x:Name="NeedsInput" Grid.Column="1" Margin="4,0,0,0" VerticalAlignment="Center" FontSize="11.5" FontWeight="SemiBold" />
+            <Ellipse Grid.Row="1" Width="7" Height="7" Fill="{DynamicResource UnreadDot}" />
+            <TextBlock x:Name="Unread" Grid.Row="1" Grid.Column="1" Margin="4,0,0,0" VerticalAlignment="Center" FontSize="11.5" FontWeight="SemiBold" />
+            <Ellipse Grid.Row="2" Width="7" Height="7" Fill="{DynamicResource WorkingDot}" />
+            <TextBlock x:Name="Working" Grid.Row="2" Grid.Column="1" Margin="4,0,0,0" VerticalAlignment="Center" FontSize="11.5" />
         </Grid>
     </Border>
 </Window>

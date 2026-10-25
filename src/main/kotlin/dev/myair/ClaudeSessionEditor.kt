@@ -2,6 +2,8 @@ package dev.myair
 
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.icons.AllIcons
+import com.intellij.ui.BadgeIcon
+import com.intellij.ui.JBColor
 import com.intellij.ide.FileIconProvider
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -45,6 +47,10 @@ class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, var title: 
     @Volatile
     var status: SessionStatus? = null
 
+    /** [ClaudeSessionsService.unread] holds [sessionId]. */
+    @Volatile
+    var unread = false
+
     init {
         isWritable = false
     }
@@ -57,7 +63,7 @@ class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {
 /** The tab icon shows the session's status, as the rows of the Claude Sessions tool window do. */
 class ClaudeSessionFileIconProvider : FileIconProvider, DumbAware {
     override fun getIcon(file: VirtualFile, flags: Int, project: Project?): Icon? =
-        (file as? ClaudeSessionVirtualFile)?.let { it.status?.icon ?: AllIcons.Toolwindows.ToolWindowMessages }
+        (file as? ClaudeSessionVirtualFile)?.let { if (it.unread) UNREAD_ICON else it.status?.icon ?: AllIcons.Toolwindows.ToolWindowMessages }
 }
 
 val SessionStatus.icon: Icon
@@ -66,6 +72,9 @@ val SessionStatus.icon: Icon
         SessionStatus.NEEDS_INPUT -> AllIcons.General.Warning
         SessionStatus.IDLE -> AllIcons.Actions.Checked
     }
+
+/** An idle session with an unread reply: the idle icon with the taskbar's blue "Unread" dot (`taskbar/Theme.cs`). */
+val UNREAD_ICON: Icon = BadgeIcon(SessionStatus.IDLE.icon, JBColor(0x005FB8, 0x4CC2FF))
 
 fun projectBase(project: Project): Path = Path.of(checkNotNull(project.basePath) { "project ${project.name} has no base path" })
 

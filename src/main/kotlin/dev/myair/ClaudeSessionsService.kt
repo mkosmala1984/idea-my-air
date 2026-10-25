@@ -30,6 +30,8 @@ class ClaudeSessionsService : Disposable {
     /** What this IDE last wrote to [boardFile]; folder, pin and title changes refresh too, but leave the board as it is. */
     private var boardText: String? = null
 
+    private val seenStore = SeenStore(structure.file.resolveSibling("seen"))
+
     /** False until the first refresh lands; the first scan reads every transcript and takes seconds. */
     var loaded = false
         private set
@@ -48,6 +50,10 @@ class ClaudeSessionsService : Disposable {
     var foldersError: String? = null
         private set
 
+    /** Running idle sessions with a message the user has not seen, as the taskbar's "Unread" group lists them. */
+    var unread = emptySet<String>()
+        private set
+
     /** Pinned and dismissed sessions; see [pinnedSessions] for what the list shows. */
     var pins = Pins()
         private set
@@ -62,7 +68,7 @@ class ClaudeSessionsService : Disposable {
     private val refresher = AppExecutorUtil.createBoundedApplicationPoolExecutor("Claude sessions refresh", 1)
 
     // File events drive refreshes; the 60 s rescan covers events the OS dropped, as Air's REREAD_INTERVAL does.
-    private val watcher = ClaudeHomeWatcher(listOf(claudeHome.resolve("sessions"), structure.file.parent), claudeHome.resolve("projects")) { refresh() }
+    private val watcher = ClaudeHomeWatcher(listOf(claudeHome.resolve("sessions"), structure.file.parent, seenStore.dir), claudeHome.resolve("projects")) { refresh() }
     private val safetyNet = AppExecutorUtil.getAppScheduledExecutorService().scheduleWithFixedDelay(::refresh, 60, 60, TimeUnit.SECONDS)
 
     init {
@@ -96,7 +102,9 @@ class ClaudeSessionsService : Disposable {
                 // Also read where updatePins writes, dropping dismissals that are over (written only when some are);
                 // a broken pins.json throws, which the IDE reports as an error.
                 val pinned = pinStore.update { it.prune(scanned, current) }
-                if (loaded && scanned == sessions && current == live && read == folders && error == foldersError && pinned == pins) return@invokeLater
+                // Before the check below: a session the user looked at changes the board and nothing else.
+                val unreadChanged = updateBoard(scanned, current, pinned.settled)
+                if (loaded && !unreadChanged && scanned == sessions && current == live && read == folders && error == foldersError && pinned == pins) return@invokeLater
                 if (failure != null && error != foldersError) thisLogger().error("Cannot read ${structure.file}", failure)
                 loaded = true
                 sessions = scanned
@@ -106,14 +114,36 @@ class ClaudeSessionsService : Disposable {
                 foldersError = error
                 retargetTabs()
                 listeners.forEach { it() }
-                // Every IDE writes the same content, derived from the same files, so it needs no single owner.
-                val board = boardJson(boardSessions(sessions, live))
-                if (board != boardText) {
-                    writeAtomically(boardFile, board)
-                    boardText = board
-                }
             }
         }
+    }
+
+    /** Called on the EDT when the user may look at a session: a tab selected, the IDE window activated. */
+    fun lookedAt() {
+        if (!updateBoard(sessions, live, pins.settled)) return
+        retargetTabs()
+        listeners.forEach { it() }
+    }
+
+    /**
+     * Marks seen the sessions met for the first time and those whose tab the user looks at now, then writes the board.
+     * Every IDE writes the same content, derived from the same files, so it needs no single owner. Returns whether [unread]
+     * changed.
+     */
+    private fun updateBoard(sessions: List<ClaudeSession>, live: Map<String, LiveSession>, settled: Set<String>): Boolean {
+        val seen = seenStore.read()
+        val now = System.currentTimeMillis()
+        val marks = firstSight(sessions, live, seen) + newToUser(SessionHosts.visibleSessions(), sessions, seen).associateWith { now }
+        marks.forEach { (id, at) -> seenStore.mark(id, at) }
+        val running = boardSessions(sessions, live, seen + marks)
+        val board = boardJson(running, recentSessions(sessions, running, settled))
+        if (board != boardText) {
+            writeAtomically(boardFile, board)
+            boardText = board
+        }
+        val before = unread
+        unread = running.filter { it.unread }.map { it.id }.toSet()
+        return unread != before
     }
 
     /** Applies [op] to the folders as they are on disk now and shows the result in every panel of this IDE. */
@@ -126,6 +156,8 @@ class ClaudeSessionsService : Disposable {
     /** Applies [op] to the pins as they are on disk now and shows the result in every panel of this IDE. */
     fun updatePins(op: (Pins) -> Pins) {
         pins = pinStore.update(op)
+        // Settling a session takes it out of the flyout's "Recent" group.
+        if (updateBoard(sessions, live, pins.settled)) retargetTabs()
         listeners.forEach { it() }
     }
 
@@ -139,13 +171,15 @@ class ClaudeSessionsService : Disposable {
                 val (sessionId, title) = retarget(file.sessionId, file.title, file.pid, live, titles)
                 // By pid rather than session id: another process may run the same session ("Open Anyway").
                 val status = live.values.firstOrNull { it.pid == file.pid }?.status
-                if (sessionId == file.sessionId && title == file.title && status == file.status) continue
+                val unread = sessionId in this.unread
+                if (sessionId == file.sessionId && title == file.title && status == file.status && unread == file.unread) continue
                 if (sessionId != file.sessionId) switched += file.sessionId to sessionId
                 // Other IDEs list tabs by session and title only, so a status change alone is not published.
                 if (sessionId != file.sessionId || title != file.title) changed = true
                 file.sessionId = sessionId
                 file.title = title
                 file.status = status
+                file.unread = unread
                 editors.updateFilePresentation(file)
             }
         }
