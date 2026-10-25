@@ -27,6 +27,7 @@ import com.intellij.testFramework.LightVirtualFile
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
+import dev.myair.folders.ChangeSource
 import org.jetbrains.plugins.terminal.LocalTerminalDirectRunner
 import org.jetbrains.plugins.terminal.ShellStartupOptions
 import org.jetbrains.plugins.terminal.ShellTerminalWidget

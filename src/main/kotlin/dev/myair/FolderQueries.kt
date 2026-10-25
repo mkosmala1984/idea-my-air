@@ -2,6 +2,9 @@ package dev.myair
 
 import com.google.gson.GsonBuilder
 import dev.myair.claude.ClaudeSession
+import dev.myair.folders.Folder
+import dev.myair.folders.SessionFolders
+import dev.myair.folders.StructureHistory
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime

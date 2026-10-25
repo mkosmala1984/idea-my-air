@@ -2,6 +2,7 @@ package dev.myair
 
 import com.google.gson.JsonParser
 import dev.myair.claude.ClaudeSession
+import dev.myair.folders.SessionFolders
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.nio.file.Path

@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.folders
 
 import dev.myair.claude.ClaudeSession
 import org.junit.jupiter.api.Test

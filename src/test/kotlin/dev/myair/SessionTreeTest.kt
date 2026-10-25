@@ -1,6 +1,8 @@
 package dev.myair
 
 import dev.myair.claude.ClaudeSession
+import dev.myair.folders.Folder
+import dev.myair.folders.SessionFolders
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import java.time.Instant

@@ -5,6 +5,9 @@ import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.openapi.application.EDT
+import dev.myair.folders.ChangeSource
+import dev.myair.folders.FolderChanges
+import dev.myair.folders.SessionFolders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.ZonedDateTime
