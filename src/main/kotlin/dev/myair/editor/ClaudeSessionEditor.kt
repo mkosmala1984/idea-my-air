@@ -10,6 +10,8 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.terminal.JBTerminalWidget
+import dev.myair.MyAirSettings
 import org.jetbrains.plugins.terminal.LocalTerminalDirectRunner
 import org.jetbrains.plugins.terminal.ShellStartupOptions
 import org.jetbrains.plugins.terminal.ShellTerminalWidget
@@ -42,7 +44,11 @@ class ClaudeSessionEditor(project: Project, private val file: ClaudeSessionVirtu
         }
     }
 
-    override fun getComponent(): JComponent = widget.component
+    private val centered = checkNotNull(JBTerminalWidget.asJediTermWidget(widget)) { "not a JediTerm terminal: $widget" }.let {
+        CenteredTerminal(widget.component, it.terminalPanel, it.settingsProvider) { MyAirSettings.getInstance().terminalColumns }
+    }
+
+    override fun getComponent(): JComponent = centered
     override fun getPreferredFocusedComponent(): JComponent = widget.preferredFocusableComponent
     override fun getName() = "Claude"
     override fun getFile(): VirtualFile = file
