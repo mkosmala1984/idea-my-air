@@ -12,6 +12,7 @@ public partial class MainWindow : Window
 {
     private readonly BoardWatcher _board;
     private readonly Flyout _flyout;
+    private readonly Bubble _bubble;
     private readonly DispatcherTimer _open;
     private readonly DispatcherTimer _close;
 
@@ -24,13 +25,15 @@ public partial class MainWindow : Window
         Foreground = (System.Windows.Media.Brush)Resources["Text"];
         _board = board;
         _flyout = new Flyout(board);
-        _open = Timer(250, () => _flyout.Peek(Root));
+        _bubble = new Bubble(board, Root);
+        _open = Timer(250, () => OpenFlyout(() => _flyout.Peek(Root)));
         // Only a peek closes by itself, and not while the pointer is back on the widget or on the flyout.
         _close = Timer(300, () => { if (!_flyout.Pinned && !_flyout.IsMouseOver && !Root.IsMouseOver) _flyout.Dismiss(); });
         _flyout.MouseEnter += (_, _) => _close.Stop();
         _flyout.MouseLeave += (_, _) => CloseSoon();
         Host = new TaskbarContentHost(this, Root, new() { PreferredWidth = Width });
         _board.Changed += Render;
+        _board.Arrived += Announce;
         Render();
     }
 
@@ -51,6 +54,18 @@ public partial class MainWindow : Window
         Unread.Text = Board.Count(_board.Board, Group.Unread).ToString();
         Working.Text = Board.Count(_board.Board, Group.Working).ToString();
         Root.Opacity = _board.Ides.Count > 0 ? 1 : 0.4;
+    }
+
+    // The flyout lists every session the bubble would; it shows them alone.
+    private void Announce(IReadOnlyList<BoardSession> arrived)
+    {
+        if (!_flyout.IsVisible) _bubble.Announce(arrived);
+    }
+
+    private void OpenFlyout(Action open)
+    {
+        _bubble.Dismiss();
+        open();
     }
 
     private void OnEnter(object sender, MouseEventArgs e)
@@ -75,7 +90,7 @@ public partial class MainWindow : Window
         _open.Stop();
         _close.Stop();
         if (_flyout.Pinned) _flyout.Dismiss();
-        else if (!_flyout.JustDismissed) _flyout.Pin(Root);
+        else if (!_flyout.JustDismissed) OpenFlyout(() => _flyout.Pin(Root));
         e.Handled = true;
     }
 
@@ -91,7 +106,9 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _board.Changed -= Render;
+        _board.Arrived -= Announce;
         _flyout.Close();
+        _bubble.Close();
         Host.Dispose();
         base.OnClosed(e);
     }

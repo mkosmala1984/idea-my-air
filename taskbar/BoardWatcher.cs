@@ -24,6 +24,11 @@ public sealed partial class BoardWatcher
     public IReadOnlyList<Ide> Ides { get; private set; } = [];
     public event Action? Changed;
 
+    /** Raised after [Changed] with the sessions that came to need the user ([Board.Arrivals]); never for the first read. */
+    public event Action<IReadOnlyList<BoardSession>>? Arrived;
+
+    private bool _loaded;
+
     public BoardWatcher(string root, Dispatcher dispatcher)
     {
         _boardFile = Path.Combine(root, "taskbar", "board.json");
@@ -58,10 +63,14 @@ public sealed partial class BoardWatcher
         var file = TryRead(_boardFile) is { } text ? Taskbar.Board.ParseBoard(text) : BoardFile.Empty;
         // Tabs only steer where a click goes; redrawing on their changes would move the flyout's focus for nothing.
         var redraw = !file.Sessions.SequenceEqual(Board) || !file.Recent.SequenceEqual(Recent) || ides.Count != Ides.Count;
+        // The first read finds what waited before the app started; without an IDE the board is stale and a click fails.
+        var arrived = _loaded && ides.Count > 0 ? Taskbar.Board.Arrivals(Board, file.Sessions) : [];
+        _loaded = true;
         Board = file.Sessions;
         Recent = file.Recent;
         Ides = ides;
         if (redraw) Changed?.Invoke();
+        if (arrived.Count > 0) Arrived?.Invoke(arrived);
     }
 
     /** Null when the file is gone: an IDE removes its tab list on exit, and the board does not exist before the first IDE. */
