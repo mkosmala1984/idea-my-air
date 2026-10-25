@@ -134,6 +134,12 @@ class ClaudeSessionsService : Disposable {
         return unread != before
     }
 
+    /** Called on the EDT after the user applied My Air settings: what the panels and the board show may depend on them. */
+    fun settingsChanged() {
+        updateBoard(sessions, live, pins.settled)
+        listeners.forEach { it() }
+    }
+
     /** Applies [op] to the folders as they are on disk now and shows the result in every panel of this IDE. */
     fun updateFolders(source: ChangeSource, op: (SessionFolders) -> SessionFolders) {
         check(foldersError == null) { "folders cannot change while ${structure.file} is unreadable: $foldersError" }
