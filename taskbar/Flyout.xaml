@@ -64,7 +64,7 @@
                     <Ellipse Grid.RowSpan="2" Grid.Column="1" Width="8" Height="8" Margin="12,0,2,0" VerticalAlignment="Center"
                              Fill="{DynamicResource UnreadDot}" Visibility="{Binding DotVisibility}" />
                     <StackPanel Grid.Row="1" Margin="0,1,0,0" Orientation="Horizontal">
-                        <TextBlock FontSize="13.5" Foreground="{DynamicResource Secondary}" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock FontSize="13.5" Foreground="{DynamicResource Secondary}" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Detail}" />
                         <Border Margin="6,0,0,0" Padding="6,0" CornerRadius="9" Background="{DynamicResource ChipBack}" Visibility="{Binding ChipVisibility}">
                             <TextBlock FontSize="13" Foreground="{DynamicResource ChipText}" Text="{Binding Chip}" />
                         </Border>

@@ -7,9 +7,10 @@ public enum SessionStatus { Working, NeedsInput, Idle }
 
 /**
  * A running session from `~/.my-air/taskbar/board.json`, written by the plugin (TaskbarBoard.kt). [LastMessage] is epoch
- * ms; it and [Project] are missing while the transcript is not scanned yet.
+ * ms; it and [Project] are missing while the transcript is not scanned yet. [Activity] is the task in progress of the
+ * session's brief, else its goal; missing without a brief.
  */
-public sealed record BoardSession(string Id, string Title, SessionStatus Status, bool Unread, string? Project = null, string? WaitingFor = null, long? LastMessage = null);
+public sealed record BoardSession(string Id, string Title, SessionStatus Status, bool Unread, string? Project = null, string? WaitingFor = null, long? LastMessage = null, string? Activity = null);
 
 public sealed record OpenTab(IReadOnlyList<string> SessionIds, string Title, string Project);
 
@@ -80,13 +81,17 @@ public static class Board
         _ => throw new ArgumentOutOfRangeException(nameof(group), group, null),
     };
 
-    /** The second line of a row: the project, and for an unread reply when it came. */
+    /** The second line of a row: the project, for an unread reply when it came, and what the session is doing. */
     public static string Detail(BoardSession s, long nowMs)
     {
-        var project = s.Project ?? "new session";
-        if (!s.Unread || s.LastMessage is not { } at) return project;
-        var ago = Ago(at, nowMs);
-        return $"{project} · finished {(ago == "now" ? "just now" : ago + " ago")}";
+        var parts = new List<string> { s.Project ?? "new session" };
+        if (s.Unread && s.LastMessage is { } at)
+        {
+            var ago = Ago(at, nowMs);
+            parts.Add($"finished {(ago == "now" ? "just now" : ago + " ago")}");
+        }
+        if (s.Activity is { } activity) parts.Add(activity);
+        return string.Join(" · ", parts);
     }
 
     /**

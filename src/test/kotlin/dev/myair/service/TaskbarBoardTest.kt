@@ -1,8 +1,11 @@
 package dev.myair.service
 
+import dev.myair.claude.Brief
+import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
+import dev.myair.claude.TaskStatus
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import java.time.Instant
@@ -30,8 +33,8 @@ class TaskbarBoardTest {
         val board = boardSessions(sessions, mapOf("fresh" to live(SessionStatus.NEEDS_INPUT, "dialog open"), "s3" to live(SessionStatus.NEEDS_INPUT)), emptyMap())
         assertEquals(
             listOf(
-                BoardSession("s3", "title s3", "p3", SessionStatus.NEEDS_INPUT, null, 97, false),
-                BoardSession("fresh", NEW_SESSION_TITLE, null, SessionStatus.NEEDS_INPUT, "dialog open", null, false),
+                BoardSession("s3", "title s3", "p3", SessionStatus.NEEDS_INPUT, null, 97, false, null),
+                BoardSession("fresh", NEW_SESSION_TITLE, null, SessionStatus.NEEDS_INPUT, "dialog open", null, false, null),
             ),
             board,
         )
@@ -48,15 +51,27 @@ class TaskbarBoardTest {
         )
     }
 
+    @Test
+    fun `a session's activity is its task in progress, else its goal`() {
+        val tasks = listOf(BriefTask("export", TaskStatus.COMPLETED), BriefTask("map", TaskStatus.IN_PROGRESS))
+        val briefed = listOf(
+            sessions[0].copy(brief = Brief("Migrate", tasks)),
+            sessions[1].copy(brief = Brief("Migrate", tasks.take(1))),
+            sessions[2],
+        )
+        val live = (1..3).associate { "s$it" to live(SessionStatus.WORKING) }
+        assertEquals(listOf("map", "Migrate", null), boardSessions(briefed, live, emptyMap()).map { it.activity })
+    }
+
     /** The same text is parsed by BoardTest in taskbar/tests, which keeps both sides of the file format in step. */
     @Test
     fun `json names statuses by enum constant and leaves null fields out`() {
         val board = listOf(
-            BoardSession("a", "Fix tray", "my-air", SessionStatus.IDLE, null, 1700000000000, true),
-            BoardSession("b", "New session", null, SessionStatus.NEEDS_INPUT, "permission", null, false),
+            BoardSession("a", "Fix tray", "my-air", SessionStatus.IDLE, null, 1700000000000, true, "map statuses"),
+            BoardSession("b", "New session", null, SessionStatus.NEEDS_INPUT, "permission", null, false, null),
         )
         assertEquals(
-            """{"sessions":[{"id":"a","title":"Fix tray","project":"my-air","status":"IDLE","lastMessage":1700000000000,"unread":true},""" +
+            """{"sessions":[{"id":"a","title":"Fix tray","project":"my-air","status":"IDLE","lastMessage":1700000000000,"unread":true,"activity":"map statuses"},""" +
                 """{"id":"b","title":"New session","status":"NEEDS_INPUT","waitingFor":"permission","unread":false}],""" +
                 """"recent":[{"id":"c","title":"Old work","project":"tulip","lastMessage":1690000000000}]}""",
             boardJson(board, listOf(RecentSession("c", "Old work", "tulip", 1690000000000))),

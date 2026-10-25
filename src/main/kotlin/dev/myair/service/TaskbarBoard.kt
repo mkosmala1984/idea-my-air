@@ -8,11 +8,12 @@ import dev.myair.store.SeenStore
 
 /**
  * A running session as the taskbar widget (`taskbar/`) shows it; [project] and [lastMessage] (epoch ms) are null while its
- * transcript is not scanned yet. [unread]: idle, with a message after the user last looked at it.
+ * transcript is not scanned yet. [unread]: idle, with a message after the user last looked at it. [activity]: the task in
+ * progress of its brief, else the brief's goal.
  */
 data class BoardSession(
     val id: String, val title: String, val project: String?, val status: SessionStatus, val waitingFor: String?,
-    val lastMessage: Long?, val unread: Boolean,
+    val lastMessage: Long?, val unread: Boolean, val activity: String?,
 )
 
 /**
@@ -25,11 +26,11 @@ fun boardSessions(sessions: List<ClaudeSession>, live: Map<String, LiveSession>,
         val at = s.lastMessage.toEpochMilli()
         live[s.id]?.let {
             val unread = it.status == SessionStatus.IDLE && seen[s.id]?.let { seenAt -> at > seenAt } == true
-            BoardSession(s.id, s.title, s.cwd.fileName.toString(), it.status, it.waitingFor, at, unread)
+            BoardSession(s.id, s.title, s.cwd.fileName.toString(), it.status, it.waitingFor, at, unread, s.brief?.current?.content ?: s.brief?.goal)
         }
     }
     val unscanned = (live.keys - sessions.map { it.id }.toSet()).map { id ->
-        live.getValue(id).let { BoardSession(id, NEW_SESSION_TITLE, null, it.status, it.waitingFor, null, false) }
+        live.getValue(id).let { BoardSession(id, NEW_SESSION_TITLE, null, it.status, it.waitingFor, null, false, null) }
     }
     return (scanned + unscanned).sortedBy {
         when (it.status) {
