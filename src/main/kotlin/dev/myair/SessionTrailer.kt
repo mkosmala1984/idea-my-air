@@ -4,6 +4,7 @@ import com.intellij.ide.ui.UISettings
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.util.ui.GraphicsUtil
 import com.intellij.util.ui.JBUI
+import dev.myair.claude.ClaudeSession
 import java.awt.Color
 import java.awt.Graphics
 import java.awt.Graphics2D

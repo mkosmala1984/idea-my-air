@@ -47,6 +47,9 @@ import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.StatusText
 import com.intellij.util.ui.tree.TreeUtil
+import dev.myair.claude.ClaudeSession
+import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
 import java.awt.BorderLayout
 import java.awt.CardLayout
 import java.awt.Component

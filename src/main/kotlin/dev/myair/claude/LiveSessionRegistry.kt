@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.claude
 
 import com.google.gson.JsonParser
 import java.nio.file.Path

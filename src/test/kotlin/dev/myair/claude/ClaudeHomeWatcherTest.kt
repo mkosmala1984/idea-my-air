@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.claude
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir

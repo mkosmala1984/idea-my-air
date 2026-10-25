@@ -1,5 +1,8 @@
 package dev.myair
 
+import dev.myair.claude.ClaudeSession
+import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
