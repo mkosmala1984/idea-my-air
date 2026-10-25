@@ -55,9 +55,15 @@ object ClaudeSessionOpener {
     private fun hostElsewhere(live: LiveSession, session: ClaudeSession) =
         SessionHosts.hostWindow(live.pid, session.cwd)?.takeIf { it.pid != ProcessHandle.current().pid() }
 
-    /** The session belongs to [project]: [cwd] is its base or one of its worktrees. */
-    fun startNew(project: Project, cwd: Path = projectBase(project), id: String = UUID.randomUUID().toString()) {
-        openTab(project, ClaudeSessionVirtualFile(id, cwd, projectBase(project), NEW_SESSION_TITLE, listOf("--session-id", id)))
+    /** Starts `claude` with [args] in [cwd], which is [sessionProject] or one of its worktrees; the tab opens in [project]. */
+    fun startNew(
+        project: Project,
+        sessionProject: Path = projectBase(project),
+        cwd: Path = sessionProject,
+        id: String = UUID.randomUUID().toString(),
+        args: List<String> = emptyList(),
+    ) {
+        openTab(project, ClaudeSessionVirtualFile(id, cwd, sessionProject, NEW_SESSION_TITLE, listOf("--session-id", id) + args))
     }
 
     private fun openTab(project: Project, file: ClaudeSessionVirtualFile) {
