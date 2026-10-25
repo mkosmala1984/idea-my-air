@@ -1,4 +1,4 @@
-package dev.myair
+package dev.myair.toolwindow
 
 import dev.myair.claude.ClaudeSession
 import dev.myair.folders.Folder
