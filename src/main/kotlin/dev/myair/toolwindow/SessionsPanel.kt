@@ -38,6 +38,7 @@ import dev.myair.actions.NewSessionInDirAction
 import dev.myair.actions.PresetsGroup
 import dev.myair.actions.SameSettingsAction
 import dev.myair.actions.SaveAsPresetAction
+import dev.myair.actions.ShowChangesVsBaseAction
 import dev.myair.claude.ClaudeSession
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.folders.Folder
@@ -169,7 +170,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             DefaultActionGroup(
                 NewSessionInDirAction("New Claude Session", false, selectedDir),
                 NewSessionInDirAction("New Claude Session in Worktree...", true, selectedDir), Separator.getInstance(),
-                pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree),
+                pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree),
                 Separator.getInstance(), newFolder, rename, delete,
             ),
             "ClaudeSessionsPopup",
@@ -188,7 +189,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         remove.registerCustomShortcutSet(CommonShortcuts.getDelete(), pinned)
         val inList = { pinned.selectedValuesList }
         val pinnedPopup = DefaultActionGroup(
-            pinAction(service, inList), settleAction(service, inList), remove, Separator.getInstance(), SameSettingsAction(inList), SaveAsPresetAction(inList),
+            pinAction(service, inList), settleAction(service, inList), remove, Separator.getInstance(), SameSettingsAction(inList), SaveAsPresetAction(inList), ShowChangesVsBaseAction(inList),
         )
         pinned.addMouseListener(object : PopupHandler() {
             override fun invokePopup(comp: Component, x: Int, y: Int) {
