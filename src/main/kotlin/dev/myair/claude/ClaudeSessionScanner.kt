@@ -106,7 +106,9 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         /** The line `claude` writes when a notification is queued for the conversation, before the model reads it. */
         private const val ENQUEUE = "{\"type\":\"queue-operation\",\"operation\":\"enqueue\""
         private const val TASK_NOTIFICATION = "<task-notification>"
-        private val FINAL_NOTIFICATION = Regex("<task-id>([^<]+)</task-id>[\\s\\S]*<status>[a-z_]+</status>")
+
+        /** How a background shell's result names its output file. */
+        private val SHELL_OUTPUT = Regex("Output is being written to: (.+?\\.output)")
 
         /** In the `toolUseResult` of an Artifact publish, which names the artifact's url, title and local file. */
         private const val ARTIFACT = "\"artifact_id\":"
@@ -157,6 +159,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                 if (TOOL_RESULT in line && (shellCalls.keys.any { "\"$it\"" in line } || ASYNC_LAUNCHED in line)) json(line)
                     .takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
                         val result = o["toolUseResult"] as? JsonObject
+                        val started = time(o)
                         o.getAsJsonObject("message").getAsJsonArray("content").map { it.asJsonObject }
                             .filter { it["type"].asString == "tool_result" }
                             .forEach { item ->
@@ -164,17 +167,36 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                                 val task = when {
                                     result == null -> null
                                     call != null -> (result["backgroundTaskId"] ?: result["taskId"].takeIf { call.kind == BackgroundTask.Kind.MONITOR })
-                                        ?.let { BackgroundTask(it.asString, call.kind, checkNotNull(call.description) { "background task without a description: $file" }) }
+                                        ?.let {
+                                            val description = checkNotNull(call.description) { "background task without a description: $file" }
+                                            val output = item["content"].takeIf { c -> c.isJsonPrimitive }?.let { c -> SHELL_OUTPUT.find(c.asString) }
+                                            BackgroundTask(it.asString, call.kind, description, started, output?.let { m -> Path.of(m.groupValues[1]) })
+                                        }
                                     result["status"]?.asString != "async_launched" -> null
-                                    result.has("agentId") -> BackgroundTask(result["agentId"].asString, BackgroundTask.Kind.AGENT, result["description"].asString)
-                                    else -> BackgroundTask(result["taskId"].asString, BackgroundTask.Kind.WORKFLOW, result["summary"].asString)
+                                    result.has("agentId") -> BackgroundTask(
+                                        result["agentId"].asString, BackgroundTask.Kind.AGENT, result["description"].asString, started,
+                                        result["outputFile"]?.asString?.let(Path::of),
+                                    )
+                                    else -> BackgroundTask(result["taskId"].asString, BackgroundTask.Kind.WORKFLOW, result["summary"].asString, started)
                                 }
                                 if (task != null) background[task.id] = task
                             }
                     }
                 if (line.startsWith(ENQUEUE) && TASK_NOTIFICATION in line) {
-                    // A monitor's events carry no status; the notification that ends a task does.
-                    FINAL_NOTIFICATION.find(json(line)["content"].asString)?.let { background.remove(it.groupValues[1]) }
+                    val o = json(line)
+                    val content = o["content"].asString
+                    // A monitor's events carry no status; the notification that ends a task does. An agent sent another
+                    // message notifies again, and its latest end counts.
+                    tag(content, "status")?.let { status ->
+                        val id = checkNotNull(tag(content, "task-id")) { "final notification without a task id: $file" }
+                        background[id]?.let { task ->
+                            val summary = checkNotNull(tag(content, "summary")) { "final notification without a summary: $file" }
+                            background[id] = task.copy(
+                                output = tag(content, "output-file")?.let(Path::of) ?: task.output,
+                                end = BackgroundTask.End(time(o), BackgroundTask.Status.valueOf(status.uppercase()), summary),
+                            )
+                        }
+                    }
                 }
                 if (MESSAGE_HINTS.any { it in line }) message(line)?.let {
                     lastMessage = it.time
@@ -279,6 +301,11 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         }
 
         private fun json(line: String): JsonObject = JsonParser.parseString(line).asJsonObject
+
+        private fun time(o: JsonObject): Instant = Instant.parse(checkNotNull(o["timestamp"]) { "line without timestamp: $o" }.asString)
+
+        /** The text of the first `<name>` element of a notification. */
+        private fun tag(content: String, name: String) = Regex("<$name>([\\s\\S]*?)</$name>").find(content)?.groupValues?.get(1)
 
         /** How `claude` writes a skill the human ran; its expansion follows as a meta line. Built-in commands carry no message tag. */
         private const val SKILL_COMMAND = "<command-message>"
