@@ -38,11 +38,18 @@ data class Preset(
         require(worktree || base == null) { "preset $name has a base branch without a worktree" }
     }
 
-    /** The `claude` flags it adds to `--session-id`. */
-    fun claudeArgs(): List<String> = buildList {
+    /**
+     * The `claude` arguments it adds to `--session-id`, ending with [prompt], the session's first message. It follows
+     * `--`: `--add-dir` takes every argument after it, and a prompt naming a subcommand (`mcp`) would run that instead.
+     */
+    fun claudeArgs(prompt: String? = null): List<String> = buildList {
         model?.let { addAll(listOf("--model", it)) }
         effort?.let { addAll(listOf("--effort", it)) }
         addDirs.forEach { addAll(listOf("--add-dir", it)) }
+        prompt?.let {
+            require(it.isNotBlank()) { "blank first prompt" }
+            addAll(listOf("--", it))
+        }
     }
 }
 

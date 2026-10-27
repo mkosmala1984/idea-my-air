@@ -44,9 +44,7 @@ fun popupPoint(e: AnActionEvent): RelativePoint {
  */
 fun startInWorktree(project: Project, dir: Path, base: String?, args: List<String>, where: RelativePoint) =
     background(project, "Reading branches", { Git.repo(dir) }) { repo ->
-        val properties = PropertiesComponent.getInstance()
-        val key = "$RECENT_BASES:${repo.mainRoot}"
-        val recent = properties.getList(key).orEmpty()
+        val recent = recentBases(repo.mainRoot)
         fun create(base: String) {
             val id = UUID.randomUUID().toString()
             val name = id.take(8)
@@ -55,7 +53,7 @@ fun startInWorktree(project: Project, dir: Path, base: String?, args: List<Strin
                 Git.addWorktree(repo.mainRoot, path, "worktree-$name", base)
                 copyIncluded(repo.mainRoot, path, Git.includedFiles(repo.mainRoot))
             }) {
-                properties.setList(key, pushRecent(recent, base, repo.branches))
+                PropertiesComponent.getInstance().setList(recentKey(repo.mainRoot), pushRecent(recent, base, repo.branches))
                 ClaudeSessionOpener.startNew(project, dir, path, id, args)
             }
         }
@@ -91,4 +89,6 @@ private fun <T> background(project: Project, title: String, work: () -> T, done:
     }.queue()
 
 /** Recent bases per repository, in the application's properties: a preset may start sessions in any repository. */
-private const val RECENT_BASES = "dev.myair.worktreeBases"
+private fun recentKey(mainRoot: Path) = "dev.myair.worktreeBases:$mainRoot"
+
+fun recentBases(mainRoot: Path): List<String> = PropertiesComponent.getInstance().getList(recentKey(mainRoot)).orEmpty()

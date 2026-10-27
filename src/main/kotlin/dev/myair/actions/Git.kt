@@ -42,12 +42,15 @@ object Git {
     fun state(dir: Path): GitState? {
         if (generateSequence(dir.toAbsolutePath()) { it.parent }.none { it.resolve(".git").exists() }) return null
         check(run(dir, "rev-parse", "--is-inside-work-tree").trim() == "true") { "$dir is not in a work tree" }
-        val branch = run(dir, "branch", "--show-current").trim().ifEmpty { "detached at " + run(dir, "rev-parse", "--short=7", "HEAD").trim() }
+        val branch = currentBranch(dir)
         // A repository without commits has no HEAD to diff against.
         if (run(dir, "rev-parse", "--verify", "-q", "HEAD", ok = setOf(0, 1)).isBlank()) return GitState(branch, 0, 0)
         val counts = run(dir, "--no-optional-locks", "diff", "HEAD", "--numstat").lines().filter { it.isNotEmpty() }.map { it.split('\t') }
         return GitState(branch, counts.sumOf { lines(it[0]) }, counts.sumOf { lines(it[1]) })
     }
+
+    /** The checked-out branch of [dir], or `detached at <sha7>`. */
+    fun currentBranch(dir: Path) = run(dir, "branch", "--show-current").trim().ifEmpty { "detached at " + run(dir, "rev-parse", "--short=7", "HEAD").trim() }
 
     /** A `--numstat` count; a binary file has `-` for both. */
     private fun lines(count: String) = if (count == "-") 0 else count.toInt()
