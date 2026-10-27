@@ -162,6 +162,46 @@ class ClaudeSessionScannerTest {
         assertEquals(end(BackgroundTask.Status.COMPLETED, "done", "2026-10-24T10:09:00Z"), scanner.scan().single().background[1].end)
     }
 
+    private fun enqueue(content: String, at: String) =
+        """{"type":"queue-operation","operation":"enqueue","timestamp":"$at","sessionId":"s1","content":"${content.replace("\n", "\\n")}"}"""
+
+    @Test
+    fun `an agent has its model and usage, a workflow its agents, a monitor its events until it ends or expires`() {
+        val file = write("s1", user("\"prompt\""),
+            call("t1", "Agent", """{"description":"Review","prompt":"p"}"""),
+            result("t1", """{"isAsync":true,"status":"async_launched","agentId":"a1","description":"Review","prompt":"p","resolvedModel":"claude-opus-5-5"}"""),
+            call("t2", "Workflow", """{"script":"x"}"""),
+            result("t2", """{"status":"async_launched","taskId":"w1","taskType":"local_workflow","summary":"Review all"}"""),
+            call("t3", "Monitor", """{"command":"tail -f log","description":"errors","timeout_ms":1000}"""),
+            result("t3", """{"taskId":"m1","timeoutMs":1000,"persistent":false}"""),
+            call("t4", "Monitor", """{"command":"tail -f log","description":"quiet","timeout_ms":1000}"""),
+            result("t4", """{"taskId":"m2","timeoutMs":1000,"persistent":false}"""),
+            // The agent's result quotes a usage of its own; the notification's comes after it.
+            enqueue("<task-notification>\n<task-id>a1</task-id>\n<status>completed</status>\n<summary>Agent finished</summary>\n" +
+                "<result>saw <usage><subagent_tokens>1</subagent_tokens><tool_uses>1</tool_uses></usage></result>\n" +
+                "<usage><subagent_tokens>154221</subagent_tokens><tool_uses>23</tool_uses><duration_ms>160228</duration_ms></usage>\n</task-notification>", "2026-10-24T10:05:00Z"),
+            enqueue("<task-notification>\n<task-id>w1</task-id>\n<status>completed</status>\n<summary>Workflow completed</summary>\n" +
+                "<usage><agent_count>11</agent_count><agents_done>10</agents_done><agents_error>1</agents_error><agents_skipped>0</agents_skipped>" +
+                "<subagent_tokens>1377311</subagent_tokens><tool_uses>125</tool_uses><duration_ms>131859</duration_ms></usage>\n</task-notification>", "2026-10-24T10:06:00Z"),
+            enqueue("<task-notification>\n<task-id>m1</task-id>\n<summary>Monitor event</summary>\n<event>ERROR one</event>\n</task-notification>", "2026-10-24T10:03:00Z"),
+            enqueue("<task-notification>\n<task-id>m1</task-id>\n<summary>Monitor event</summary>\n<event>ERROR two</event>\n</task-notification>", "2026-10-24T10:04:00Z"),
+            enqueue("<task-notification>\n<task-id>m2</task-id>\n<summary>Monitor event</summary>\n" +
+                "<event>[Monitor expired after 15m with no events delivered.]</event>\n</task-notification>", "2026-10-24T10:17:00Z"),
+        )
+        val scanner = ClaudeSessionScanner(dir)
+        val (a1, w1, m1, m2) = scanner.scan().single().background
+        assertEquals("claude-opus-5-5" to BackgroundTask.Usage(154221, 23, null), a1.model to a1.usage)
+        assertEquals(BackgroundTask.Usage(1377311, 125, BackgroundTask.Agents(11, 10, 1)), w1.usage)
+        assertEquals(Triple(2, Instant.parse("2026-10-24T10:04:00Z"), null), Triple(m1.events, m1.lastEvent, m1.end))
+        assertEquals(0 to BackgroundTask.Status.EXPIRED, m2.events to m2.end?.status)
+
+        // A monitor's stream ends with a final notification that may carry its last events.
+        file.appendText(enqueue("<task-notification>\n<task-id>m1</task-id>\n<status>completed</status>\n<summary>stream ended</summary>\n" +
+            "<event>ERROR three</event>\n</task-notification>", "2026-10-24T10:08:00Z") + "\n")
+        val ended = scanner.scan().single().background[2]
+        assertEquals(Triple(3, Instant.parse("2026-10-24T10:08:00Z"), BackgroundTask.Status.COMPLETED), Triple(ended.events, ended.lastEvent, ended.end?.status))
+    }
+
     @Test
     fun `a final notification with an unknown status fails loudly`() {
         val file = write("s1", user("\"prompt\""),
