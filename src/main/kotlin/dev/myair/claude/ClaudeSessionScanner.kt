@@ -280,11 +280,20 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
 
         private fun json(line: String): JsonObject = JsonParser.parseString(line).asJsonObject
 
-        /** Plain text the human typed; tool results and harness-injected `<...>` blocks are not prompts. */
+        /** How `claude` writes a skill the human ran; its expansion follows as a meta line. Built-in commands carry no message tag. */
+        private const val SKILL_COMMAND = "<command-message>"
+        private val COMMAND_NAME = Regex("<command-name>([^<]+)</command-name>")
+        private val COMMAND_ARGS = Regex("<command-args>([\\s\\S]*?)</command-args>")
+
+        /** Plain text the human typed, or a skill they ran as they typed it; tool results and harness-injected `<...>` blocks are not prompts. */
         private fun promptText(o: JsonObject): String? {
             val content = o.getAsJsonObject("message")["content"]
             val text = if (content.isJsonPrimitive) content.asString
             else content.asJsonArray.map { it.asJsonObject }.firstOrNull { it["type"].asString == "text" }?.get("text")?.asString
+            if (text != null && text.startsWith(SKILL_COMMAND)) {
+                val name = checkNotNull(COMMAND_NAME.find(text)) { "skill command without a name: ${text.take(200)}" }.groupValues[1]
+                return "$name ${COMMAND_ARGS.find(text)?.groupValues?.get(1).orEmpty()}".trim()
+            }
             return text?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("<") }
         }
     }
