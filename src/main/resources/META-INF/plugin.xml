@@ -13,6 +13,7 @@
     <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"
                 factoryClass="dev.myair.toolwindow.SessionsToolWindowFactory"/>
     <fileEditorProvider implementation="dev.myair.editor.ClaudeSessionEditorProvider"/>
+    <virtualFileSystem key="myair-session" implementationClass="dev.myair.editor.ClaudeSessionFileSystem"/>
     <fileIconProvider order="first" implementation="dev.myair.editor.ClaudeSessionFileIconProvider"/>
     <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>
     <editorTabTitleProvider implementation="dev.myair.editor.ClaudeSessionTabTitleProvider"/>
