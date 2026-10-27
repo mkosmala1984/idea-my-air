@@ -34,13 +34,20 @@ object UnfiledSessions {
     override fun toString() = "sessions"
 }
 
+/** The fixed folder of Folders mode above [UnfiledSessions]: the [RECENT_COUNT] sessions with the newest last message, wherever they are filed. */
+object RecentSessions {
+    override fun toString() = "recent"
+}
+
+const val RECENT_COUNT = 10
+
 /** Projects mode: projects ordered by their most recent session; [sessions] arrive newest first. */
 fun projectsTree(sessions: List<ClaudeSession>) = node(null, projectNodes(sessions))
 
 /**
  * Folders mode: the user's folders in their order, each with its subfolders and then its sessions newest first (see
- * [SessionFolders.placeOf]), and [UnfiledSessions] last. Sessions filed but absent from [sessions] are not shown. A non-empty [query] keeps the matching
- * sessions, the folders on their path and [UnfiledSessions].
+ * [SessionFolders.placeOf]), then [RecentSessions] and [UnfiledSessions] last. Sessions filed but absent from [sessions] are not shown. A non-empty [query] keeps the matching
+ * sessions, the folders on their path, [RecentSessions] and [UnfiledSessions]; [sessions] arrive newest first.
  */
 fun foldersTree(structure: SessionFolders, sessions: List<ClaudeSession>, query: String): DefaultMutableTreeNode {
     val shown = sessions.filter { it.matches(query) }
@@ -49,7 +56,11 @@ fun foldersTree(structure: SessionFolders, sessions: List<ClaudeSession>, query:
         val children = folder.folders.mapNotNull(::folderNode) + places[folder.id].orEmpty().map(::sessionNode)
         return if (query.isNotEmpty() && children.isEmpty()) null else node(folder, children)
     }
-    return node(null, structure.folders.mapNotNull(::folderNode) + node(UnfiledSessions, projectNodes(places[null].orEmpty())))
+    return node(
+        null,
+        structure.folders.mapNotNull(::folderNode) + node(RecentSessions, shown.take(RECENT_COUNT).map(::sessionNode)) +
+            node(UnfiledSessions, projectNodes(places[null].orEmpty())),
+    )
 }
 
 /** The folder [path] points into, for a new folder or a drop: the nearest user folder above it, none under [UnfiledSessions]. */
@@ -74,11 +85,13 @@ class Drop(val change: (SessionFolders) -> SessionFolders, val path: TreePath, v
  * Sessions land in the folder of whatever they are dropped on or into, none under [UnfiledSessions], and that folder is what
  * the drop shows; a session of a bound project cannot go back to [UnfiledSessions], since it would stay in the project's
  * folder. A folder goes into a folder or the top level, before the folder it is dropped in front of, or after the last one;
- * the drop shows that spot, not the pointer's, since sessions and [UnfiledSessions] always follow the folders. A project
+ * the drop shows that spot, not the pointer's, since sessions, [RecentSessions] and [UnfiledSessions] always follow the folders. Nothing drops on or into [RecentSessions]. A project
  * lands the same way, as a new folder named after its directory and bound to it.
  */
 fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, childIndex: Int): Drop? {
     val target = path.lastPathComponent as DefaultMutableTreeNode
+    // Recent sessions are a view of the others: nothing is filed into it.
+    if (path.path.any { (it as DefaultMutableTreeNode).userObject == RecentSessions }) return null
     val moved = dragged.singleOrNull()?.takeIf { it is Folder || it is Path } ?: run {
         if (target.isRoot) return null
         val folderId = targetFolder(path)
