@@ -9,8 +9,13 @@ import java.awt.datatransfer.Transferable
 import java.awt.image.BufferedImage
 import java.io.File
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
+import java.time.Duration
+import java.time.Instant
 import javax.imageio.ImageIO
 import kotlin.io.path.listDirectoryEntries
+import kotlin.io.path.setLastModifiedTime
+import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -36,6 +41,17 @@ class PastedImagesTest {
     fun `mentions copied files where they are, quoting a path with a space`(@TempDir dir: Path) {
         val files = listOf(File("C:/shots/a.png"), File("C:/my shots/b.png"))
         assertEquals(listOf("@${files[0].toPath()}", "@\"${files[1].toPath()}\""), pastedMentions(transferable(DataFlavor.javaFileListFlavor, files), dir))
+    }
+
+    @Test
+    fun `prunes only the images older than the cutoff, and a missing folder is nothing to prune`(@TempDir dir: Path) {
+        val now = Instant.parse("2026-10-27T12:00:00Z")
+        val old = dir.resolve("old.png").apply { writeText("x"); setLastModifiedTime(FileTime.from(now.minus(Duration.ofDays(31)))) }
+        val fresh = dir.resolve("fresh.png").apply { writeText("x"); setLastModifiedTime(FileTime.from(now.minus(Duration.ofDays(29)))) }
+        val other = dir.resolve("old.txt").apply { writeText("x"); setLastModifiedTime(FileTime.from(now.minus(Duration.ofDays(31)))) }
+        assertEquals(listOf(old), pruneImages(dir, now.minus(Duration.ofDays(30))))
+        assertEquals(setOf(fresh, other), dir.listDirectoryEntries().toSet())
+        assertEquals(emptyList(), pruneImages(dir.resolve("none"), now))
     }
 
     @Test

@@ -6,12 +6,27 @@ import java.awt.datatransfer.Transferable
 import java.awt.image.BufferedImage
 import java.io.File
 import java.nio.file.Path
+import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 import javax.imageio.ImageIO
 import kotlin.io.path.createDirectories
+import kotlin.io.path.deleteExisting
+import kotlin.io.path.exists
+import kotlin.io.path.getLastModifiedTime
+import kotlin.io.path.listDirectoryEntries
 
 /** Where pasted images are saved, for `claude` to read when the session starts. */
 val PASTED_IMAGES: Path = Path.of(System.getProperty("user.home"), ".my-air", "images")
+
+/** How long a pasted image is kept: its session has read it long before, unless a draft holding it waited that long. */
+val IMAGES_KEPT: Duration = Duration.ofDays(30)
+
+/** Deletes the images in [dir] last modified before [cutoff] and returns them. */
+fun pruneImages(dir: Path, cutoff: Instant): List<Path> {
+    if (!dir.exists()) return emptyList()
+    return dir.listDirectoryEntries("*.png").filter { it.getLastModifiedTime().toInstant() < cutoff }.onEach { it.deleteExisting() }
+}
 
 /**
  * What a paste of [content] puts in the message: an image saved as a PNG in [dir], or copied files, each as an `@`
