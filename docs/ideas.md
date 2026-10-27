@@ -1,0 +1,6 @@
+- nowa sesja w obecnym projekcie z wyborem effortu
+- diff zmian wykonanych na branchu względem początkowego brancha
+- akcja do otworzenia projektu w idea lub terminal
+- background tasks, dodanie szczegółów, statusu
+- dodanie do panelu envionment brancha początkowego
+- domyślne przypinanie zakładki z sesją 
