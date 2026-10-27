@@ -5,7 +5,7 @@
 | 1 | done | |
 | 2 | done | |
 | 3 | done | |
-| 4 | in progress: sandbox check by the user | |
+| 4 | done | |
 
 ## TL;DR
 
@@ -54,5 +54,5 @@
 
 ## Task 4: proof
 
-- [ ] Unit test for what is pure (Task 1). The openers are platform calls: verify in the sandbox IDE (`runIde` command in CLAUDE.md): right click a project row → Open in IDEA focuses an open project and opens a closed one; Open in Terminal adds a Terminal tool-window tab in that directory (`pwd` shows it); the same two links in the Environment section behave identically; a session row of a removed worktree shows the items disabled.
-- [ ] Add the finished feature to `CLAUDE.md` "How the pieces fit" in one sentence and remove the line from `docs/ideas.md`.
+- [x] Unit test for what is pure (Task 1). The openers are platform calls: verify in the sandbox IDE (`runIde` command in CLAUDE.md): right click a project row → Open in IDEA focuses an open project and opens a closed one; Open in Terminal adds a Terminal tool-window tab in that directory (`pwd` shows it); the same two links in the Environment section behave identically; a session row of a removed worktree shows the items disabled.
+- [x] Add the finished feature to `CLAUDE.md` "How the pieces fit" in one sentence and remove the line from `docs/ideas.md`.
