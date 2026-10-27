@@ -185,6 +185,39 @@ class GitTest {
         assertEquals(true, state.baseStored)
         assertEquals(null, state.mergeBase)
         assertEquals(null, state.changes)
+        assertEquals("Base gone no longer exists", state.problem)
+    }
+
+    @Test
+    fun `a base without history in common with HEAD is a problem, not a failure`() {
+        val repo = init("plain")
+        git(repo, "checkout", "-q", "--orphan", "pages")
+        commit(repo, "p.txt", "p\n")
+        git(repo, "checkout", "-q", "main")
+        Git.setBase(repo, "main", "pages")
+        val state = state(repo)
+        assertEquals("main", state.branch)
+        assertEquals(null, state.changes)
+        assertEquals("Base pages shares no history with main", state.problem)
+    }
+
+    @Test
+    fun `a default branch that cannot be told keeps the branch and names the problem`() {
+        val repo = dir.resolve("develop").createDirectories().also { git(it, "init", "-b", "develop") }
+        commit(repo, "a.txt", "a\n")
+        val state = state(repo)
+        assertEquals("develop", state.branch)
+        assertEquals(null, state.base)
+        assertEquals(null, state.changes)
+        assertContains(state.problem!!, "cannot tell the default branch")
+    }
+
+    @Test
+    fun `an untracked nested repository is not a changed file`() {
+        val repo = init("outer")
+        init("outer/inner")
+        repo.resolve("new.txt").writeText("n\n")
+        assertEquals(listOf(FileChange("new.txt", FileChange.Kind.UNTRACKED, 1, 0)), state(repo).changes)
     }
 
     @Test

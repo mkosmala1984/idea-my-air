@@ -3,6 +3,7 @@ package dev.myair.actions
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import kotlin.io.path.exists
+import kotlin.io.path.isRegularFile
 import kotlin.io.path.readBytes
 
 /** A git repository as the worktree popup needs it. */
@@ -15,13 +16,14 @@ data class FileChange(val path: String, val kind: Kind, val added: Int, val remo
 
 /**
  * The work tree of a folder against its base. [branch]: the checked-out branch, or `detached at <sha7>`; [root]: the
- * work tree root. [base]: the base stored for the branch ([baseStored]), else the default branch; null only without
- * commits. [changes]: the files changed since the merge base of [base] and HEAD, untracked ones included; null when
- * [base] names no commit. [mergeBase] is null then and without commits.
+ * work tree root. [base]: the base stored for the branch ([baseStored]), else the default branch; null without commits
+ * and when no default branch can be told. [changes]: the files changed since the merge base of [base] and HEAD,
+ * untracked ones included; null exactly when [problem] says why they cannot be read. [mergeBase] is null then and
+ * without commits.
  */
 data class GitState(
     val branch: String, val detached: Boolean, val root: Path, val base: String?, val baseStored: Boolean,
-    val mergeBase: String?, val changes: List<FileChange>?,
+    val mergeBase: String?, val changes: List<FileChange>?, val problem: String?,
 ) {
     val added get() = changes.orEmpty().sumOf { it.added }
     val removed get() = changes.orEmpty().sumOf { it.removed }
@@ -72,13 +74,16 @@ object Git {
         val root = Path.of(run(dir, "rev-parse", "--show-toplevel").trim())
         val current = run(root, "branch", "--show-current").trim().ifEmpty { null }
         // A repository without commits has no HEAD to diff against: all its files are untracked.
-        if (!isCommit(root, "HEAD")) return GitState(checkNotNull(current), false, root, null, false, null, untracked(root))
-        val stored = current?.let { storedBase(root, it) }
-        val base = stored ?: repo(root).default
+        if (!isCommit(root, "HEAD")) return GitState(checkNotNull(current), false, root, null, false, null, untracked(root), null)
         val branch = current ?: ("detached at " + run(root, "rev-parse", "--short=7", "HEAD").trim())
-        if (!isCommit(root, base)) return GitState(branch, current == null, root, base, stored != null, null, null)
-        val mergeBase = run(root, "merge-base", base, "HEAD").trim()
-        return GitState(branch, current == null, root, base, stored != null, mergeBase, tracked(root, mergeBase) + untracked(root))
+        val stored = current?.let { storedBase(root, it) }
+        fun problem(base: String?, problem: String) = GitState(branch, current == null, root, base, stored != null, null, null, problem)
+        // defaultBranch throws when the repository names no default; the branch row stays, the reason goes to Changes.
+        val base = stored ?: runCatching { repo(root).default }.getOrElse { return problem(null, it.message.orEmpty()) }
+        if (!isCommit(root, base)) return problem(base, "Base $base no longer exists")
+        // merge-base exits 1, saying nothing, when the two share no commit.
+        val mergeBase = run(root, "merge-base", base, "HEAD", ok = setOf(0, 1)).trim().ifEmpty { return problem(base, "Base $base shares no history with $branch") }
+        return GitState(branch, current == null, root, base, stored != null, mergeBase, tracked(root, mergeBase) + untracked(root), null)
     }
 
     /** [path], relative to [root], as it was in [commit]. */
@@ -86,11 +91,18 @@ object Git {
 
     private fun isCommit(root: Path, ref: String) = run(root, "rev-parse", "--verify", "-q", "$ref^{commit}", ok = setOf(0, 1)).isNotBlank()
 
-    /** Tracked files changed in the work tree since [mergeBase]; renames are a deletion and an addition. */
+    /**
+     * Tracked files changed in the work tree since [mergeBase]; renames are a deletion and an addition. One `git diff`
+     * gives both the status (`--raw`: `:<modes> <shas> <status>`, then the path) and the counts (`--numstat`), so a
+     * file the session writes meanwhile cannot be in one list and not the other.
+     */
     private fun tracked(root: Path, mergeBase: String): List<FileChange> {
-        fun diff(format: String) = nulSeparated(run(root, "--no-optional-locks", "diff", "--no-renames", "-z", format, mergeBase))
-        val kinds = diff("--name-status").chunked(2).associate { (status, path) -> path to kindOf(status) }
-        return diff("--numstat").map { line ->
+        val entries = nulSeparated(run(root, "--no-optional-locks", "diff", "--no-renames", "--raw", "--numstat", "-z", mergeBase))
+        // Raw entries take two fields each, a meta line and a path that may itself start with ':'.
+        var raw = 0
+        while (raw < entries.size && entries[raw].startsWith(":")) raw += 2
+        val kinds = entries.take(raw).chunked(2).associate { (meta, path) -> path to kindOf(meta.substringAfterLast(' ')) }
+        return entries.drop(raw).map { line ->
             val (added, removed, path) = line.split('\t', limit = 3)
             FileChange(path, kinds.getValue(path), lines(added), lines(removed))
         }.sortedBy { it.path }
@@ -103,8 +115,12 @@ object Git {
         else -> error("unexpected git diff status $status")
     }
 
-    private fun untracked(root: Path) = nulSeparated(run(root, "ls-files", "-z", "--others", "--exclude-standard")).sorted()
-        .map { FileChange(it, FileChange.Kind.UNTRACKED, lineCount(root.resolve(it).readBytes()), 0) }
+    /**
+     * Untracked files, without the nested repositories and worktrees `ls-files` names as `dir/`; anything but a regular
+     * file (a symlink to a folder, a broken one) counts no lines.
+     */
+    private fun untracked(root: Path) = nulSeparated(run(root, "ls-files", "-z", "--others", "--exclude-standard")).filterNot { it.endsWith("/") }.sorted()
+        .map { FileChange(it, FileChange.Kind.UNTRACKED, root.resolve(it).let { file -> if (file.isRegularFile()) lineCount(file.readBytes()) else 0 }, 0) }
 
     /** `-z` output: every entry ends with a NUL. */
     private fun nulSeparated(output: String) = output.split('\u0000').dropLast(1)
