@@ -171,6 +171,17 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
+    fun `a skill the human ran is a prompt as they typed it, its expansion is not`() {
+        val s = parse(write("s1",
+            user("\"<command-message>grill-me</command-message>\\n<command-name>/grill-me</command-name>\\n<command-args>the diff</command-args>\""),
+            user("""[{"type":"text","text":"Base directory for this skill"}]""", """"isMeta":true,"""),
+            user("\"<command-message>show-me</command-message>\\n<command-name>/show-me</command-name>\""),
+        ))!!
+        assertEquals("/grill-me the diff", s.title)
+        assertEquals(listOf("/grill-me the diff", "/show-me"), s.prompts)
+    }
+
+    @Test
     fun `the first three human prompts are kept, the same kind the title comes from`() {
         val s = parse(write("s1",
             user("\"one\""),
