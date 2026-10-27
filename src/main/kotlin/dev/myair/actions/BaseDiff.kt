@@ -7,12 +7,19 @@ import com.intellij.diff.chains.DiffRequestProducer
 import com.intellij.diff.chains.SimpleDiffRequestChain
 import com.intellij.diff.requests.DiffRequest
 import com.intellij.diff.requests.SimpleDiffRequest
+import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.UserDataHolder
 import com.intellij.openapi.vfs.LocalFileSystem
 import dev.myair.actions.FileChange.Kind
+import dev.myair.claude.ClaudeSession
+import kotlin.io.path.exists
 
 /** The diff window over every file of [state]'s changes, opened on the [selected] one; each file is read when shown. */
 fun showBaseDiff(project: Project, state: GitState, selected: Int) {
@@ -38,4 +45,27 @@ fun showBaseDiff(project: Project, state: GitState, selected: Int) {
         }
     }
     DiffManager.getInstance().showDiff(project, SimpleDiffRequestChain.fromProducers(producers, selected), DiffDialogHints.FRAME)
+}
+
+/** On a session's menu: the diff of the [selected] session's folder against its base. */
+class ShowChangesVsBaseAction(private val selected: () -> List<ClaudeSession>) :
+    DumbAwareAction("Show Changes vs Base", "Changes of the session's branch against the branch it started from", AllIcons.Actions.Diff) {
+    override fun getActionUpdateThread() = ActionUpdateThread.EDT
+    override fun update(e: AnActionEvent) {
+        val sessions = selected()
+        e.presentation.isVisible = sessions.size == 1
+        e.presentation.isEnabled = sessions.singleOrNull()?.cwd?.exists() == true
+    }
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project!!
+        val cwd = selected().single().cwd
+        background(project, "Reading changes", { Git.state(cwd) }) { state ->
+            when {
+                state == null -> Messages.showErrorDialog(project, "$cwd is not in a git repository.", "No Changes")
+                state.changes == null -> Messages.showErrorDialog(project, "Base ${state.base} no longer exists.", "No Changes")
+                state.changes.isEmpty() -> Messages.showInfoMessage(project, "No changes against ${state.base}.", "No Changes")
+                else -> showBaseDiff(project, state, 0)
+            }
+        }
+    }
 }
