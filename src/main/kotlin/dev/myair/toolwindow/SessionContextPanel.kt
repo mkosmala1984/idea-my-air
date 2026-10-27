@@ -38,6 +38,7 @@ import java.awt.BorderLayout
 import java.awt.Point
 import java.awt.event.HierarchyEvent
 import java.nio.file.Path
+import java.time.ZoneId
 import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlin.io.path.exists
@@ -60,7 +61,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     private var reads = 0
     private val gitReader = AppExecutorUtil.createBoundedApplicationPoolExecutor("Session context git", 1)
     private val expanded = HashMap<String, Boolean>()
-    /** The file lists showing all their rows, by section; the others show [FILES_SHOWN]. */
+    /** The lists showing all their rows, by section; the others show [FILES_SHOWN]. */
     private val fullLists = HashSet<String>()
 
     init {
@@ -175,9 +176,12 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             }
         }
         if (context.background.isNotEmpty()) section("Background") {
-            for (task in context.background) row {
+            paged("Background", context.background) { task, _ ->
                 icon(BACKGROUND_ICONS.getValue(task.kind))
-                label(task.description)
+                val output = task.output
+                if (output == null) label(task.description)
+                else link(task.description) { openFile(project, output) }.applyToComponent { toolTipText = output.toString() }
+                comment(backgroundState(task, context.live, ZoneId.systemDefault())).applyToComponent { toolTipText = task.end?.summary }
             }
         }
         val failure = git?.exceptionOrNull()

@@ -7,7 +7,9 @@ import dev.myair.claude.TaskStatus
 import dev.myair.claude.ClaudeSession
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
 
 class SessionContextTest {
@@ -32,12 +34,37 @@ class SessionContextTest {
         assertEquals(listOf(description, page, plan), contextOf(session(main, written), cwdExists = true, live = false, git = null).outputs)
     }
 
+    private val started = Instant.parse("2026-10-24T10:02:00Z")
+
+    private fun task(id: String, status: BackgroundTask.Status? = null, endedAt: String = "2026-10-24T10:04:40Z", summary: String = "done") =
+        BackgroundTask(id, BackgroundTask.Kind.SHELL, id, started, end = status?.let { BackgroundTask.End(Instant.parse(endedAt), it, summary) })
+
     @Test
-    fun `background tasks show only while the session has a process, as they end with it`() {
-        val task = BackgroundTask("b1", BackgroundTask.Kind.SHELL, "Run the sandbox")
-        val session = session(main).copy(background = listOf(task))
-        assertEquals(listOf(task), contextOf(session, cwdExists = true, live = true, git = null).background)
-        assertEquals(emptyList(), contextOf(session, cwdExists = true, live = false, git = null).background)
+    fun `running background tasks come first in the order launched, then the ended ones, the latest end first`() {
+        val tasks = listOf(
+            task("old", BackgroundTask.Status.COMPLETED, "2026-10-24T10:03:00Z"), task("r1"),
+            task("new", BackgroundTask.Status.FAILED, "2026-10-24T10:09:00Z"), task("r2"),
+        )
+        val context = contextOf(session(main).copy(background = tasks), cwdExists = true, live = false, git = null)
+        assertEquals(listOf("r1", "r2", "new", "old"), context.background.map { it.id })
+    }
+
+    @Test
+    fun `a running task says when it started, an ended one how it ended and how long it took`() {
+        val utc = ZoneOffset.UTC
+        assertEquals("since 10:02", backgroundState(task("r"), live = true, utc))
+        assertEquals("ended with its process", backgroundState(task("r"), live = false, utc))
+        assertEquals("completed · 2 min 40 s", backgroundState(task("c", BackgroundTask.Status.COMPLETED, summary = "completed (exit code 0)"), live = false, utc))
+        assertEquals("failed · exit 1 · 2 min 40 s", backgroundState(task("f", BackgroundTask.Status.FAILED, summary = "failed with exit code 1"), live = true, utc))
+        assertEquals("killed · 2 min 40 s", backgroundState(task("k", BackgroundTask.Status.KILLED), live = true, utc))
+    }
+
+    @Test
+    fun `durations read in whole seconds, then minutes and seconds, then hours and minutes`() {
+        assertEquals("45 s", durationText(Duration.ofMillis(45_900)))
+        assertEquals("1 min 0 s", durationText(Duration.ofSeconds(60)))
+        assertEquals("59 min 59 s", durationText(Duration.ofSeconds(3599)))
+        assertEquals("1 h 5 min", durationText(Duration.ofSeconds(3900)))
     }
 
     @Test

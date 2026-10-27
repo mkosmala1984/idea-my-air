@@ -108,40 +108,68 @@ class ClaudeSessionScannerTest {
     private fun call(id: String, name: String, input: String, sidechain: Boolean = false) =
         """{"parentUuid":"p","isSidechain":$sidechain,"message":{"role":"assistant","content":[{"type":"tool_use","id":"$id","name":"$name","input":$input}]},"type":"assistant",$cwdLine,"sessionId":"s1","timestamp":"2026-10-24T10:00:00Z"}"""
 
-    private fun result(id: String, toolUseResult: String, sidechain: Boolean = false) =
-        """{"parentUuid":"p","isSidechain":$sidechain,"type":"user","message":{"role":"user","content":[{"tool_use_id":"$id","type":"tool_result","content":"ok"}]},""" +
+    private fun result(id: String, toolUseResult: String, sidechain: Boolean = false, content: String = "ok") =
+        """{"parentUuid":"p","isSidechain":$sidechain,"type":"user","message":{"role":"user","content":[{"tool_use_id":"$id","type":"tool_result","content":"$content"}]},""" +
             """"toolUseResult":$toolUseResult,$cwdLine,"sessionId":"s1","timestamp":"2026-10-24T10:02:00Z"}"""
 
-    private fun notification(taskId: String, status: String?) =
-        """{"type":"queue-operation","operation":"enqueue","timestamp":"2026-10-24T10:03:00Z","sessionId":"s1","content":"<task-notification>\n<task-id>$taskId</task-id>\n<tool-use-id>x</tool-use-id>\n""" +
-            """${status?.let { "<status>$it</status>\\n" }.orEmpty()}<summary>done</summary>\n</task-notification>"}"""
+    private fun notification(taskId: String, status: String?, summary: String = "done", output: String? = null, at: String = "2026-10-24T10:03:00Z") =
+        """{"type":"queue-operation","operation":"enqueue","timestamp":"$at","sessionId":"s1","content":"<task-notification>\n<task-id>$taskId</task-id>\n<tool-use-id>x</tool-use-id>\n""" +
+            """${output?.let { "<output-file>$it</output-file>\\n" }.orEmpty()}${status?.let { "<status>$it</status>\\n" }.orEmpty()}<summary>$summary</summary>\n</task-notification>"}"""
 
     @Test
-    fun `background tasks are the launched ones of the main conversation without a final notification`() {
+    fun `background tasks are the launched ones of the main conversation, ended by their final notification`() {
+        val started = Instant.parse("2026-10-24T10:02:00Z")
         val file = write("s1", user("\"prompt\""),
             call("t1", "Bash", """{"command":"gradlew runIde","description":"Run the sandbox","run_in_background":true}"""),
-            result("t1", """{"stdout":"","stderr":"","backgroundTaskId":"b1"}"""),
+            result("t1", """{"stdout":"","stderr":"","backgroundTaskId":"b1"}""",
+                content = """Command running in background with ID: b1. Output is being written to: C:\\Temp\\my dir\\tasks\\b1.output. You will be notified when it completes."""),
             call("t2", "Bash", """{"command":"git status"}"""),
             result("t2", """{"stdout":"clean","stderr":""}"""),
             call("t3", "Agent", """{"description":"Review","prompt":"p"}"""),
-            result("t3", """{"isAsync":true,"status":"async_launched","agentId":"a1","description":"Final review","prompt":"p"}"""),
+            result("t3", """{"isAsync":true,"status":"async_launched","agentId":"a1","description":"Final review","prompt":"p","outputFile":"C:\\Temp\\a1.output"}"""),
             call("t4", "Monitor", """{"command":"tail -f log","description":"errors in log","timeout_ms":1000}"""),
             result("t4", """{"taskId":"m1","timeoutMs":1000,"persistent":false}"""),
             call("t5", "Bash", """{"command":"sleep 9","run_in_background":true}""", sidechain = true),
             result("t5", """{"stdout":"","stderr":"","backgroundTaskId":"b2"}""", sidechain = true),
+            call("t6", "Workflow", """{"script":"x"}"""),
+            result("t6", """{"status":"async_launched","taskId":"w1","taskType":"local_workflow","summary":"Review all"}"""),
         )
         val scanner = ClaudeSessionScanner(dir)
+        val b1 = BackgroundTask("b1", BackgroundTask.Kind.SHELL, "Run the sandbox", started, Path.of("C:\\Temp\\my dir\\tasks\\b1.output"))
+        val a1 = BackgroundTask("a1", BackgroundTask.Kind.AGENT, "Final review", started, Path.of("C:\\Temp\\a1.output"))
+        val m1 = BackgroundTask("m1", BackgroundTask.Kind.MONITOR, "errors in log", started)
+        val w1 = BackgroundTask("w1", BackgroundTask.Kind.WORKFLOW, "Review all", started)
+        assertEquals(listOf(b1, a1, m1, w1), scanner.scan().single().background)
+
+        // A monitor's event carries no status; a final notification does, whatever it is, and may name the output file.
+        file.appendText(listOf(
+            notification("m1", null),
+            notification("b1", "failed", "Background command \\\"Run the sandbox\\\" failed with exit code 1"),
+            notification("w1", "completed", output = "C:\\\\Temp\\\\w1.output", at = "2026-10-24T10:04:00Z"),
+            notification("unknown", "completed"),
+        ).joinToString("") { it + "\n" })
+        val end = { status: BackgroundTask.Status, summary: String, at: String -> BackgroundTask.End(Instant.parse(at), status, summary) }
         assertEquals(
             listOf(
-                BackgroundTask("b1", BackgroundTask.Kind.SHELL, "Run the sandbox"),
-                BackgroundTask("a1", BackgroundTask.Kind.AGENT, "Final review"),
-                BackgroundTask("m1", BackgroundTask.Kind.MONITOR, "errors in log"),
+                b1.copy(end = end(BackgroundTask.Status.FAILED, "Background command \"Run the sandbox\" failed with exit code 1", "2026-10-24T10:03:00Z")),
+                a1, m1,
+                w1.copy(output = Path.of("C:\\Temp\\w1.output"), end = end(BackgroundTask.Status.COMPLETED, "done", "2026-10-24T10:04:00Z")),
             ),
             scanner.scan().single().background,
         )
-        // A monitor's event carries no status; a final notification does, whatever it is.
-        file.appendText(notification("m1", null) + "\n" + notification("b1", "completed") + "\n" + notification("a1", "killed") + "\n")
-        assertEquals(listOf("m1"), scanner.scan().single().background.map { it.id })
+        // An agent sent another message notifies again; its latest end counts.
+        file.appendText(notification("a1", "killed", at = "2026-10-24T10:05:00Z") + "\n" + notification("a1", "completed", at = "2026-10-24T10:09:00Z") + "\n")
+        assertEquals(end(BackgroundTask.Status.COMPLETED, "done", "2026-10-24T10:09:00Z"), scanner.scan().single().background[1].end)
+    }
+
+    @Test
+    fun `a final notification with an unknown status fails loudly`() {
+        val file = write("s1", user("\"prompt\""),
+            call("t1", "Bash", """{"command":"sleep 9","description":"Sleep","run_in_background":true}"""),
+            result("t1", """{"stdout":"","stderr":"","backgroundTaskId":"b1"}"""),
+            notification("b1", "vanished"),
+        )
+        assertFailsWith<IllegalArgumentException> { parse(file) }
     }
 
     @Test

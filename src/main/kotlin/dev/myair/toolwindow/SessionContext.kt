@@ -6,6 +6,9 @@ import dev.myair.claude.BackgroundTask
 import dev.myair.claude.Brief
 import dev.myair.claude.ClaudeSession
 import java.nio.file.Path
+import java.time.Duration
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlin.io.path.extension
 
 /** The file types of the session's own writing, as Claude Desktop's Outputs lists them: plans, notes, pages. */
@@ -14,13 +17,13 @@ val OUTPUT_EXTENSIONS = setOf("md", "html")
 /**
  * What the context pane shows of a session. [project] is the name of its project folder, [worktree] whether it runs in
  * a linked worktree of it; [files] all files it wrote, first touch first, [outputs] the [OUTPUT_EXTENSIONS] ones of them,
- * the newest first; [background] its tasks still running, none without its process; [git] null outside a work tree and
- * while it is being read.
+ * the newest first; [background] its tasks, the unended ones first in the order launched, then the ended ones, the
+ * latest end first; [live] whether it has a process; [git] null outside a work tree and while it is being read.
  */
 data class SessionContext(
     val project: String, val projectPath: Path, val cwd: Path, val worktree: Boolean, val desktop: Boolean,
     val addedDirs: List<Path>, val brief: Brief?, val files: List<Path>, val outputs: List<Path>, val artifacts: List<Artifact>,
-    val background: List<BackgroundTask>, val cwdExists: Boolean, val git: GitState?,
+    val background: List<BackgroundTask>, val live: Boolean, val cwdExists: Boolean, val git: GitState?,
 )
 
 /** [ClaudeSession.changedFiles] keeps the order files were first written, without repeats. */
@@ -28,8 +31,33 @@ fun contextOf(session: ClaudeSession, cwdExists: Boolean, live: Boolean, git: Gi
     (session.project.fileName ?: session.project).toString(), session.project, session.cwd, session.cwd != session.project,
     session.desktop, session.addedDirs, session.brief, session.changedFiles,
     session.changedFiles.filter { it.extension.lowercase() in OUTPUT_EXTENSIONS }.reversed(), session.artifacts,
-    if (live) session.background else emptyList(), cwdExists, git,
+    session.background.sortedWith(compareBy(nullsFirst(reverseOrder())) { it.end?.time }),
+    live, cwdExists, git,
 )
+
+private val EXIT_CODE = Regex("exit code (\\d+)")
+private val CLOCK = DateTimeFormatter.ofPattern("HH:mm")
+
+/**
+ * What the pane says of [task] after its name: while it runs, the time it started in [zone]; once ended, how, with the
+ * exit code of a failed command, and how long it took. A task without an end in a session without its process died
+ * with it, as the transcript does not record.
+ */
+fun backgroundState(task: BackgroundTask, live: Boolean, zone: ZoneId): String {
+    val end = task.end ?: return if (live) "since ${CLOCK.format(task.started.atZone(zone))}" else "ended with its process"
+    val exit = EXIT_CODE.find(end.summary)?.takeIf { end.status == BackgroundTask.Status.FAILED }?.let { "exit ${it.groupValues[1]}" }
+    return listOfNotNull(end.status.name.lowercase(), exit, durationText(Duration.between(task.started, end.time))).joinToString(" · ")
+}
+
+/** Whole seconds under a minute, else the two largest units: `45 s`, `2 min 40 s`, `1 h 5 min`. */
+fun durationText(duration: Duration): String {
+    val s = duration.seconds
+    return when {
+        s < 60 -> "$s s"
+        s < 3600 -> "${s / 60} min ${s % 60} s"
+        else -> "${s / 3600} h ${s % 3600 / 60} min"
+    }
+}
 
 /** Files inside the session's folder read relative to it; anything else keeps its full path. */
 fun fileLabel(path: Path, cwd: Path) = if (path.startsWith(cwd)) cwd.relativize(path).toString() else path.toString()

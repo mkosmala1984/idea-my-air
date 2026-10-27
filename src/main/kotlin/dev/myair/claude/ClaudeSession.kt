@@ -12,8 +12,8 @@ import java.time.Instant
  * [addedDirs] are the directories the session may use besides [cwd], as its latest environment snapshot lists them.
  * [model] and [effort]: what the latest reply of the model ran with; null before the first one.
  * [artifacts]: the artifacts the main conversation published, in the order first published.
- * [background]: the tasks the main conversation sent to the background and no notification has ended yet; they end
- * with their process too, which the transcript does not record.
+ * [background]: the tasks the main conversation sent to the background, in the order launched; those without an
+ * [BackgroundTask.end] also end with their process, which the transcript does not record.
  */
 data class ClaudeSession(
     val id: String, val cwd: Path, val title: String, val lastMessage: Instant, val changedFiles: List<Path>, val prompts: List<String>,
@@ -35,9 +35,20 @@ data class ClaudeSession(
 /** An artifact as its latest publish named it; [path] is the local file published. */
 data class Artifact(val id: String, val title: String, val url: String, val path: Path)
 
-/** A shell command, monitor, agent or workflow running in the background; [id] is the one its notifications name. */
-data class BackgroundTask(val id: String, val kind: Kind, val description: String) {
+/**
+ * A shell command, monitor, agent or workflow sent to the background; [id] is the one its notifications name. [output]:
+ * the file `claude` writes its output to, as its launch or final notification names it. [end]: null while no final
+ * notification has come.
+ */
+data class BackgroundTask(
+    val id: String, val kind: Kind, val description: String, val started: Instant, val output: Path? = null, val end: End? = null,
+) {
     enum class Kind { SHELL, MONITOR, AGENT, WORKFLOW }
+
+    /** [summary] is `claude`'s own line about the end, which names a command's exit code. */
+    data class End(val time: Instant, val status: Status, val summary: String)
+
+    enum class Status { COMPLETED, FAILED, KILLED, STOPPED }
 }
 
 /** Whether this path is [dir] or a directory below it, comparing as text: see [dev.myair.folders.SessionFolders.projectFolder]. */
