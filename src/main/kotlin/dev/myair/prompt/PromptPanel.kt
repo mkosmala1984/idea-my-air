@@ -51,6 +51,7 @@ import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.nio.file.Path
+import java.time.Instant
 import javax.swing.Icon
 import javax.swing.JButton
 import javax.swing.JComponent
@@ -156,6 +157,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
             override fun textChanged(e: DocumentEvent) = saveDraft()
         })
         selectPreset(choice, draft?.base ?: choice.preset.base)
+        ApplicationManager.getApplication().executeOnPooledThread { pruneImages(PASTED_IMAGES, Instant.now() - IMAGES_KEPT) }
     }
 
     override fun getPreferredSize(): Dimension = super.getPreferredSize().apply { width = maxOf(width, JBUI.scale(720)) }
