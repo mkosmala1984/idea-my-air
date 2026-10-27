@@ -2,6 +2,7 @@ package dev.myair.service
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.util.Disposer
@@ -22,6 +23,9 @@ import dev.myair.store.Pins
 import dev.myair.store.pinnedSessions
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import kotlin.io.path.fileSize
+import kotlin.io.path.getLastModifiedTime
+import kotlin.io.path.isRegularFile
 
 /**
  * The one watcher over `~/.claude` and `~/.my-air`, shared by every project: session list, live statuses, the session each
@@ -30,14 +34,14 @@ import java.util.concurrent.TimeUnit
 @Service(Service.Level.APP)
 class ClaudeSessionsService : Disposable {
     private val claudeHome = Path.of(System.getProperty("user.home"), ".claude")
-    private val scanner = ClaudeSessionScanner(claudeHome.resolve("projects"))
+    private val structure = StructureStore(Path.of(System.getProperty("user.home"), ".my-air", "structure.json"))
+    private val scanner = ClaudeSessionScanner(claudeHome.resolve("projects"), ClaudeSessionScanner.Saved(structure.file.resolveSibling("scan-cache.json"), pluginBuild()))
     private val registry = LiveSessionRegistry(claudeHome.resolve("sessions"))
     private val desktop = DesktopSessionReader(Path.of(checkNotNull(System.getenv("LOCALAPPDATA")) { "LOCALAPPDATA is not set" }, "Claude-Data"))
-    private val structure = StructureStore(Path.of(System.getProperty("user.home"), ".my-air", "structure.json"))
     private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
     private val board = BoardWriter(structure.file.parent)
 
-    /** False until the first refresh lands; the first scan reads every transcript and takes seconds. */
+    /** False until the first refresh lands; without a saved scan the first one reads every transcript and takes seconds. */
     var loaded = false
         private set
 
@@ -165,9 +169,18 @@ class ClaudeSessionsService : Disposable {
     override fun dispose() {
         safetyNet.cancel(false)
         watcher.close()
+        scanner.save()
     }
 
     companion object {
         fun getInstance(): ClaudeSessionsService = ApplicationManager.getApplication().getService(ClaudeSessionsService::class.java)
     }
+}
+
+/** The plugin's jar, as its path, size and modification time: every `buildPlugin` and every install changes it. */
+private fun pluginBuild(): String {
+    // The plugin class loader defines classes without a code source location.
+    val jar = Path.of(checkNotNull(PathManager.getJarPathForClass(ClaudeSessionScanner::class.java)) { "no jar for ${ClaudeSessionScanner::class.java}" })
+    check(jar.isRegularFile()) { "plugin classes are not loaded from a jar: $jar" }
+    return "$jar ${jar.fileSize()} ${jar.getLastModifiedTime()}"
 }

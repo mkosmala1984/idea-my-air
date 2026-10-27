@@ -1,9 +1,14 @@
 package dev.myair.claude
 
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.TypeAdapter
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
+import dev.myair.store.writeAtomically
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 import java.nio.channels.FileChannel
@@ -11,33 +16,87 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.io.StringReader
 import java.time.Instant
+import kotlin.io.path.createDirectories
+import kotlin.io.path.exists
 import kotlin.io.path.extension
 import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.nameWithoutExtension
+import kotlin.io.path.readText
 
 /**
  * Reads `<projectsDir>/<encoded-cwd>/<sessionId>.jsonl`. Subagent transcripts live one level deeper and are not listed.
  * The directory name encodes the cwd lossily, so the cwd comes from the transcript itself.
- * Transcripts are append-only, so a rescan reads only the lines added since the previous one.
+ * Transcripts are append-only, so a rescan reads only the lines added since the previous one; with [saved], so does the
+ * first scan after a restart.
  */
-class ClaudeSessionScanner(private val projectsDir: Path) {
-    private val cache = HashMap<Path, Transcript>()
+class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Saved? = null) {
+    /** Loaded by the first scan, off the thread that builds the scanner: the file holds megabytes. */
+    private val cache by lazy { saved?.load() ?: HashMap() }
+    private var unsaved = false
+    private var savedAt = 0L
 
     /** [desktopProjects]: the folder Claude Desktop started each of its sessions in, by session id ([DesktopSessionReader]). */
     @Synchronized
     fun scan(desktopProjects: Map<String, Path> = emptyMap()): List<ClaudeSession> {
         val files = projectsDir.listDirectoryEntries().filter { it.isDirectory() }
             .flatMap { dir -> dir.listDirectoryEntries().filter { it.extension == "jsonl" } }
-        cache.keys.retainAll(files.toSet())
-        return files.mapNotNull { file ->
+        if (cache.keys.retainAll(files.toSet())) unsaved = true
+        val sessions = files.mapNotNull { file ->
             val size = Files.size(file)
             // A file shorter than what was already read has been rewritten: start over.
             val known = cache[file]?.takeIf { size >= it.offset }
             val transcript = if (known != null && known.offset == size) known else read(file, known ?: Transcript.EMPTY)
+            if (transcript != known) unsaved = true
             cache[file] = transcript
             transcript.toSession(file, desktopProjects[file.nameWithoutExtension])
         }.sortedByDescending { it.lastMessage }
+        // Live sessions append every second; after a crash, a minute of lines is cheap to read again.
+        if (saved != null && System.currentTimeMillis() - savedAt >= SAVE_INTERVAL_MS) save()
+        return sessions
+    }
+
+    /** Writes what was read to [Saved.file], if anything changed since the last write. */
+    @Synchronized
+    fun save() {
+        val saved = checkNotNull(saved) { "scanner of $projectsDir has no file to save to" }
+        savedAt = System.currentTimeMillis()
+        if (!unsaved) return
+        saved.write(cache)
+        unsaved = false
+    }
+
+    /**
+     * The scanner's state kept across restarts in [file], valid only for the [build] of the plugin that wrote it: another
+     * build may read transcripts differently, so it starts over.
+     */
+    class Saved(val file: Path, private val build: String) {
+        fun load(): HashMap<Path, Transcript> {
+            if (!file.exists()) return HashMap()
+            val root = JsonParser.parseString(file.readText()).asJsonObject
+            if (root["build"].asString != build) return HashMap()
+            return root.getAsJsonObject("transcripts").entrySet().associateTo(HashMap()) { (path, t) -> Path.of(path) to gson.fromJson(t, Transcript::class.java) }
+        }
+
+        fun write(transcripts: Map<Path, Transcript>) {
+            file.parent.createDirectories()
+            writeAtomically(file, gson.toJson(mapOf("build" to build, "transcripts" to transcripts.mapKeys { it.key.toString() })))
+        }
+
+        private companion object {
+            fun <T> asString(parse: (String) -> T): TypeAdapter<T> = object : TypeAdapter<T>() {
+                override fun write(out: JsonWriter, value: T) {
+                    out.value(value.toString())
+                }
+
+                override fun read(reader: JsonReader): T = parse(reader.nextString())
+            }.nullSafe()
+
+            val gson: Gson = GsonBuilder()
+                .registerTypeAdapter(Instant::class.java, asString(Instant::parse))
+                .registerTypeHierarchyAdapter(Path::class.java, asString(Path::of))
+                .create()
+        }
     }
 
     /** What a transcript says up to [offset], the byte after its last complete line. */
@@ -80,6 +139,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
 
         /** Human prompts kept per session: enough for an agent to judge what the session was about. */
         const val PROMPTS = 3
+        private const val SAVE_INTERVAL_MS = 60_000L
         private const val ASSISTANT = "\"type\":\"assistant\""
         private const val SYNTHETIC = "<synthetic>"
 
