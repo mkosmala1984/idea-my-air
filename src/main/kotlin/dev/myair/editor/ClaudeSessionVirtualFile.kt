@@ -2,6 +2,7 @@ package dev.myair.editor
 
 import com.intellij.icons.AllIcons
 import com.intellij.ide.FileIconProvider
+import com.intellij.openapi.fileEditor.impl.EditorHistoryManager
 import com.intellij.openapi.fileEditor.impl.EditorTabTitleProvider
 import com.intellij.openapi.fileTypes.FileTypes
 import com.intellij.openapi.project.DumbAware
@@ -19,9 +20,16 @@ import javax.swing.Icon
  * A tab running `claude <claudeArgs>` in [cwd]. [sessionId] and [title] follow the session the process shows now, which
  * `/clear` or `/resume` can change; [ClaudeSessionsService] updates them by [pid], known once the process has started.
  * [project] is the session's [dev.myair.claude.ClaudeSession.project], named in the tab title outside that project's window.
+ * [restored]: the platform reopened the tab on startup through [ClaudeSessionFileSystem]; nobody checked it may start yet.
  */
-class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, val project: Path, var title: String, val claudeArgs: List<String>) :
-    LightVirtualFile(title, FileTypes.PLAIN_TEXT, "") {
+class ClaudeSessionVirtualFile(
+    var sessionId: String,
+    val cwd: Path,
+    val project: Path,
+    var title: String,
+    val claudeArgs: List<String>,
+    val restored: Boolean = false,
+) : LightVirtualFile(title, FileTypes.PLAIN_TEXT, ""), EditorHistoryManager.OptionallyIncluded {
     @Volatile
     var pid: Long? = null
 
@@ -36,6 +44,14 @@ class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, val project
     init {
         isWritable = false
     }
+
+    override fun getFileSystem() = ClaudeSessionFileSystem.instance
+
+    /** Read when the platform saves the open tabs, so a tab `/clear` switched restores the session it shows now. */
+    override fun getPath() = sessionTabPath(sessionId, cwd, project)
+
+    // Recent Files would hold this object, its URL and claudeArgs from when it was opened, and reopen it unchecked.
+    override fun isIncludedInEditorHistory(project: Project) = false
 }
 
 class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {
