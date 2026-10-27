@@ -76,6 +76,9 @@ fun nodeDir(path: TreePath): Path? = when (val item = (path.lastPathComponent as
     else -> null
 }
 
+/** The directory to open from the node at [path]: a session's own cwd, else [nodeDir]. */
+fun openDir(path: TreePath): Path? = ((path.lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession)?.cwd ?: nodeDir(path)
+
 /** A drop as it will happen: the [change], and where the tree shows it: [childIndex] -1 frames [path]'s row, otherwise a line before that child. */
 class Drop(val change: (SessionFolders) -> SessionFolders, val path: TreePath, val childIndex: Int)
 
