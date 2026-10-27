@@ -197,6 +197,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 ActionManager.getInstance().createActionPopupMenu("ClaudePinnedPopup", pinnedPopup).component.show(comp, x, y)
             }
         })
+        val withPrompt = ActionManager.getInstance().getAction("dev.myair.NewSessionWithPrompt")
         val newSession = ActionManager.getInstance().getAction("dev.myair.NewClaudeSession")
         val newSessionInWorktree = ActionManager.getInstance().getAction("dev.myair.NewClaudeSessionInWorktree")
         val options = DefaultActionGroup("View Options", true).apply {
@@ -215,7 +216,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         fun bar(place: String, vararg actions: AnAction) =
             ActionManager.getInstance().createActionToolbar(place, DefaultActionGroup(*actions), true).apply { targetComponent = tree }.component
         val actions = JPanel(BorderLayout()).apply {
-            add(bar("ClaudeSessions", newSession, newSessionInWorktree, PresetsGroup(), newFolder), BorderLayout.CENTER)
+            add(bar("ClaudeSessions", withPrompt, newSession, newSessionInWorktree, PresetsGroup(), newFolder), BorderLayout.CENTER)
             add(bar("ClaudeSessionsView", options, search), BorderLayout.EAST)
         }
         val close = InplaceButton(IconButton("Close Search", AllIcons.Actions.Close, AllIcons.Actions.CloseHovered)) { showSearch(false) }

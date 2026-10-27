@@ -82,7 +82,7 @@ class PresetsEditor {
 private enum class WorktreeMode { NONE, ASK, FIXED }
 
 /** The aliases `claude --help` names for `--model`. */
-private val MODELS = listOf("fable", "opus", "sonnet")
+internal val MODELS = listOf("fable", "opus", "sonnet")
 private const val OWN_SETTING = "claude's own setting"
 
 /**

@@ -20,6 +20,12 @@ class PresetsTest {
     }
 
     @Test
+    fun `puts the first prompt after --, so the variadic --add-dir does not take it and a word like mcp is no subcommand`() {
+        assertEquals(listOf("--add-dir", "E:/docs", "--", "mcp"), Preset("Docs", addDirs = listOf("E:/docs")).claudeArgs("mcp"))
+        assertThrows<IllegalArgumentException> { Preset("Plain").claudeArgs(" \n") }
+    }
+
+    @Test
     fun `survives a round trip through json, also without optional values`() {
         val presets = listOf(full, Preset("Plain"), Preset("Ask", worktree = true))
         assertEquals(presets, parsePresets(presetsJson(presets)))

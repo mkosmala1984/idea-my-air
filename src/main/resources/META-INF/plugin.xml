@@ -17,6 +17,7 @@
     <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>
     <editorTabTitleProvider implementation="dev.myair.editor.ClaudeSessionTabTitleProvider"/>
     <postStartupActivity implementation="dev.myair.tabs.TabsSyncStartup"/>
+    <editorEmptyStateComponentProvider implementation="dev.myair.prompt.PromptEmptyState"/>
   </extensions>
 
   <applicationListeners>
@@ -37,6 +38,11 @@
             description="Create a worktree on a new branch off a chosen branch and start claude in it in an editor tab">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
+    <action id="dev.myair.NewSessionWithPrompt" class="dev.myair.prompt.NewSessionWithPromptAction"
+            text="New Claude Session with Prompt..." icon="AllIcons.Actions.Edit"
+            description="Type the first message and pick a configuration, then start claude in an editor tab">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
     <action id="dev.myair.FocusClaudeSession" class="dev.myair.actions.FocusClaudeSessionAction" text="Focus Claude Session..."
             description="Switch to the window and tab of a Claude session open in any IDE">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
@@ -47,6 +53,7 @@
       <keyboard-shortcut keymap="$default" first-keystroke="alt shift K"/>
     </action>
     <group id="dev.myair.MainToolbar">
+      <reference ref="dev.myair.NewSessionWithPrompt"/>
       <reference ref="dev.myair.NewClaudeSession"/>
       <reference ref="dev.myair.NewClaudeSessionInWorktree"/>
       <group id="dev.myair.Presets" class="dev.myair.actions.PresetsGroup"/>
