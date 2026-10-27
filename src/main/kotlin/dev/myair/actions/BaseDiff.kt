@@ -62,8 +62,8 @@ class ShowChangesVsBaseAction(private val selected: () -> List<ClaudeSession>) :
         background(project, "Reading changes", { Git.state(cwd) }) { state ->
             when {
                 state == null -> Messages.showErrorDialog(project, "$cwd is not in a git repository.", "No Changes")
-                state.changes == null -> Messages.showErrorDialog(project, "Base ${state.base} no longer exists.", "No Changes")
-                state.changes.isEmpty() -> Messages.showInfoMessage(project, "No changes against ${state.base}.", "No Changes")
+                state.changes == null -> Messages.showErrorDialog(project, "${state.problem}.", "No Changes")
+                state.changes.isEmpty() -> Messages.showInfoMessage(project, "No changes" + state.base?.let { " against $it" }.orEmpty() + ".", "No Changes")
                 else -> showBaseDiff(project, state, 0)
             }
         }

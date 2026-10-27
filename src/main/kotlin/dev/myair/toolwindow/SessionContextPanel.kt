@@ -13,6 +13,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vcs.FileStatus
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
@@ -32,6 +33,7 @@ import dev.myair.claude.TaskStatus
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.service.ClaudeSessionsService
 import java.awt.BorderLayout
+import java.awt.Point
 import java.awt.event.HierarchyEvent
 import java.nio.file.Path
 import javax.swing.JComponent
@@ -176,14 +178,14 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         else context.git?.let { git ->
             section("Changes") {
                 val changes = git.changes
-                if (changes == null) row { comment("Base ${git.base} no longer exists") }
+                if (changes == null) row { comment(checkNotNull(git.problem)) }
                 else {
                     row {
                         icon(AllIcons.Actions.Diff)
                         label("+${git.added}").applyToComponent { foreground = FileStatus.ADDED.color }
                         label("−${git.removed}").applyToComponent { foreground = FileStatus.DELETED.color }
                         if (changes.isNotEmpty()) link("Show diff") { showBaseDiff(project, git, 0) }
-                            .applyToComponent { toolTipText = "Changes against ${git.base}" }
+                            .applyToComponent { toolTipText = git.base?.let { "Changes against $it" } }
                     }
                     paged("Changes", changes) { change, index ->
                         label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = KIND_STATUSES.getValue(change.kind).color }
@@ -195,14 +197,20 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
     }
 
-    /** Asks for a new base of [git]'s branch under [anchor] and reads the changes again against it. */
-    private fun pickBase(git: GitState, anchor: JComponent) = background(project, "Reading branches", { Git.repo(git.root) }) { repo ->
-        basePopup("Base Branch of ${git.branch}", baseChoices(repo.branches, repo.default, recentBases(repo.mainRoot))) { base ->
-            background(project, "Setting base branch", { Git.setBase(git.root, git.branch, base) }) {
-                readFor = null
-                update()
-            }
-        }.showUnderneathOf(anchor)
+    /**
+     * Asks for a new base of [git]'s branch under [anchor] and reads the changes again against it. The point is taken at
+     * the click: the pane may be rebuilt, and [anchor] gone, while the branches are read.
+     */
+    private fun pickBase(git: GitState, anchor: JComponent) {
+        val under = RelativePoint.fromScreen(Point(anchor.locationOnScreen).apply { y += anchor.height })
+        background(project, "Reading branches", { Git.repo(git.root) }) { repo ->
+            basePopup("Base Branch of ${git.branch}", baseChoices(repo.branches, repo.default, recentBases(repo.mainRoot))) { base ->
+                background(project, "Setting base branch", { Git.setBase(git.root, git.branch, base) }) {
+                    readFor = null
+                    update()
+                }
+            }.show(under)
+        }
     }
 
     /** A row per file of [files], named by [label], opening it in the editor. */
