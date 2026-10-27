@@ -109,6 +109,23 @@ class GitTest {
     }
 
     @Test
+    fun `a new worktree branch stores its base`() {
+        val repo = clone()
+        Git.addWorktree(repo, worktreePath(repo, ".claude/worktrees", "ab12cd34"), "worktree-ab12cd34", "origin/feature")
+        assertEquals("origin/feature", Git.storedBase(repo, "worktree-ab12cd34"))
+    }
+
+    @Test
+    fun `a branch without a stored base has none, and a set one survives a rename`() {
+        val repo = init("plain")
+        git(repo, "branch", "topic")
+        assertEquals(null, Git.storedBase(repo, "topic"))
+        Git.setBase(repo, "topic", "main")
+        git(repo, "branch", "-m", "topic", "renamed")
+        assertEquals("main", Git.storedBase(repo, "renamed"))
+    }
+
+    @Test
     fun `state of a repository names its branch and counts uncommitted lines`() {
         val repo = init("changed")
         repo.resolve("a.txt").writeText("1\n2\n3\n")

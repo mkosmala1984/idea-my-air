@@ -55,10 +55,24 @@ object Git {
     /** A `--numstat` count; a binary file has `-` for both. */
     private fun lines(count: String) = if (count == "-") 0 else count.toInt()
 
-    /** A new [branch] off [base] checked out at [path]; `--no-track` keeps a remote base from becoming its upstream. */
+    /**
+     * A new [branch] off [base] checked out at [path], with [base] stored as its base; `--no-track` keeps a remote base
+     * from becoming its upstream.
+     */
     fun addWorktree(mainRoot: Path, path: Path, branch: String, base: String) {
         run(mainRoot, "worktree", "add", "--no-track", "-b", branch, path.toString(), base)
+        setBase(mainRoot, branch, base)
     }
+
+    /** The ref [branch] is compared against, kept in the repository's config so it follows `git branch -m`. */
+    fun setBase(dir: Path, branch: String, base: String) {
+        run(dir, "config", baseKey(branch), base)
+    }
+
+    /** The base [setBase] stored for [branch]; null when none was. */
+    fun storedBase(dir: Path, branch: String): String? = run(dir, "config", "--get", baseKey(branch), ok = setOf(0, 1)).trim().ifEmpty { null }
+
+    private fun baseKey(branch: String) = "branch.$branch.myAirBase"
 
     /** Untracked files of [mainRoot] that match `.worktreeinclude` and are gitignored, as `claude --worktree` copies them. */
     fun includedFiles(mainRoot: Path): List<String> {
