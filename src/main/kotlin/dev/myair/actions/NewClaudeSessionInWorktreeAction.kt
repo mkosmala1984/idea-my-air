@@ -9,6 +9,7 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.ui.popup.ListPopup
 import com.intellij.openapi.ui.popup.ListSeparator
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
@@ -61,22 +62,24 @@ fun startInWorktree(project: Project, dir: Path, base: String?, args: List<Strin
             if (base in repo.branches) create(base) else Messages.showErrorDialog(project, "Branch $base is not in ${repo.mainRoot}.", "Cannot Create Worktree")
             return@background
         }
-        val choices = baseChoices(repo.branches, repo.default, recent)
-        val step = object : BaseListPopupStep<String>("Base Branch for New Worktree", choices.items) {
-            override fun isSpeedSearchEnabled() = true
-            override fun getDefaultOptionIndex() = choices.selected
-            override fun getSeparatorAbove(value: String) = when (choices.items.indexOf(value)) {
-                choices.restStart -> ListSeparator()
-                choices.recentStart -> ListSeparator("Recent")
-                else -> null
-            }
-            override fun onChosen(selectedValue: String, finalChoice: Boolean): PopupStep<*>? = doFinalStep { create(selectedValue) }
-        }
-        JBPopupFactory.getInstance().createListPopup(step).show(where)
+        basePopup("Base Branch for New Worktree", baseChoices(repo.branches, repo.default, recent), ::create).show(where)
     }
 
+/** A searchable list of [choices], the recent ones under a separator; [chosen] gets the pick. */
+fun basePopup(title: String, choices: BaseChoices, chosen: (String) -> Unit): ListPopup =
+    JBPopupFactory.getInstance().createListPopup(object : BaseListPopupStep<String>(title, choices.items) {
+        override fun isSpeedSearchEnabled() = true
+        override fun getDefaultOptionIndex() = choices.selected
+        override fun getSeparatorAbove(value: String) = when (choices.items.indexOf(value)) {
+            choices.restStart -> ListSeparator()
+            choices.recentStart -> ListSeparator("Recent")
+            else -> null
+        }
+        override fun onChosen(selectedValue: String, finalChoice: Boolean): PopupStep<*>? = doFinalStep { chosen(selectedValue) }
+    })
+
 /** Runs [work] off the EDT, then [done] with its result on the EDT; a failure shows its message. */
-private fun <T> background(project: Project, title: String, work: () -> T, done: (T) -> Unit) =
+internal fun <T> background(project: Project, title: String, work: () -> T, done: (T) -> Unit) =
     object : Task.Backgroundable(project, title) {
         private var result: Result<T>? = null
         override fun run(indicator: ProgressIndicator) {

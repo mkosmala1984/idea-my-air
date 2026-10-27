@@ -109,26 +109,185 @@ class GitTest {
     }
 
     @Test
-    fun `state of a repository names its branch and counts uncommitted lines`() {
-        val repo = init("changed")
-        repo.resolve("a.txt").writeText("1\n2\n3\n")
-        git(repo, "add", "a.txt")
-        git(repo, "commit", "-m", "a")
-        repo.resolve("a.txt").writeText("1\nX\n3\n4\n5\n")
-        assertEquals(GitState("main", 3, 1), Git.state(repo))
+    fun `a new worktree branch stores its base`() {
+        val repo = clone()
+        Git.addWorktree(repo, worktreePath(repo, ".claude/worktrees", "ab12cd34"), "worktree-ab12cd34", "origin/feature")
+        assertEquals("origin/feature", Git.storedBase(repo, "worktree-ab12cd34"))
     }
 
     @Test
-    fun `state of a detached head names its commit`() {
+    fun `a branch without a stored base has none, and a set one survives a rename`() {
+        val repo = init("plain")
+        git(repo, "branch", "topic")
+        assertEquals(null, Git.storedBase(repo, "topic"))
+        Git.setBase(repo, "topic", "main")
+        git(repo, "branch", "-m", "topic", "renamed")
+        assertEquals("main", Git.storedBase(repo, "renamed"))
+    }
+
+    /** Writes [text] to [name] in [repo] and commits it. */
+    private fun commit(repo: Path, name: String, text: String) {
+        repo.resolve(name).writeText(text)
+        git(repo, "add", name)
+        git(repo, "commit", "-m", name)
+    }
+
+    private fun state(dir: Path) = checkNotNull(Git.state(dir))
+
+    @Test
+    fun `a worktree diffs against the merge base with its stored base, untracked files included`() {
+        val repo = clone()
+        val path = worktreePath(repo, ".claude/worktrees", "ab12cd34")
+        Git.addWorktree(repo, path, "worktree-ab12cd34", "origin/feature")
+        commit(path, "a.txt", "1\n2\n")
+        path.resolve("a.txt").writeText("1\n2\n3\n")
+        path.resolve("new.txt").writeText("x\ny\n")
+        val state = state(path)
+        assertEquals("worktree-ab12cd34", state.branch)
+        assertEquals(false, state.detached)
+        assertEquals("origin/feature", state.base)
+        assertEquals(true, state.baseStored)
+        assertEquals(git(repo, "rev-parse", "origin/feature"), state.mergeBase)
+        assertEquals(path.toRealPath(), state.root.toRealPath())
+        assertEquals(listOf(FileChange("a.txt", FileChange.Kind.ADDED, 3, 0), FileChange("new.txt", FileChange.Kind.UNTRACKED, 2, 0)), state.changes)
+        assertEquals(5, state.added)
+        assertEquals(0, state.removed)
+    }
+
+    @Test
+    fun `without a stored base the default branch is the base`() {
+        val repo = clone()
+        git(repo, "checkout", "-b", "topic")
+        commit(repo, "t.txt", "t\n")
+        val state = state(repo)
+        assertEquals("origin/main", state.base)
+        assertEquals(false, state.baseStored)
+        assertEquals(listOf(FileChange("t.txt", FileChange.Kind.ADDED, 1, 0)), state.changes)
+    }
+
+    @Test
+    fun `commits the base got after the branch was cut are not changes`() {
+        val repo = clone()
+        git(repo, "checkout", "-b", "topic")
+        commit(repo, "t.txt", "t\n")
+        commit(dir.resolve("upstream"), "u.txt", "u\n")
+        git(repo, "fetch")
+        assertEquals(listOf(FileChange("t.txt", FileChange.Kind.ADDED, 1, 0)), state(repo).changes)
+    }
+
+    @Test
+    fun `a stored base that names no commit leaves changes null`() {
+        val repo = init("plain")
+        git(repo, "checkout", "-b", "topic")
+        Git.setBase(repo, "topic", "gone")
+        val state = state(repo)
+        assertEquals("gone", state.base)
+        assertEquals(true, state.baseStored)
+        assertEquals(null, state.mergeBase)
+        assertEquals(null, state.changes)
+        assertEquals("Base gone no longer exists", state.problem)
+    }
+
+    @Test
+    fun `a base without history in common with HEAD is a problem, not a failure`() {
+        val repo = init("plain")
+        git(repo, "checkout", "-q", "--orphan", "pages")
+        commit(repo, "p.txt", "p\n")
+        git(repo, "checkout", "-q", "main")
+        Git.setBase(repo, "main", "pages")
+        val state = state(repo)
+        assertEquals("main", state.branch)
+        assertEquals(null, state.changes)
+        assertEquals("Base pages shares no history with main", state.problem)
+    }
+
+    @Test
+    fun `a default branch that cannot be told keeps the branch and names the problem`() {
+        val repo = dir.resolve("develop").createDirectories().also { git(it, "init", "-b", "develop") }
+        commit(repo, "a.txt", "a\n")
+        val state = state(repo)
+        assertEquals("develop", state.branch)
+        assertEquals(null, state.base)
+        assertEquals(null, state.changes)
+        assertContains(state.problem!!, "cannot tell the default branch")
+    }
+
+    @Test
+    fun `an untracked nested repository is not a changed file`() {
+        val repo = init("outer")
+        init("outer/inner")
+        repo.resolve("new.txt").writeText("n\n")
+        assertEquals(listOf(FileChange("new.txt", FileChange.Kind.UNTRACKED, 1, 0)), state(repo).changes)
+    }
+
+    @Test
+    fun `uncommitted edits and deletions count against the merge base`() {
+        val repo = init("changed")
+        commit(repo, "a.txt", "1\n2\n3\n")
+        commit(repo, "b.txt", "1\n2\n")
+        repo.resolve("a.txt").writeText("1\nX\n3\n4\n5\n")
+        git(repo, "rm", "-q", "b.txt")
+        val state = state(repo)
+        assertEquals("main", state.branch)
+        assertEquals("main", state.base)
+        assertEquals(git(repo, "rev-parse", "HEAD"), state.mergeBase)
+        assertEquals(listOf(FileChange("a.txt", FileChange.Kind.MODIFIED, 3, 1), FileChange("b.txt", FileChange.Kind.DELETED, 0, 2)), state.changes)
+    }
+
+    @Test
+    fun `a detached head diffs against the default branch`() {
         val repo = init("detached")
         git(repo, "checkout", "--detach")
-        assertEquals(GitState("detached at ${git(repo, "rev-parse", "--short=7", "HEAD")}", 0, 0), Git.state(repo))
+        val state = state(repo)
+        assertEquals("detached at ${git(repo, "rev-parse", "--short=7", "HEAD")}", state.branch)
+        assertEquals(true, state.detached)
+        assertEquals("main", state.base)
+        assertEquals(false, state.baseStored)
+        assertEquals(emptyList(), state.changes)
     }
 
     @Test
-    fun `state of a repository without commits is its branch with no changes`() {
+    fun `a repository without commits lists its files as untracked`() {
         val repo = dir.resolve("unborn").createDirectories().also { git(it, "init", "-b", "main") }
-        assertEquals(GitState("main", 0, 0), Git.state(repo))
+        repo.resolve("a.txt").writeText("a\n")
+        val state = state(repo)
+        assertEquals("main", state.branch)
+        assertEquals(null, state.base)
+        assertEquals(null, state.mergeBase)
+        assertEquals(listOf(FileChange("a.txt", FileChange.Kind.UNTRACKED, 1, 0)), state.changes)
+    }
+
+    @Test
+    fun `from a subdirectory paths are relative to the root and untracked files outside it count`() {
+        val repo = init("nested")
+        commit(repo, "a.txt", "a\n")
+        val sub = repo.resolve("sub").createDirectories()
+        repo.resolve("a.txt").writeText("b\n")
+        sub.resolve("s.txt").writeText("s\n")
+        repo.resolve("top.txt").writeText("t\n")
+        val state = state(sub)
+        assertEquals(repo.toRealPath(), state.root.toRealPath())
+        assertEquals(
+            listOf(FileChange("a.txt", FileChange.Kind.MODIFIED, 1, 1), FileChange("sub/s.txt", FileChange.Kind.UNTRACKED, 1, 0), FileChange("top.txt", FileChange.Kind.UNTRACKED, 1, 0)),
+            state.changes,
+        )
+    }
+
+    @Test
+    fun `lines are counted as git counts them and a binary file has none`() {
+        assertEquals(0, lineCount(byteArrayOf()))
+        assertEquals(1, lineCount("a".toByteArray()))
+        assertEquals(1, lineCount("a\n".toByteArray()))
+        assertEquals(2, lineCount("a\nb".toByteArray()))
+        assertEquals(0, lineCount(byteArrayOf(97, 0, 10)))
+    }
+
+    @Test
+    fun `show reads a file as it was in a commit`() {
+        val repo = init("shown")
+        commit(repo, "a.txt", "old\n")
+        repo.resolve("a.txt").writeText("new\n")
+        assertEquals("old\n", Git.show(repo, git(repo, "rev-parse", "HEAD"), "a.txt").toString(Charsets.UTF_8))
     }
 
     @Test

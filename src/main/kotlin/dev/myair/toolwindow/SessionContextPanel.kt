@@ -13,22 +13,32 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vcs.FileStatus
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
+import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.ui.JBUI
+import dev.myair.actions.FileChange.Kind
 import dev.myair.actions.Git
 import dev.myair.actions.GitState
+import dev.myair.actions.background
+import dev.myair.actions.baseChoices
+import dev.myair.actions.basePopup
 import dev.myair.actions.openInIdea
 import dev.myair.actions.openInTerminal
+import dev.myair.actions.recentBases
+import dev.myair.actions.showBaseDiff
 import dev.myair.claude.BackgroundTask
 import dev.myair.claude.TaskStatus
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.service.ClaudeSessionsService
 import java.awt.BorderLayout
+import java.awt.Point
 import java.awt.event.HierarchyEvent
 import java.nio.file.Path
+import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlin.io.path.exists
 
@@ -123,6 +133,12 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 row {
                     icon(AllIcons.Vcs.Branch)
                     label(git.branch)
+                    git.base?.let { base ->
+                        // A detached HEAD has no branch to store a base for.
+                        if (git.detached) comment("← $base")
+                        else link("← $base" + if (git.baseStored) "" else " (default)") { pickBase(git, it.source as JComponent) }
+                            .applyToComponent { toolTipText = "The branch the changes are counted against" }
+                    }
                     if (context.worktree) comment("Worktree").align(AlignX.RIGHT)
                 }
             }
@@ -168,27 +184,54 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         if (failure != null) section("Changes") { row { comment(failure.message.orEmpty()) } }
         else context.git?.let { git ->
             section("Changes") {
-                row {
-                    icon(AllIcons.Actions.Diff)
-                    label("+${git.added}").applyToComponent { foreground = FileStatus.ADDED.color }
-                    label("−${git.removed}").applyToComponent { foreground = FileStatus.DELETED.color }
+                val changes = git.changes
+                if (changes == null) row { comment(checkNotNull(git.problem)) }
+                else {
+                    row {
+                        icon(AllIcons.Actions.Diff)
+                        label("+${git.added}").applyToComponent { foreground = FileStatus.ADDED.color }
+                        label("−${git.removed}").applyToComponent { foreground = FileStatus.DELETED.color }
+                        if (changes.isNotEmpty()) link("Show diff") { showBaseDiff(project, git, 0) }
+                            .applyToComponent { toolTipText = git.base?.let { "Changes against $it" } }
+                    }
+                    paged("Changes", changes) { change, index ->
+                        label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = KIND_STATUSES.getValue(change.kind).color }
+                        link(change.path) { showBaseDiff(project, git, index) }
+                        comment("+${change.added} −${change.removed}")
+                    }
                 }
             }
         }
     }
 
     /**
-     * A row per file of [files], named by [label], opening it in the editor; [FILES_SHOWN] of them until Show more, which
-     * is kept by [key].
+     * Asks for a new base of [git]'s branch under [anchor] and reads the changes again against it. The point is taken at
+     * the click: the pane may be rebuilt, and [anchor] gone, while the branches are read.
      */
-    private fun Panel.files(key: String, files: List<Path>, label: (Path) -> String) {
-        val all = key in fullLists
-        for (file in if (all) files else files.take(FILES_SHOWN)) row {
-            icon(FileTypeManager.getInstance().getFileTypeByFileName(file.fileName.toString()).icon ?: AllIcons.FileTypes.Any_type)
-            link(label(file)) { openFile(project, file) }.applyToComponent { toolTipText = file.toString() }
+    private fun pickBase(git: GitState, anchor: JComponent) {
+        val under = RelativePoint.fromScreen(Point(anchor.locationOnScreen).apply { y += anchor.height })
+        background(project, "Reading branches", { Git.repo(git.root) }) { repo ->
+            basePopup("Base Branch of ${git.branch}", baseChoices(repo.branches, repo.default, recentBases(repo.mainRoot))) { base ->
+                background(project, "Setting base branch", { Git.setBase(git.root, git.branch, base) }) {
+                    readFor = null
+                    update()
+                }
+            }.show(under)
         }
-        if (files.size > FILES_SHOWN) row {
-            link(if (all) "Show less" else "Show more (${files.size})") {
+    }
+
+    /** A row per file of [files], named by [label], opening it in the editor. */
+    private fun Panel.files(key: String, files: List<Path>, label: (Path) -> String) = paged(key, files) { file, _ ->
+        icon(FileTypeManager.getInstance().getFileTypeByFileName(file.fileName.toString()).icon ?: AllIcons.FileTypes.Any_type)
+        link(label(file)) { openFile(project, file) }.applyToComponent { toolTipText = file.toString() }
+    }
+
+    /** A row per item of [items], filled by [fill] with the item and its index; [FILES_SHOWN] of them until Show more, kept by [key]. */
+    private fun <T> Panel.paged(key: String, items: List<T>, fill: Row.(T, Int) -> Unit) {
+        val all = key in fullLists
+        for ((index, item) in (if (all) items else items.take(FILES_SHOWN)).withIndex()) row { fill(item, index) }
+        if (items.size > FILES_SHOWN) row {
+            link(if (all) "Show less" else "Show more (${items.size})") {
                 if (all) fullLists -= key else fullLists += key
                 render()
             }
@@ -203,6 +246,10 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     companion object {
         private const val FILES_SHOWN = 5
+        private val KIND_LETTERS = mapOf(Kind.ADDED to "A", Kind.MODIFIED to "M", Kind.DELETED to "D", Kind.UNTRACKED to "U")
+        private val KIND_STATUSES = mapOf(
+            Kind.ADDED to FileStatus.ADDED, Kind.MODIFIED to FileStatus.MODIFIED, Kind.DELETED to FileStatus.DELETED, Kind.UNTRACKED to FileStatus.UNKNOWN,
+        )
         private val BACKGROUND_ICONS = mapOf(
             BackgroundTask.Kind.SHELL to AllIcons.Nodes.Console, BackgroundTask.Kind.MONITOR to AllIcons.Actions.Show,
             BackgroundTask.Kind.AGENT to AllIcons.Actions.Execute, BackgroundTask.Kind.WORKFLOW to AllIcons.Actions.RunAll,
