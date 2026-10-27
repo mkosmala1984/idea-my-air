@@ -8,6 +8,7 @@ import java.nio.file.attribute.FileTime
 import java.time.Instant
 import kotlin.io.path.appendText
 import kotlin.io.path.createDirectories
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -471,6 +472,44 @@ class ClaudeSessionScannerTest {
         val complete = ClaudeSessionScanner.read(file, partial)
         assertEquals("Done", complete.customTitle)
         assertEquals(Files.size(file), complete.offset)
+    }
+
+    @Test
+    fun `a scanner of the same build continues from the saved scan, another build reads everything again`() {
+        val file = write("s1", user("\"prompt\""), """{"type":"ai-title","aiTitle":"Old","sessionId":"s1"}""")
+        val saved = dir.resolve("cache/scan-cache.json")
+        // The first scan saves at once.
+        assertEquals("Old", ClaudeSessionScanner(dir, ClaudeSessionScanner.Saved(saved, "b1")).scan().single().title)
+
+        // The part already read changes in place, which only a scan that does not trust the saved one sees.
+        file.writeText(file.readText().replace("Old", "Bad") + user("\"later\"", at = "2026-10-25T10:00:00Z") + "\n")
+        val restarted = ClaudeSessionScanner(dir, ClaudeSessionScanner.Saved(saved, "b1")).scan().single()
+        assertEquals("Old" to Instant.parse("2026-10-25T10:00:00Z"), restarted.title to restarted.lastMessage)
+        assertEquals("Bad", ClaudeSessionScanner(dir, ClaudeSessionScanner.Saved(saved, "b2")).scan().single().title)
+    }
+
+    @Test
+    fun `a saved transcript reads back equal, with calls still waiting for their results`() {
+        val file = write("s1", user("\"prompt\""), reply("claude-opus-5-5", "high"), environment("E:\\plans"), published("a", "Plan"),
+            assistant(toolUse("Edit", """{"file_path":"C:\\a.kt","old_string":"x"}""")),
+            briefCall("t1", "Goal", """[{"content":"x","status":"in_progress"}]"""), result("t1"), briefCall("t2", "Next", """[]"""),
+            call("t3", "Bash", """{"command":"gradlew runIde","description":"Run","run_in_background":true}"""),
+            result("t3", """{"stdout":"","stderr":"","backgroundTaskId":"b1"}""", content = """Output is being written to: C:\\Temp\\b1.output"""),
+            call("t4", "Workflow", """{"script":"x"}"""),
+            result("t4", """{"status":"async_launched","taskId":"w1","taskType":"local_workflow","summary":"Review all"}"""),
+            enqueue("<task-notification>\n<task-id>w1</task-id>\n<status>completed</status>\n<summary>Workflow completed</summary>\n" +
+                "<usage><agent_count>2</agent_count><agents_done>2</agents_done><agents_error>0</agents_error><subagent_tokens>9</subagent_tokens><tool_uses>3</tool_uses></usage>\n</task-notification>", "2026-10-24T10:06:00Z"),
+            call("t5", "Monitor", """{"command":"tail -f log","description":"errors","timeout_ms":1000}"""),
+        )
+        val transcript = ClaudeSessionScanner.read(file, ClaudeSessionScanner.Transcript.EMPTY)
+        assertEquals(listOf("t2"), transcript.briefCalls.keys.toList())
+        assertEquals(listOf("t5"), transcript.shellCalls.keys.toList())
+        assertEquals(listOf("b1", "w1"), transcript.background.keys.toList())
+        assertEquals(2, transcript.background.getValue("w1").usage?.agents?.done)
+
+        val saved = ClaudeSessionScanner.Saved(dir.resolve("cache/scan-cache.json"), "b1")
+        saved.write(mapOf(file to transcript))
+        assertEquals(mapOf(file to transcript), saved.load())
     }
 
     @Test
