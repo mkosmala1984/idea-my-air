@@ -132,6 +132,16 @@ class SessionTreeTest {
     }
 
     @Test
+    fun `a session row opens its own cwd, other nodes as for a new session`() {
+        val root = foldersTree(structure, sessions, "")
+        fun pathTo(vararg indices: Int) = TreePath(indices.fold(listOf(root)) { nodes, i -> nodes + nodes.last().getChildAt(i) as DefaultMutableTreeNode }.toTypedArray())
+        assertEquals(Path.of("/tf"), openDir(pathTo(3, 0, 0)))
+        assertEquals(Path.of("/tf"), openDir(pathTo(3, 0)))
+        assertNull(openDir(pathTo(0)))
+        assertNull(nodeDir(pathTo(3, 0, 0)))
+    }
+
+    @Test
     fun `a bound project's folder holds its subfolders, then its sessions filed nowhere else, and leaves sessions`() {
         val bound = structure.createFolder("empty", "p", "rtm", project = Path.of("/rtm").toString()).createFolder("p", "sub", "sub")
             .assign("s1", null).assign("s4", "sub")

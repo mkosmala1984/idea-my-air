@@ -20,6 +20,8 @@ import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.ui.JBUI
 import dev.myair.actions.Git
 import dev.myair.actions.GitState
+import dev.myair.actions.openInIdea
+import dev.myair.actions.openInTerminal
 import dev.myair.claude.BackgroundTask
 import dev.myair.claude.TaskStatus
 import dev.myair.editor.ClaudeSessionVirtualFile
@@ -111,6 +113,11 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 icon(AllIcons.Nodes.Folder)
                 label(context.project)
                 comment(context.projectPath.toString())
+            }
+            if (context.cwdExists) row {
+                icon(AllIcons.Debugger.Console)
+                link("Open in IDEA") { openInIdea(project, context.cwd) }
+                link("Open in Terminal") { openInTerminal(project, context.cwd) }
             }
             context.git?.let { git ->
                 row {
