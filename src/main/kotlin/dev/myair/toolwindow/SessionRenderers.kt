@@ -94,15 +94,23 @@ class SessionRenderer(
                 icon = AllIcons.Actions.ListFiles
                 append(item.toString(), SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
             }
+            RecentSessions -> {
+                icon = AllIcons.Vcs.History
+                append(item.toString(), SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+            }
             is Path -> {
                 icon = AllIcons.Nodes.Folder
                 append(item.fileName?.toString() ?: item.toString())
                 append("  $item", SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
-            // In a user folder the project is no longer the parent node, so the row names it, unless the folder is bound to it.
+            // In a user folder or among recent sessions the project is no longer the parent node, so the row names it, unless the folder is bound to it.
             is ClaudeSession -> appendSession(
                 item, liveOf(item), settled(item), unread(item),
-                showProject = ((node.parent as DefaultMutableTreeNode).userObject as? Folder)?.let { it.project != item.cwd.toString() } ?: false,
+                showProject = when (val parent = (node.parent as DefaultMutableTreeNode).userObject) {
+                    is Folder -> parent.project != item.cwd.toString()
+                    RecentSessions -> true
+                    else -> false
+                },
             )
             is BriefGoal -> {
                 icon = AllIcons.Actions.IntentionBulb
