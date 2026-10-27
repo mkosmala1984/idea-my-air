@@ -107,6 +107,9 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
         private const val ENQUEUE = "{\"type\":\"queue-operation\",\"operation\":\"enqueue\""
         private const val TASK_NOTIFICATION = "<task-notification>"
 
+        /** How a monitor's event says it timed out; no final notification follows. */
+        private const val MONITOR_EXPIRED = "[Monitor expired"
+
         /** How a background shell's result names its output file. */
         private val SHELL_OUTPUT = Regex("Output is being written to: (.+?\\.output)")
 
@@ -175,7 +178,7 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                                     result["status"]?.asString != "async_launched" -> null
                                     result.has("agentId") -> BackgroundTask(
                                         result["agentId"].asString, BackgroundTask.Kind.AGENT, result["description"].asString, started,
-                                        result["outputFile"]?.asString?.let(Path::of),
+                                        result["outputFile"]?.asString?.let(Path::of), model = result["resolvedModel"]?.asString,
                                     )
                                     else -> BackgroundTask(result["taskId"].asString, BackgroundTask.Kind.WORKFLOW, result["summary"].asString, started)
                                 }
@@ -185,16 +188,27 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
                 if (line.startsWith(ENQUEUE) && TASK_NOTIFICATION in line) {
                     val o = json(line)
                     val content = o["content"].asString
-                    // A monitor's events carry no status; the notification that ends a task does. An agent sent another
-                    // message notifies again, and its latest end counts.
-                    tag(content, "status")?.let { status ->
-                        val id = checkNotNull(tag(content, "task-id")) { "final notification without a task id: $file" }
-                        background[id]?.let { task ->
-                            val summary = checkNotNull(tag(content, "summary")) { "final notification without a summary: $file" }
-                            background[id] = task.copy(
-                                output = tag(content, "output-file")?.let(Path::of) ?: task.output,
-                                end = BackgroundTask.End(time(o), BackgroundTask.Status.valueOf(status.uppercase()), summary),
-                            )
+                    // A monitor's events carry no status, but for the last ones its stream ended with; the notification
+                    // that ends a task does. An agent sent another message notifies again, and its latest end counts.
+                    val status = tag(content, "status")
+                    val id = tag(content, "task-id")
+                    if (status != null) checkNotNull(id) { "final notification without a task id: $file" }
+                    if (id != null) background[id]?.let { task ->
+                        val event = tag(content, "event")
+                        background[id] = when {
+                            event != null && event.startsWith(MONITOR_EXPIRED) -> task.copy(end = BackgroundTask.End(time(o), BackgroundTask.Status.EXPIRED, event))
+                            else -> {
+                                val counted = if (event == null) task else task.copy(events = task.events + 1, lastEvent = time(o))
+                                if (status == null) counted else counted.copy(
+                                    output = tag(content, "output-file")?.let(Path::of) ?: task.output,
+                                    end = BackgroundTask.End(
+                                        time(o), BackgroundTask.Status.valueOf(status.uppercase()),
+                                        checkNotNull(tag(content, "summary")) { "final notification without a summary: $file" },
+                                    ),
+                                    // After an agent's result, whose text may hold anything.
+                                    usage = content.lastIndexOf("<usage>").takeIf { it >= 0 }?.let { usage(content.substring(it)) } ?: task.usage,
+                                )
+                            }
                         }
                     }
                 }
@@ -306,6 +320,13 @@ class ClaudeSessionScanner(private val projectsDir: Path) {
 
         /** The text of the first `<name>` element of a notification. */
         private fun tag(content: String, name: String) = Regex("<$name>([\\s\\S]*?)</$name>").find(content)?.groupValues?.get(1)
+
+        /** The `<usage>` of an agent's or workflow's final notification; only a workflow's counts agents. */
+        private fun usage(xml: String): BackgroundTask.Usage {
+            fun number(name: String) = checkNotNull(tag(xml, name)) { "usage without $name: $xml" }.toLong()
+            val agents = tag(xml, "agent_count")?.let { BackgroundTask.Agents(it.toInt(), number("agents_done").toInt(), number("agents_error").toInt()) }
+            return BackgroundTask.Usage(number("subagent_tokens"), number("tool_uses").toInt(), agents)
+        }
 
         /** How `claude` writes a skill the human ran; its expansion follows as a meta line. Built-in commands carry no message tag. */
         private const val SKILL_COMMAND = "<command-message>"

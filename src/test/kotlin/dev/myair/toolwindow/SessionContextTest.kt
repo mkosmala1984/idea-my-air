@@ -60,6 +60,28 @@ class SessionContextTest {
     }
 
     @Test
+    fun `an agent shows its model and usage, a workflow its agents, a monitor its events`() {
+        val utc = ZoneOffset.UTC
+        val agent = task("a").copy(kind = BackgroundTask.Kind.AGENT, model = "claude-opus-5-5")
+        assertEquals("opus-5-5 · since 10:02", backgroundState(agent, live = true, utc))
+        val ended = task("a", BackgroundTask.Status.COMPLETED).copy(kind = BackgroundTask.Kind.AGENT, model = "claude-opus-5-5", usage = BackgroundTask.Usage(154_221, 23, null))
+        assertEquals("opus-5-5 · completed · 2 min 40 s · 154k tokens · 23 tools", backgroundState(ended, live = true, utc))
+        val workflow = task("w", BackgroundTask.Status.COMPLETED).copy(kind = BackgroundTask.Kind.WORKFLOW, usage = BackgroundTask.Usage(1_377_311, 125, BackgroundTask.Agents(11, 10, 1)))
+        assertEquals("completed · 2 min 40 s · 10/11 agents, 1 failed · 1.4M tokens · 125 tools", backgroundState(workflow, live = true, utc))
+        val monitor = task("m").copy(kind = BackgroundTask.Kind.MONITOR)
+        assertEquals("since 10:02 · no events", backgroundState(monitor, live = true, utc))
+        assertEquals("since 10:02 · 1 event, last 10:07", backgroundState(monitor.copy(events = 1, lastEvent = Instant.parse("2026-10-24T10:07:00Z")), live = true, utc))
+        assertEquals("since 10:02 · 3 events, last 10:09", backgroundState(monitor.copy(events = 3, lastEvent = Instant.parse("2026-10-24T10:09:00Z")), live = true, utc))
+    }
+
+    @Test
+    fun `counts read as they are under a thousand, then in thousands, then in millions`() {
+        assertEquals("950", countText(950))
+        assertEquals("154k", countText(154_221))
+        assertEquals("1.4M", countText(1_377_311))
+    }
+
+    @Test
     fun `durations read in whole seconds, then minutes and seconds, then hours and minutes`() {
         assertEquals("45 s", durationText(Duration.ofMillis(45_900)))
         assertEquals("1 min 0 s", durationText(Duration.ofSeconds(60)))

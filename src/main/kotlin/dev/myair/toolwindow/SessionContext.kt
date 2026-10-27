@@ -7,8 +7,10 @@ import dev.myair.claude.Brief
 import dev.myair.claude.ClaudeSession
 import java.nio.file.Path
 import java.time.Duration
+import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.io.path.extension
 
 /** The file types of the session's own writing, as Claude Desktop's Outputs lists them: plans, notes, pages. */
@@ -39,14 +41,38 @@ private val EXIT_CODE = Regex("exit code (\\d+)")
 private val CLOCK = DateTimeFormatter.ofPattern("HH:mm")
 
 /**
- * What the pane says of [task] after its name: while it runs, the time it started in [zone]; once ended, how, with the
- * exit code of a failed command, and how long it took. A task without an end in a session without its process died
- * with it, as the transcript does not record.
+ * What the pane says of [task] after its name: an agent's model; while it runs, the time it started in [zone]; once
+ * ended, how, with the exit code of a failed command, and how long it took; a monitor's events; what an agent or
+ * workflow used. A task without an end in a session without its process died with it, as the transcript does not record.
  */
 fun backgroundState(task: BackgroundTask, live: Boolean, zone: ZoneId): String {
-    val end = task.end ?: return if (live) "since ${CLOCK.format(task.started.atZone(zone))}" else "ended with its process"
-    val exit = EXIT_CODE.find(end.summary)?.takeIf { end.status == BackgroundTask.Status.FAILED }?.let { "exit ${it.groupValues[1]}" }
-    return listOfNotNull(end.status.name.lowercase(), exit, durationText(Duration.between(task.started, end.time))).joinToString(" · ")
+    fun clock(time: Instant) = CLOCK.format(time.atZone(zone))
+    val end = task.end
+    val state = when {
+        end != null -> listOfNotNull(
+            end.status.name.lowercase(),
+            EXIT_CODE.find(end.summary)?.takeIf { end.status == BackgroundTask.Status.FAILED }?.let { "exit ${it.groupValues[1]}" },
+            durationText(Duration.between(task.started, end.time)),
+        )
+        live -> listOf("since ${clock(task.started)}")
+        else -> listOf("ended with its process")
+    }
+    val events = if (task.kind != BackgroundTask.Kind.MONITOR) null
+    else task.lastEvent?.let { "${task.events} event${if (task.events == 1) "" else "s"}, last ${clock(it)}" } ?: "no events"
+    val usage = task.usage?.let { u ->
+        listOfNotNull(
+            u.agents?.let { a -> "${a.done}/${a.count} agents" + if (a.failed > 0) ", ${a.failed} failed" else "" },
+            "${countText(u.tokens)} tokens", "${u.toolUses} tools",
+        )
+    }.orEmpty()
+    return (listOfNotNull(task.model?.removePrefix("claude-")) + state + listOfNotNull(events) + usage).joinToString(" · ")
+}
+
+/** `950`, `154k`, `1.4M`. */
+fun countText(n: Long): String = when {
+    n < 1000 -> "$n"
+    n < 1_000_000 -> "${n / 1000}k"
+    else -> String.format(Locale.ROOT, "%.1fM", n / 1_000_000.0)
 }
 
 /** Whole seconds under a minute, else the two largest units: `45 s`, `2 min 40 s`, `1 h 5 min`. */

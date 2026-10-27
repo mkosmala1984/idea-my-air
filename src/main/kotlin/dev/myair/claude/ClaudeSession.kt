@@ -38,17 +38,25 @@ data class Artifact(val id: String, val title: String, val url: String, val path
 /**
  * A shell command, monitor, agent or workflow sent to the background; [id] is the one its notifications name. [output]:
  * the file `claude` writes its output to, as its launch or final notification names it. [end]: null while no final
- * notification has come.
+ * notification has come. [model]: the model an agent runs on. [events]: how many event notifications a monitor sent,
+ * the last at [lastEvent]. [usage]: what an agent or workflow used, as its latest final notification counts it.
  */
 data class BackgroundTask(
     val id: String, val kind: Kind, val description: String, val started: Instant, val output: Path? = null, val end: End? = null,
+    val model: String? = null, val events: Int = 0, val lastEvent: Instant? = null, val usage: Usage? = null,
 ) {
     enum class Kind { SHELL, MONITOR, AGENT, WORKFLOW }
 
     /** [summary] is `claude`'s own line about the end, which names a command's exit code. */
     data class End(val time: Instant, val status: Status, val summary: String)
 
-    enum class Status { COMPLETED, FAILED, KILLED, STOPPED }
+    /** The statuses of a final notification, and [EXPIRED]: a monitor's timeout, which `claude` tells as an event. */
+    enum class Status { COMPLETED, FAILED, KILLED, STOPPED, EXPIRED }
+
+    /** [agents]: a workflow's agents, none for an agent. */
+    data class Usage(val tokens: Long, val toolUses: Int, val agents: Agents?)
+
+    data class Agents(val count: Int, val done: Int, val failed: Int)
 }
 
 /** Whether this path is [dir] or a directory below it, comparing as text: see [dev.myair.folders.SessionFolders.projectFolder]. */
