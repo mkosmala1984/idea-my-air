@@ -1,6 +1,7 @@
 package dev.myair.editor
 
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import dev.myair.claude.ClaudeSession
@@ -63,7 +64,12 @@ object ClaudeSessionOpener {
         id: String = UUID.randomUUID().toString(),
         args: List<String> = emptyList(),
     ) {
-        openTab(project, ClaudeSessionVirtualFile(id, cwd, sessionProject, NEW_SESSION_TITLE, listOf("--session-id", id) + args))
+        val file = ClaudeSessionVirtualFile(id, cwd, sessionProject, NEW_SESSION_TITLE, listOf("--session-id", id) + args)
+        openTab(project, file)
+        // The tab just opened with focus, so the current window holds it.
+        val window = checkNotNull(FileEditorManagerEx.getInstanceEx(project).currentWindow) { "no editor window after opening $id" }
+        check(window.isFileOpen(file)) { "session $id opened outside the current editor window" }
+        window.setFilePinned(file, true)
     }
 
     private fun openTab(project: Project, file: ClaudeSessionVirtualFile) {
