@@ -8,6 +8,7 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
+import dev.myair.tabs.HostWindow
 import dev.myair.tabs.SessionHosts
 import dev.myair.tabs.TabsSync
 import java.nio.file.Path
@@ -24,7 +25,7 @@ object ClaudeSessionOpener {
         if (tab != null) return SessionHosts.focus(tab)
         if (TabsSync.getInstance().focusElsewhere(session.id)) return
         val live = ClaudeSessionsService.getInstance().live[session.id]
-        if (live != null && switchToWindow) hostElsewhere(live, session)?.let { return SessionHosts.bringToFront(it) }
+        if (live != null && switchToWindow) hostElsewhere(live, session.cwd)?.let { return SessionHosts.bringToFront(it) }
         if (live != null && !confirmRunningElsewhere(project, session, live)) return
         if (!session.cwd.isDirectory()) {
             Messages.showErrorDialog(project, "Session directory no longer exists:\n${session.cwd}", "Cannot Resume Session")
@@ -39,11 +40,9 @@ object ClaudeSessionOpener {
      * to open a second process.
      */
     private fun confirmRunningElsewhere(project: Project, session: ClaudeSession, live: LiveSession): Boolean {
-        val host = hostElsewhere(live, session)
-        val where = host?.let { "in ${it.executable} (\"${it.title}\")" } ?: "outside an editor tab of this IDE"
-        val message = "\"${session.title}\" is already running $where: claude pid ${live.pid}, started from ${live.entrypoint}.\n" +
-            "Opening it here starts a second process that writes to the same transcript."
+        val host = hostElsewhere(live, session.cwd)
         val options = listOfNotNull(if (host != null) "Switch to Window" else null, "Open Anyway", "Cancel")
+        val message = runningElsewhereMessage(session.title, live, host)
         // Escape closes the dialog with -1, which means Cancel.
         return when (options.getOrNull(Messages.showDialog(project, message, "Session Already Running", options.toTypedArray(), 0, Messages.getWarningIcon()))) {
             "Switch to Window" -> false.also { SessionHosts.bringToFront(host!!) }
@@ -52,9 +51,15 @@ object ClaudeSessionOpener {
         }
     }
 
-    /** The window of the program running [live], when that program is not this IDE. */
-    private fun hostElsewhere(live: LiveSession, session: ClaudeSession) =
-        SessionHosts.hostWindow(live.pid, session.cwd)?.takeIf { it.pid != ProcessHandle.current().pid() }
+    fun runningElsewhereMessage(title: String, live: LiveSession, host: HostWindow?): String {
+        val where = host?.let { "in ${it.executable} (\"${it.title}\")" } ?: "outside an editor tab of this IDE"
+        return "\"$title\" is already running $where: claude pid ${live.pid}, started from ${live.entrypoint}.\n" +
+            "Opening it here starts a second process that writes to the same transcript."
+    }
+
+    /** The window of the program running [live] in [cwd], when that program is not this IDE. */
+    fun hostElsewhere(live: LiveSession, cwd: Path) =
+        SessionHosts.hostWindow(live.pid, cwd)?.takeIf { it.pid != ProcessHandle.current().pid() }
 
     /** Starts `claude` with [args] in [cwd], which is [sessionProject] or one of its worktrees; the tab opens in [project]. */
     fun startNew(
