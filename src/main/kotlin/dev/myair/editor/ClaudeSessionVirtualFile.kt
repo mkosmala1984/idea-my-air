@@ -2,6 +2,7 @@ package dev.myair.editor
 
 import com.intellij.icons.AllIcons
 import com.intellij.ide.FileIconProvider
+import com.intellij.openapi.fileEditor.impl.EditorHistoryManager
 import com.intellij.openapi.fileEditor.impl.EditorTabTitleProvider
 import com.intellij.openapi.fileTypes.FileTypes
 import com.intellij.openapi.project.DumbAware
@@ -28,7 +29,7 @@ class ClaudeSessionVirtualFile(
     var title: String,
     val claudeArgs: List<String>,
     val restored: Boolean = false,
-) : LightVirtualFile(title, FileTypes.PLAIN_TEXT, "") {
+) : LightVirtualFile(title, FileTypes.PLAIN_TEXT, ""), EditorHistoryManager.OptionallyIncluded {
     @Volatile
     var pid: Long? = null
 
@@ -48,6 +49,9 @@ class ClaudeSessionVirtualFile(
 
     /** Read when the platform saves the open tabs, so a tab `/clear` switched restores the session it shows now. */
     override fun getPath() = sessionTabPath(sessionId, cwd, project)
+
+    // Recent Files would hold this object, its URL and claudeArgs from when it was opened, and reopen it unchecked.
+    override fun isIncludedInEditorHistory(project: Project) = false
 }
 
 class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {

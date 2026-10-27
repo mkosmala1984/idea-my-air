@@ -1,7 +1,5 @@
 package dev.myair.editor
 
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vfs.DeprecatedVirtualFileSystem
 import com.intellij.openapi.vfs.NonPhysicalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
@@ -19,14 +17,12 @@ class ClaudeSessionFileSystem : DeprecatedVirtualFileSystem(), NonPhysicalFileSy
 
     override fun getProtocol() = PROTOCOL
 
-    /** The open tab of that session if there is one, so a second tab never runs a second process; else a tab to restore. */
+    /**
+     * Always a new tab to restore, even when the session is open in another tab: an editor per tab runs its own process,
+     * so sharing the file would not prevent a second one, while the restored tab's check against the registry does.
+     */
     override fun findFileByPath(path: String): VirtualFile {
         val ref = parseSessionTabPath(path)
-        ProjectManager.getInstance().openProjects.asSequence()
-            .flatMap { FileEditorManager.getInstance(it).openFiles.asSequence() }
-            .filterIsInstance<ClaudeSessionVirtualFile>()
-            .firstOrNull { it.sessionId == ref.sessionId }
-            ?.let { return it }
         ClaudeSessionsService.getInstance() // starts tracking which session each tab shows
         return ClaudeSessionVirtualFile(ref.sessionId, ref.cwd, ref.project, NEW_SESSION_TITLE, restartArgs(ref.sessionId, claudeHome), restored = true)
     }
