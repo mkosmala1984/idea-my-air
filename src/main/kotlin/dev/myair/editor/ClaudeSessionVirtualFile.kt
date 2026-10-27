@@ -19,9 +19,16 @@ import javax.swing.Icon
  * A tab running `claude <claudeArgs>` in [cwd]. [sessionId] and [title] follow the session the process shows now, which
  * `/clear` or `/resume` can change; [ClaudeSessionsService] updates them by [pid], known once the process has started.
  * [project] is the session's [dev.myair.claude.ClaudeSession.project], named in the tab title outside that project's window.
+ * [restored]: the platform reopened the tab on startup through [ClaudeSessionFileSystem]; nobody checked it may start yet.
  */
-class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, val project: Path, var title: String, val claudeArgs: List<String>) :
-    LightVirtualFile(title, FileTypes.PLAIN_TEXT, "") {
+class ClaudeSessionVirtualFile(
+    var sessionId: String,
+    val cwd: Path,
+    val project: Path,
+    var title: String,
+    val claudeArgs: List<String>,
+    val restored: Boolean = false,
+) : LightVirtualFile(title, FileTypes.PLAIN_TEXT, "") {
     @Volatile
     var pid: Long? = null
 
@@ -36,6 +43,11 @@ class ClaudeSessionVirtualFile(var sessionId: String, val cwd: Path, val project
     init {
         isWritable = false
     }
+
+    override fun getFileSystem() = ClaudeSessionFileSystem.instance
+
+    /** Read when the platform saves the open tabs, so a tab `/clear` switched restores the session it shows now. */
+    override fun getPath() = sessionTabPath(sessionId, cwd, project)
 }
 
 class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {
