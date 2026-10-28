@@ -7,6 +7,7 @@ import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.openapi.util.text.StringUtil
+import com.intellij.util.ui.JBUI
 import dev.myair.claude.Brief
 import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
@@ -83,6 +84,10 @@ class PinnedRenderer(
 class SessionRenderer(
     private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
 ) : ColoredTreeCellRenderer() {
+    init {
+        iconTextGap = JBUI.scale(6)
+    }
+
     override fun customizeCellRenderer(
         tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean,
     ) {

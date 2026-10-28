@@ -168,9 +168,10 @@ class SessionTrailer(
 
     private companion object {
         /** Clear of the rounded corners of a selected or hovered row. */
-        const val PAD = 16
+        const val PAD = 12
         const val GAP = 8
         const val BUTTON = 22
-        const val DOT_GAP = 4
+        /** Beside the room the 16 px dot icon leaves around its dot. */
+        const val DOT_GAP = 2
     }
 }
