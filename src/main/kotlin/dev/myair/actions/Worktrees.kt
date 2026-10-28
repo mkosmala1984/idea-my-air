@@ -3,6 +3,7 @@ package dev.myair.actions
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.time.LocalDate
 import kotlin.io.path.createDirectories
 
 const val MAX_RECENT_BASES = 5
@@ -32,6 +33,13 @@ fun defaultBranch(remotes: List<String>, originHead: String?, local: List<String
     val candidates = local.filter { it == "main" || it == "master" }
     check(candidates.size == 1) { "no origin remote and the local branches main/master found are $candidates: cannot tell the default branch" }
     return candidates.single()
+}
+
+/** `<base>-<date>-<first 4 of session [id]>`, the base reduced to letters and digits: it names both the worktree directory and its branch. */
+fun worktreeName(base: String, date: LocalDate, id: String): String {
+    val slug = base.replace(Regex("[^A-Za-z0-9]+"), "-").trim('-')
+    check(slug.isNotEmpty()) { "base branch '$base' has no letters or digits" }
+    return "$slug-$date-${id.take(4)}"
 }
 
 /** A relative [setting] resolves against [mainRoot]; [Path.resolve] returns an absolute one unchanged. */
