@@ -19,6 +19,7 @@ import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.projectBase
 import java.awt.Point
 import java.nio.file.Path
+import java.time.LocalDate
 import java.util.UUID
 
 /** Starts a session in a new worktree of the project's repository, off a base picked from a popup. */
@@ -39,7 +40,7 @@ fun popupPoint(e: AnActionEvent): RelativePoint {
 }
 
 /**
- * Starts `claude` with [args] in a new worktree of the repository of [dir]: a branch `worktree-<id>` off [base], or off
+ * Starts `claude` with [args] in a new worktree of the repository of [dir]: a branch `worktree-<base>-<date>-<id4>` off [base], or off
  * a base picked from a popup at [where] when [base] is null, checked out in the worktrees directory of [MyAirSettings],
  * with the `.worktreeinclude` files of the main checkout copied in. The session belongs to [dir].
  */
@@ -48,7 +49,7 @@ fun startInWorktree(project: Project, dir: Path, base: String?, args: List<Strin
         val recent = recentBases(repo.mainRoot)
         fun create(base: String) {
             val id = UUID.randomUUID().toString()
-            val name = id.take(8)
+            val name = worktreeName(base, LocalDate.now(), id)
             val path = worktreePath(repo.mainRoot, MyAirSettings.getInstance().worktreesDir, name)
             background(project, "Creating worktree", {
                 Git.addWorktree(repo.mainRoot, path, "worktree-$name", base)
