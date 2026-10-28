@@ -101,10 +101,11 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         tree.trailer = SessionTrailer(
             tree, { tree.getClosestRowForLocation(it.x, it.y) }, tree::getRowBounds,
             { (tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession },
+            { folderSummary(tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode) { s -> urgencyOf(service.live[s.id], isUnread(s)) } },
             { DefaultTreeUI.getBackground(tree, tree.getPathForRow(it), it, tree.isRowSelected(it)) ?: tree.background }, trailerButtons,
         )
         pinned.trailer = SessionTrailer(
-            pinned, pinned::locationToIndex, { pinned.getCellBounds(it, it) }, { pinned.model.getElementAt(it) },
+            pinned, pinned::locationToIndex, { pinned.getCellBounds(it, it) }, { pinned.model.getElementAt(it) }, { null },
             // As WideSelectionListUI paints a row: the renderer leaves an unselected row's background to the list UI, and
             // a null hover background means hover painting is off.
             { row ->
