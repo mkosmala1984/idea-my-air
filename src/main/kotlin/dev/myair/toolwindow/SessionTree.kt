@@ -2,6 +2,8 @@ package dev.myair.toolwindow
 
 import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
+import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
 import dev.myair.folders.Folder
 import dev.myair.folders.SessionFolders
 import java.nio.file.Path
@@ -61,6 +63,36 @@ fun foldersTree(structure: SessionFolders, sessions: List<ClaudeSession>, query:
         structure.folders.mapNotNull(::folderNode) + node(RecentSessions, shown.take(RECENT_COUNT).map(::sessionNode)) +
             node(UnfiledSessions, projectNodes(places[null].orEmpty())),
     )
+}
+
+/** What makes a session call for attention, most urgent first. */
+enum class Urgency { NEEDS_INPUT, UNREAD, WORKING }
+
+/** A session's [Urgency]: its live status, an idle one only when it has an unread reply; null for none. */
+fun urgencyOf(live: LiveSession?, unread: Boolean): Urgency? = when (live?.status) {
+    SessionStatus.NEEDS_INPUT -> Urgency.NEEDS_INPUT
+    SessionStatus.WORKING -> Urgency.WORKING
+    SessionStatus.IDLE -> Urgency.UNREAD.takeIf { unread }
+    null -> null
+}
+
+/** What a group row shows on its right: how many sessions it holds and the most urgent of them. */
+data class FolderSummary(val sessions: Int, val urgent: Urgency?)
+
+/** The [FolderSummary] of a group node (folder, project, recent or unfiled sessions), counting the sessions below it as shown; null for a session and its children. */
+fun folderSummary(node: DefaultMutableTreeNode, urgency: (ClaudeSession) -> Urgency?): FolderSummary? = when (node.userObject) {
+    is ClaudeSession, is BriefGoal, is BriefTaskRow, is AddedDir, is ChangedFile -> null
+    is Folder, is Path, RecentSessions, UnfiledSessions -> {
+        val sessions = groupSessions(node)
+        FolderSummary(sessions.size, sessions.mapNotNull(urgency).minOrNull())
+    }
+    else -> error("Unexpected tree node ${node.userObject}")
+}
+
+/** The sessions below [node], not looking inside a session. */
+private fun groupSessions(node: DefaultMutableTreeNode): List<ClaudeSession> = node.children().toList().flatMap {
+    val child = it as DefaultMutableTreeNode
+    (child.userObject as? ClaudeSession)?.let(::listOf) ?: groupSessions(child)
 }
 
 /** The folder [path] points into, for a new folder or a drop: the nearest user folder above it, none under [UnfiledSessions]. */
