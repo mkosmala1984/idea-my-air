@@ -1,5 +1,6 @@
 package dev.myair.toolwindow
 
+import dev.myair.actions.GitState
 import dev.myair.claude.BackgroundTask
 import dev.myair.claude.Brief
 import dev.myair.claude.BriefTask
@@ -32,6 +33,24 @@ class SessionContextTest {
         val page = Path.of("C:/tmp/scratch/board.html")
         val written = listOf(plan, main.resolve("src/A.kt"), page, description)
         assertEquals(listOf(description, page, plan), contextOf(session(main, written), cwdExists = true, live = false, git = null).outputs)
+    }
+
+    @Test
+    fun `files are the ones written outside the work tree once git has read it, all of them before`() {
+        val inside = main.resolve("src/A.kt")
+        val outside = Path.of("C:/Users/me/.claude/scripts/s.mjs")
+        val written = session(main, listOf(inside, outside))
+        val git = GitState("main", false, main, "origin/main", true, null, emptyList(), null)
+        assertEquals(listOf(outside), contextOf(written, cwdExists = true, live = false, git = git).files)
+        assertEquals(listOf(inside, outside), contextOf(written, cwdExists = true, live = false, git = null).files)
+    }
+
+    @Test
+    fun `a model id reads as its family and version, a date suffix dropped`() {
+        assertEquals("Opus 5.5", modelName("claude-opus-5-5"))
+        assertEquals("Sonnet 4.5", modelName("claude-sonnet-4-5-20250929"))
+        assertEquals("Fable 5.1", modelName("claude-fable-5-1"))
+        assertEquals("my-local-model", modelName("my-local-model"))
     }
 
     private val started = Instant.parse("2026-10-24T10:02:00Z")

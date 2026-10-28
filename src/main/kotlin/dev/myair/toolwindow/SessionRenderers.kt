@@ -33,14 +33,17 @@ private val TaskStatus.mark get() = when (this) {
 
 fun BriefTask.line() = "${status.mark} $content"
 
+/** What a session is doing, as its tooltip and the context pane say it; null without a process. */
+fun statusText(live: LiveSession?, unread: Boolean): String? = when (live?.status) {
+    SessionStatus.NEEDS_INPUT -> "Needs input" + (live.waitingFor?.let { ": $it" } ?: "")
+    SessionStatus.WORKING -> "Working"
+    SessionStatus.IDLE -> if (unread) "Unread reply" else "Waiting for prompt"
+    null -> null
+}
+
 /** A session row's tooltip: its status, settled, Desktop, the [project] when the row does not show it, its brief, and the first human prompt. */
 fun tooltipLines(session: ClaudeSession, live: LiveSession?, unread: Boolean, settled: Boolean, project: Path?): List<String> = listOfNotNull(
-    when (live?.status) {
-        SessionStatus.NEEDS_INPUT -> "Needs input" + (live.waitingFor?.let { ": $it" } ?: "")
-        SessionStatus.WORKING -> "Working"
-        SessionStatus.IDLE -> if (unread) "Unread reply" else "Waiting for prompt"
-        null -> null
-    },
+    statusText(live, unread),
     "Settled".takeIf { settled },
     "Desktop".takeIf { session.desktop },
     project?.let { "Project: ${it.fileName ?: it}" },
