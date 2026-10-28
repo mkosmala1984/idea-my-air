@@ -3,6 +3,7 @@ package dev.myair.actions
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.nio.file.Path
+import java.time.LocalDate
 import kotlin.test.assertEquals
 
 class WorktreesTest {
@@ -58,6 +59,14 @@ class WorktreesTest {
         val root = Path.of("E:/repo")
         assertEquals(Path.of("E:/repo/.claude/worktrees/ab12cd34"), worktreePath(root, ".claude/worktrees", "ab12cd34"))
         assertEquals(Path.of("D:/wt/ab12cd34"), worktreePath(root, "D:/wt", "ab12cd34"))
+    }
+
+    @Test
+    fun `a worktree is named after its base, the date and the start of the session id`() {
+        val date = LocalDate.of(2026, 10, 28)
+        assertEquals("main-2026-10-28-3fb8", worktreeName("main", date, "3fb8816a-812b-4758"))
+        assertEquals("origin-feature-login-2026-10-28-3fb8", worktreeName("origin/feature/login", date, "3fb8816a-812b-4758"))
+        assertThrows<IllegalStateException> { worktreeName("/", date, "3fb8816a") }
     }
 
     @Test
