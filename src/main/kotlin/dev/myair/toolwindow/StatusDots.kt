@@ -2,6 +2,7 @@ package dev.myair.toolwindow
 
 import com.intellij.ui.JBColor
 import com.intellij.ui.scale.JBUIScale
+import com.intellij.util.ui.EmptyIcon
 import com.intellij.util.ui.GraphicsUtil
 import dev.myair.claude.LiveSession
 import java.awt.BasicStroke
@@ -50,5 +51,8 @@ val Urgency.dot: Icon get() = when (this) {
     Urgency.WORKING -> WORKING_DOT
 }
 
-/** The dot of a session row: none without a live process, the idle one for a live session that calls for nothing. */
-fun dotOf(live: LiveSession?, unread: Boolean): Icon? = live?.let { urgencyOf(it, unread)?.dot ?: IDLE_DOT }
+/** A session without a live process: no dot, but its room, so the titles of a folder line up. */
+private val NO_DOT: Icon = EmptyIcon.create(16)
+
+/** The dot of a session row: the idle one for a live session that calls for nothing. */
+fun dotOf(live: LiveSession?, unread: Boolean): Icon = live?.let { urgencyOf(it, unread)?.dot ?: IDLE_DOT } ?: NO_DOT
