@@ -36,7 +36,7 @@ class TrailerButton(val icon: Icon, val on: (ClaudeSession) -> Boolean, val togg
 
 /**
  * The right end of each session row in [component]: the age of its last message, replaced by [buttons] while the pointer
- * is over the row. It is painted over the rows, since a tree cell renderer is only as wide as its text, and covers a title
+ * is over the row; of each group row, its [summary]. It is painted over the rows, since a tree cell renderer is only as wide as its text, and covers a title
  * running underneath it with the row's [background]. The component calls [paint] after painting itself.
  */
 class SessionTrailer(
@@ -44,6 +44,7 @@ class SessionTrailer(
     private val rowAt: (Point) -> Int,
     private val bounds: (row: Int) -> Rectangle?,
     private val session: (row: Int) -> ClaudeSession?,
+    private val summary: (row: Int) -> FolderSummary?,
     private val background: (row: Int) -> Color,
     private val buttons: List<TrailerButton>,
 ) : MouseAdapter() {
@@ -64,7 +65,7 @@ class SessionTrailer(
             while (row >= 0) {
                 val r = bounds(row) ?: break
                 if (r.y > clip.maxY) break
-                session(row)?.let { paintRow(g2, row, r, it) }
+                session(row)?.let { paintRow(g2, row, r, it) } ?: summary(row)?.let { paintSummary(g2, row, r, it) }
                 row++
             }
         } finally {
@@ -144,6 +145,20 @@ class SessionTrailer(
         }
     }
 
+    /** The session count, right-aligned, after the dot of the most urgent session. */
+    private fun paintSummary(g: Graphics2D, row: Int, r: Rectangle, summary: FolderSummary) {
+        val text = summary.sessions.toString()
+        val metrics = component.getFontMetrics(component.font)
+        val textX = right() - metrics.stringWidth(text)
+        val dot = summary.urgent?.dot
+        val x = dot?.let { textX - JBUI.scale(DOT_GAP) - it.iconWidth } ?: textX
+        cover(g, row, r, x)
+        dot?.paintIcon(component, g, x, r.y + (r.height - dot.iconHeight) / 2)
+        g.font = component.font
+        g.color = SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
+        g.drawString(text, textX, r.y + (r.height - metrics.height) / 2 + metrics.ascent)
+    }
+
     /** Hides the part of the title that runs under the trailer starting at [x]. */
     private fun cover(g: Graphics2D, row: Int, r: Rectangle, x: Int) {
         val gap = JBUI.scale(GAP)
@@ -156,5 +171,6 @@ class SessionTrailer(
         const val PAD = 16
         const val GAP = 8
         const val BUTTON = 22
+        const val DOT_GAP = 4
     }
 }
