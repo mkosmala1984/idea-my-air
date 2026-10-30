@@ -77,6 +77,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         toggleClickCount = 0
         cellRenderer = SessionRenderer({ service.live[it.id] }, ::isSettled, ::isUnread)
         dropMode = DropMode.ON_OR_INSERT
+        // The room above the first row the design leaves.
+        border = JBUI.Borders.emptyTop(4)
     }
     private val pinned = TrailerList().apply {
         cellRenderer = PinnedRenderer({ service.live[it.id] }, ::isSettled, ::isUnread)
@@ -101,10 +103,11 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         tree.trailer = SessionTrailer(
             tree, { tree.getClosestRowForLocation(it.x, it.y) }, tree::getRowBounds,
             { (tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession },
+            { folderSummary(tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode) { s -> urgencyOf(service.live[s.id], isUnread(s)) } },
             { DefaultTreeUI.getBackground(tree, tree.getPathForRow(it), it, tree.isRowSelected(it)) ?: tree.background }, trailerButtons,
         )
         pinned.trailer = SessionTrailer(
-            pinned, pinned::locationToIndex, { pinned.getCellBounds(it, it) }, { pinned.model.getElementAt(it) },
+            pinned, pinned::locationToIndex, { pinned.getCellBounds(it, it) }, { pinned.model.getElementAt(it) }, { null },
             // As WideSelectionListUI paints a row: the renderer leaves an unselected row's background to the list UI, and
             // a null hover background means hover painting is off.
             { row ->
@@ -270,7 +273,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val font = base.deriveFont(base.size2D + JBUIScale.scale(PropertiesComponent.getInstance().getInt(FONT_SIZE, 0).toFloat()))
         tree.font = font
         pinned.font = font
-        tree.rowHeight = JBUI.CurrentTheme.Tree.rowHeight() + tree.getFontMetrics(font).height - tree.getFontMetrics(base).height
+        tree.rowHeight = JBUI.scale(ROW_HEIGHT) + tree.getFontMetrics(font).height - tree.getFontMetrics(base).height
     }
 
     /** Sets [FONT_SIZE] to [next] of it; disabled where that leaves it as it is or outside [FONT_SIZES]. */
@@ -393,5 +396,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         private const val TOOLBAR_CARD = "toolbar"
         private const val SEARCH_CARD = "search"
         private const val LOADING = "Loading sessions..."
+        /** A tree row at the label font, taller than the platform's for the design's spacing. */
+        private const val ROW_HEIGHT = 26
     }
 }

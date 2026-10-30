@@ -3,6 +3,8 @@ package dev.myair.toolwindow
 import dev.myair.claude.Brief
 import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
+import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
 import dev.myair.claude.TaskStatus
 import dev.myair.folders.Folder
 import dev.myair.folders.SessionFolders
@@ -13,6 +15,7 @@ import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreePath
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SessionTreeTest {
     private fun session(id: String, cwd: String, time: Long) = ClaudeSession(id, Path.of(cwd), "title $id", Instant.ofEpochMilli(time), emptyList(), emptyList())
@@ -194,5 +197,50 @@ class SessionTreeTest {
         assertNull(dropChange(SessionFolders(), listOf(many[15]), path.pathByAddingChild(recent.getChildAt(0)), -1))
         assertNull(dropChange(structure, listOf(structure.find("rtm")!!), path, -1))
         assertNull(targetFolder(path.pathByAddingChild(recent.getChildAt(0))))
+    }
+
+    /** The node whose user object prints as [id]. */
+    private fun find(root: DefaultMutableTreeNode, id: String) =
+        root.breadthFirstEnumeration().toList().map { it as DefaultMutableTreeNode }.first { "${it.userObject}" == id }
+
+    @Test
+    fun `a folder counts the sessions below it, subfolders included, and names the most urgent`() {
+        val nested = structure.assign("s3", "fix").assign("s2", "fix")
+        val urgency = mapOf("s1" to Urgency.WORKING, "s3" to Urgency.NEEDS_INPUT)
+        val root = foldersTree(nested, sessions, "")
+        assertEquals(FolderSummary(3, Urgency.NEEDS_INPUT), folderSummary(find(root, "rtm")) { urgency[it.id] })
+        assertEquals(FolderSummary(2, Urgency.NEEDS_INPUT), folderSummary(find(root, "fix")) { urgency[it.id] })
+        assertEquals(FolderSummary(0, null), folderSummary(find(root, "empty")) { urgency[it.id] })
+        assertEquals(FolderSummary(3, Urgency.NEEDS_INPUT), folderSummary(find(root, "recent")) { urgency[it.id] })
+    }
+
+    @Test
+    fun `a session and its children get no summary`() {
+        val briefed = session("s1", "/rtm", 1).copy(
+            changedFiles = listOf(Path.of("/rtm/a.kt")), addedDirs = listOf(Path.of("/plans")),
+            brief = Brief("Migrate", listOf(BriefTask("export", TaskStatus.COMPLETED))),
+        )
+        val root = projectsTree(listOf(briefed))
+        val nodes = root.breadthFirstEnumeration().toList().map { it as DefaultMutableTreeNode }.drop(2)
+        assertEquals(5, nodes.size)
+        assertTrue(nodes.all { folderSummary(it) { null } == null })
+        assertEquals(FolderSummary(1, null), folderSummary(find(root, "${Path.of("/rtm")}")) { null })
+    }
+
+    @Test
+    fun `a filtered tree counts only the sessions it shows`() {
+        val root = foldersTree(structure, sessions, "title s1")
+        assertEquals(FolderSummary(1, null), folderSummary(find(root, "rtm")) { null })
+        assertEquals(FolderSummary(0, null), folderSummary(find(root, "sessions")) { null })
+    }
+
+    @Test
+    fun `urgency follows the live status, unread only when idle`() {
+        fun live(status: SessionStatus) = LiveSession(1, "cli", status, null, Instant.EPOCH)
+        assertEquals(Urgency.NEEDS_INPUT, urgencyOf(live(SessionStatus.NEEDS_INPUT), unread = true))
+        assertEquals(Urgency.WORKING, urgencyOf(live(SessionStatus.WORKING), unread = true))
+        assertEquals(Urgency.UNREAD, urgencyOf(live(SessionStatus.IDLE), unread = true))
+        assertNull(urgencyOf(live(SessionStatus.IDLE), unread = false))
+        assertNull(urgencyOf(null, unread = true))
     }
 }
