@@ -7,6 +7,7 @@ import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.openapi.util.text.StringUtil
+import com.intellij.util.ui.JBUI
 import dev.myair.claude.Brief
 import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
@@ -21,9 +22,8 @@ import javax.swing.JList
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
 
-/** "2/5 · task in progress", "2/5" with none in progress, null for a brief without tasks. */
-fun briefLabel(brief: Brief?): String? =
-    brief?.takeIf { it.tasks.isNotEmpty() }?.let { "${it.done}/${it.tasks.size}" + (it.current?.let { task -> " · ${task.content}" } ?: "") }
+/** "2/5": done tasks over all of them, null for a brief without tasks. */
+fun briefCount(brief: Brief?): String? = brief?.takeIf { it.tasks.isNotEmpty() }?.let { "${it.done}/${it.tasks.size}" }
 
 private val TaskStatus.mark get() = when (this) {
     TaskStatus.COMPLETED -> "✓"
@@ -33,35 +33,44 @@ private val TaskStatus.mark get() = when (this) {
 
 fun BriefTask.line() = "${status.mark} $content"
 
-/** A session row's tooltip: what it waits for, its brief, and the first human prompt. */
-fun tooltipLines(session: ClaudeSession, live: LiveSession?): List<String> = listOfNotNull(
-    live?.takeIf { it.status == SessionStatus.NEEDS_INPUT }?.waitingFor?.let { "Waiting for: $it" },
+/** What a session is doing, as its tooltip and the context pane say it; null without a process. */
+fun statusText(live: LiveSession?, unread: Boolean): String? = when (live?.status) {
+    SessionStatus.NEEDS_INPUT -> "Needs input" + (live.waitingFor?.let { ": $it" } ?: "")
+    SessionStatus.WORKING -> "Working"
+    SessionStatus.IDLE -> if (unread) "Unread reply" else "Waiting for prompt"
+    null -> null
+}
+
+/** A session row's tooltip: its status, settled, Desktop, the [project] when the row does not show it, its brief, and the first human prompt. */
+fun tooltipLines(session: ClaudeSession, live: LiveSession?, unread: Boolean, settled: Boolean, project: Path?): List<String> = listOfNotNull(
+    statusText(live, unread),
+    "Settled".takeIf { settled },
+    "Desktop".takeIf { session.desktop },
+    project?.let { "Project: ${it.fileName ?: it}" },
     session.brief?.goal?.let { "Goal: $it" },
 ) + session.brief?.tasks.orEmpty().map { it.line() } + listOfNotNull(session.prompts.firstOrNull()?.lineSequence()?.first()?.take(PROMPT_CHARS)?.let { "Asked: $it" })
 
 private const val PROMPT_CHARS = 200
 
-/** A session's row in the tree and in the pinned list: title, status icon and label, settled mark, optionally its project; [SessionTrailer] adds the age. */
-private fun SimpleColoredComponent.appendSession(item: ClaudeSession, live: LiveSession?, settled: Boolean, unread: Boolean, showProject: Boolean) {
-    // A session without a live process is greyed out, so the running ones stand out in a long list.
-    append(item.title, if (live == null) SimpleTextAttributes.GRAYED_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
-    toolTipText = tooltipLines(item, live).takeIf { it.isNotEmpty() }?.joinToString("<br>", "<html>", "</html>") { StringUtil.escapeXmlEntities(it) }
-    live?.status?.let { icon = it.icon }
-    briefLabel(item.brief)?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
-    when (live?.status) {
-        SessionStatus.WORKING -> append("  working", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
-        SessionStatus.NEEDS_INPUT -> append("  needs input" + (live.waitingFor?.let { ": $it" } ?: ""), SimpleTextAttributes.ERROR_ATTRIBUTES)
-        SessionStatus.IDLE -> if (unread) {
-            icon = UNREAD_ICON
-            append("  unread reply", SimpleTextAttributes.LINK_ATTRIBUTES)
-        } else {
-            append("  waiting for prompt", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
-        }
-        null -> {}
-    }
-    if (settled) append("  settled", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
-    if (item.desktop) append("  Desktop", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-    if (showProject) append("  ${item.cwd.fileName ?: item.cwd}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+/**
+ * A session's row in the tree and in the pinned list: status icon, title and task count; [SessionTrailer] adds the age. The
+ * tree shows the status as [dots], the pinned list as the tab icons. [projectInRow] names the session's project after
+ * the count; [project] names it in the tooltip instead.
+ */
+private fun SimpleColoredComponent.appendSession(
+    item: ClaudeSession, live: LiveSession?, settled: Boolean, unread: Boolean, project: Path?, projectInRow: Boolean, dots: Boolean,
+) {
+    append(item.title, when {
+        settled -> SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES
+        // A session without a live process is greyed out, so the running ones stand out in a long list.
+        live == null -> SimpleTextAttributes.GRAYED_ATTRIBUTES
+        unread -> SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
+        else -> SimpleTextAttributes.REGULAR_ATTRIBUTES
+    })
+    toolTipText = tooltipLines(item, live, unread, settled, project).takeIf { it.isNotEmpty() }?.joinToString("<br>", "<html>", "</html>") { StringUtil.escapeXmlEntities(it) }
+    icon = if (dots) dotOf(live, unread) else live?.status?.let { if (it == SessionStatus.IDLE && unread) UNREAD_ICON else it.icon }
+    briefCount(item.brief)?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
+    if (projectInRow) append("  ${item.cwd.fileName ?: item.cwd}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
 }
 
 /** Sessions from every project, so each row names its project; a row without a process is there because it is pinned. */
@@ -70,7 +79,7 @@ class PinnedRenderer(
 ) : ColoredListCellRenderer<ClaudeSession>() {
     override fun customizeCellRenderer(list: JList<out ClaudeSession>, value: ClaudeSession, index: Int, selected: Boolean, hasFocus: Boolean) {
         val live = liveOf(value)
-        appendSession(value, live, settled(value), unread(value), showProject = true)
+        appendSession(value, live, settled(value), unread(value), project = null, projectInRow = true, dots = false)
         if (live == null) icon = AllIcons.General.Pin_tab
     }
 }
@@ -78,6 +87,10 @@ class PinnedRenderer(
 class SessionRenderer(
     private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
 ) : ColoredTreeCellRenderer() {
+    init {
+        iconTextGap = JBUI.scale(6)
+    }
+
     override fun customizeCellRenderer(
         tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean,
     ) {
@@ -103,15 +116,14 @@ class SessionRenderer(
                 append(item.fileName?.toString() ?: item.toString())
                 append("  $item", SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
-            // In a user folder or among recent sessions the project is no longer the parent node, so the row names it, unless the folder is bound to it.
-            is ClaudeSession -> appendSession(
-                item, liveOf(item), settled(item), unread(item),
-                showProject = when (val parent = (node.parent as DefaultMutableTreeNode).userObject) {
-                    is Folder -> parent.project != item.cwd.toString()
-                    RecentSessions -> true
-                    else -> false
-                },
-            )
+            // Among recent sessions, which mix every project, the row names the project; in a folder not bound to it the tooltip does.
+            is ClaudeSession -> when (val parent = (node.parent as DefaultMutableTreeNode).userObject) {
+                RecentSessions -> appendSession(item, liveOf(item), settled(item), unread(item), project = null, projectInRow = true, dots = true)
+                else -> appendSession(
+                    item, liveOf(item), settled(item), unread(item),
+                    project = item.cwd.takeIf { parent is Folder && parent.project != item.cwd.toString() }, projectInRow = false, dots = true,
+                )
+            }
             is BriefGoal -> {
                 icon = AllIcons.Actions.IntentionBulb
                 append(item.text)

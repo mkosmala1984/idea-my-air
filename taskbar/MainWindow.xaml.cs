@@ -1,3 +1,4 @@
+using Deskband11Lib.Core;
 using Deskband11Lib.Wpf;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,7 +32,9 @@ public partial class MainWindow : Window
         _close = Timer(300, () => { if (!_flyout.Pinned && !_flyout.IsMouseOver && !Root.IsMouseOver) _flyout.Dismiss(); });
         _flyout.MouseEnter += (_, _) => _close.Stop();
         _flyout.MouseLeave += (_, _) => CloseSoon();
-        Host = new TaskbarContentHost(this, Root, new() { PreferredWidth = Width });
+        // Always before the notification area: Auto moves it between the two gaps of a centered taskbar as apps open and close,
+        // and the left edge has no room once the app buttons fill the taskbar.
+        Host = new TaskbarContentHost(this, Root, new() { PreferredWidth = Width, Placement = TaskbarContentPlacement.BeforeNotificationArea });
         _board.Changed += Render;
         _board.Arrived += Announce;
         Render();

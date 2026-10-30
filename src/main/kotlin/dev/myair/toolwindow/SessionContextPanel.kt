@@ -19,6 +19,9 @@ import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.concurrency.AppExecutorUtil
+import com.intellij.ui.JBColor
+import com.intellij.ui.components.panels.VerticalLayout
+import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import dev.myair.actions.FileChange.Kind
 import dev.myair.actions.Git
@@ -31,6 +34,8 @@ import dev.myair.actions.openInTerminal
 import dev.myair.actions.recentBases
 import dev.myair.actions.showBaseDiff
 import dev.myair.claude.BackgroundTask
+import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
 import dev.myair.claude.TaskStatus
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.service.ClaudeSessionsService
@@ -38,6 +43,7 @@ import java.awt.BorderLayout
 import java.awt.Point
 import java.awt.event.HierarchyEvent
 import java.nio.file.Path
+import java.time.Instant
 import java.time.ZoneId
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -65,7 +71,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     private val fullLists = HashSet<String>()
 
     init {
-        border = JBUI.Borders.empty(4, 8)
+        border = JBUI.Borders.empty(CARD_GAP)
         project.messageBus.connect(parent).subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
             override fun selectionChanged(event: FileEditorManagerEvent) = update()
         })
@@ -110,7 +116,10 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val content = when {
             id == null -> panel { row { comment("No session tab selected") } }
             session == null -> panel { row { comment("Starting...") } }
-            else -> content(contextOf(session, session.cwd.exists(), session.id in service.live, git?.getOrNull()))
+            else -> content(
+                contextOf(session, session.cwd.exists(), session.id in service.live, git?.getOrNull()),
+                service.live[session.id], session.id in service.unread,
+            )
         }
         removeAll()
         add(content, BorderLayout.NORTH)
@@ -118,17 +127,15 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         repaint()
     }
 
-    private fun content(context: SessionContext) = panel {
-        section("Environment") {
+    /** One card per section, the session itself first, as artboard I of the panel's design lays them out. */
+    private fun content(context: SessionContext, live: LiveSession?, unread: Boolean) = JPanel(VerticalLayout(JBUI.scale(CARD_GAP))).apply {
+        isOpaque = false
+        add(ContextCard(header(context, live, unread)))
+        card("Environment") {
             row {
                 icon(AllIcons.Nodes.Folder)
                 label(context.project)
                 comment(context.projectPath.toString())
-            }
-            if (context.cwdExists) row {
-                icon(AllIcons.Debugger.Console)
-                link("Open in IDEA") { openInIdea(project, context.cwd) }
-                link("Open in Terminal") { openInTerminal(project, context.cwd) }
             }
             context.git?.let { git ->
                 row {
@@ -136,8 +143,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     label(git.branch)
                     git.base?.let { base ->
                         // A detached HEAD has no branch to store a base for.
-                        if (git.detached) comment("← $base")
-                        else link("← $base" + if (git.baseStored) "" else " (default)") { pickBase(git, it.source as JComponent) }
+                        if (git.detached) comment("base: $base")
+                        else link("base: $base" + if (git.baseStored) "" else " (default)") { pickBase(git, it.source as JComponent) }
                             .applyToComponent { toolTipText = "The branch the changes are counted against" }
                     }
                     if (context.worktree) comment("Worktree").align(AlignX.RIGHT)
@@ -149,15 +156,47 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 icon(AllIcons.Nodes.Folder)
                 comment(dir.toString())
             }
+            if (context.cwdExists) row {
+                link("Open in IDEA") { openInIdea(project, context.cwd) }
+                link("Open in Terminal") { openInTerminal(project, context.cwd) }
+            }
         }
-        context.brief?.let { brief ->
-            section("Brief") {
-                brief.goal?.let { goal ->
+        val failure = git?.exceptionOrNull()
+        if (failure != null) card("Changes vs base") { row { comment(failure.message.orEmpty()) } }
+        else context.git?.let { git ->
+            card("Changes vs base") {
+                val changes = git.changes
+                if (changes == null) row { comment(checkNotNull(git.problem)) }
+                else {
                     row {
-                        icon(AllIcons.Actions.IntentionBulb)
-                        text(goal)
+                        label("+${git.added}").applyToComponent { foreground = FileStatus.ADDED.color }
+                        label("−${git.removed}").applyToComponent { foreground = FileStatus.DELETED.color }
+                        if (changes.isNotEmpty()) link("Show diff") { showBaseDiff(project, git, 0) }
+                            .applyToComponent { toolTipText = git.base?.let { "Changes against $it" } }
+                            .align(AlignX.RIGHT)
+                    }
+                    if (git.added + git.removed > 0) row { cell(ChangeBar(git.added, git.removed)).align(AlignX.FILL) }
+                    paged("Changes", changes) { change, index ->
+                        label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = KIND_STATUSES.getValue(change.kind).color }
+                        link(change.path) { showBaseDiff(project, git, index) }
+                        comment("+${change.added} −${change.removed}")
                     }
                 }
+            }
+        }
+        if (context.files.isNotEmpty()) card(if (context.git == null) "Files" else "Files outside the repo") {
+            files("Files", context.files) { fileLabel(it, context.cwd) }
+        }
+        if (context.outputs.isNotEmpty()) card("Outputs") { files("Outputs", context.outputs) { it.fileName.toString() } }
+        if (context.artifacts.isNotEmpty()) card("Artifacts") {
+            for (artifact in context.artifacts) row {
+                icon(AllIcons.General.Web)
+                link(artifact.title) { BrowserUtil.browse(artifact.url) }.applyToComponent { toolTipText = artifact.url }
+            }
+        }
+        context.brief?.let { brief ->
+            card("Brief") {
+                brief.goal?.let { goal -> row { text(goal) } }
                 for (task in brief.tasks) row {
                     when (task.status) {
                         TaskStatus.COMPLETED -> comment(task.line())
@@ -167,15 +206,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 }
             }
         }
-        if (context.outputs.isNotEmpty()) section("Outputs") { files("Outputs", context.outputs) { it.fileName.toString() } }
-        if (context.files.isNotEmpty()) section("Files") { files("Files", context.files) { fileLabel(it, context.cwd) } }
-        if (context.artifacts.isNotEmpty()) section("Artifacts") {
-            for (artifact in context.artifacts) row {
-                icon(AllIcons.General.Web)
-                link(artifact.title) { BrowserUtil.browse(artifact.url) }.applyToComponent { toolTipText = artifact.url }
-            }
-        }
-        if (context.background.isNotEmpty()) section("Background") {
+        if (context.background.isNotEmpty()) card("Background") {
             paged("Background", context.background) { task, _ ->
                 icon(BACKGROUND_ICONS.getValue(task.kind))
                 val output = task.output
@@ -184,28 +215,25 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 comment(backgroundState(task, context.live, ZoneId.systemDefault())).applyToComponent { toolTipText = task.end?.summary }
             }
         }
-        val failure = git?.exceptionOrNull()
-        if (failure != null) section("Changes") { row { comment(failure.message.orEmpty()) } }
-        else context.git?.let { git ->
-            section("Changes") {
-                val changes = git.changes
-                if (changes == null) row { comment(checkNotNull(git.problem)) }
-                else {
-                    row {
-                        icon(AllIcons.Actions.Diff)
-                        label("+${git.added}").applyToComponent { foreground = FileStatus.ADDED.color }
-                        label("−${git.removed}").applyToComponent { foreground = FileStatus.DELETED.color }
-                        if (changes.isNotEmpty()) link("Show diff") { showBaseDiff(project, git, 0) }
-                            .applyToComponent { toolTipText = git.base?.let { "Changes against $it" } }
-                    }
-                    paged("Changes", changes) { change, index ->
-                        label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = KIND_STATUSES.getValue(change.kind).color }
-                        link(change.path) { showBaseDiff(project, git, index) }
-                        comment("+${change.added} −${change.removed}")
-                    }
-                }
+    }
+
+    /** The session: what it is doing and since when, its title, the model and effort of its latest reply. */
+    private fun header(context: SessionContext, live: LiveSession?, unread: Boolean) = panel {
+        row {
+            icon(dotOf(live, unread))
+            label(statusText(live, unread) ?: "No process").applyToComponent {
+                foreground = if (live?.status == SessionStatus.NEEDS_INPUT) NEEDS_INPUT_TEXT else JBUI.CurrentTheme.Label.disabledForeground()
             }
+            comment(shortAge(context.lastMessage, Instant.now())).align(AlignX.RIGHT)
         }
+        row { text(context.title).applyToComponent { font = JBFont.label().biggerOn(2f).asBold() } }
+        val chips = listOfNotNull(context.model?.let(::modelName), context.effort)
+        if (chips.isNotEmpty()) row { chips.forEach { cell(Chip(it)) } }
+    }.apply { isOpaque = false }
+
+    /** A card holding a section that stays collapsed or expanded across renders. */
+    private fun JPanel.card(title: String, init: Panel.() -> Unit) {
+        add(ContextCard(panel { section(title, init) }.apply { isOpaque = false }))
     }
 
     /**
@@ -250,6 +278,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     companion object {
         private const val FILES_SHOWN = 5
+        private const val CARD_GAP = 10
+        private val NEEDS_INPUT_TEXT = JBColor(0xB5520E, 0xF0883E)
         private val KIND_LETTERS = mapOf(Kind.ADDED to "A", Kind.MODIFIED to "M", Kind.DELETED to "D", Kind.UNTRACKED to "U")
         private val KIND_STATUSES = mapOf(
             Kind.ADDED to FileStatus.ADDED, Kind.MODIFIED to FileStatus.MODIFIED, Kind.DELETED to FileStatus.DELETED, Kind.UNTRACKED to FileStatus.UNKNOWN,

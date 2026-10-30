@@ -1,7 +1,9 @@
 package dev.myair.toolwindow
 
+import com.intellij.ui.JBColor
 import com.intellij.ui.treeStructure.SimpleTree
 import com.intellij.util.ui.JBUI
+import java.awt.Color
 import java.awt.Graphics
 import java.awt.Rectangle
 import javax.swing.JTree
@@ -14,6 +16,14 @@ import javax.swing.tree.TreePath
  */
 class DropLineTree : SimpleTree() {
     lateinit var trailer: SessionTrailer
+
+    init {
+        isOpaque = true
+    }
+
+    /** White as the editor rather than the tool window's grey: a background set on the tree did not show in the tool window. */
+    override fun getBackground(): Color = BACKGROUND
+
     var drop: Drop? = null
         set(value) {
             field = value
@@ -50,3 +60,5 @@ fun insertLine(tree: JTree, parent: TreePath, childIndex: Int): Rectangle {
     while (bottom + 1 < tree.rowCount && last.isDescendant(tree.getPathForRow(bottom + 1))) bottom++
     return line(checkNotNull(tree.getPathBounds(last)) { "drop into collapsed $parent" }.x, tree.getRowBounds(bottom).let { it.y + it.height })
 }
+
+private val BACKGROUND = JBColor.namedColor("Editor.background", JBColor(0xFFFFFF, 0x1E1F22))

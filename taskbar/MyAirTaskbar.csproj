@@ -5,6 +5,8 @@
     <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The Claude asterisk of src/main/resources/icons/claude.svg, rendered at 16 to 256 px. -->
+    <ApplicationIcon>MyAirTaskbar.ico</ApplicationIcon>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
