@@ -21,6 +21,7 @@ import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.MAX_LINE_LENGTH_WORD_WRAP
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
+import com.intellij.util.ui.EmptyIcon
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.ui.components.ActionLink
@@ -238,9 +239,11 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     }
                     if (git.added + git.removed > 0) row { cell(ChangeBar(git.added, git.removed)).align(AlignX.FILL) }
                     paged("Changes", changes) { change, index ->
-                        label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = change.kind.status.color }
-                        link(change.path) { showBaseDiff(project, git, index) }.shrinkable()
-                        comment("+${change.added} −${change.removed}")
+                        row {
+                            label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = change.kind.status.color }
+                            link(change.path) { showBaseDiff(project, git, index) }.shrinkable()
+                            comment("+${change.added} −${change.removed}")
+                        }
                     }
                 }
             }
@@ -269,15 +272,37 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
         if (context.background.isNotEmpty()) card("Background") {
             paged("Background", context.background) { task, _ ->
-                icon(BACKGROUND_ICONS.getValue(task.kind))
-                val output = task.output
-                if (output == null) label(task.description).shrinkable()
-                else link(task.description) { openFile(project, output) }.applyToComponent { toolTipText = output.toString() }.shrinkable()
-                comment(backgroundState(task, context.live, ZoneId.systemDefault())).applyToComponent { toolTipText = task.end?.summary }
+                val kindIcon = BACKGROUND_ICONS.getValue(task.kind)
+                row {
+                    icon(kindIcon)
+                    val output = task.output
+                    if (output == null) label(task.description).shrinkable()
+                    else link(task.description) { openFile(project, output) }.applyToComponent { toolTipText = output.toString() }.shrinkable()
+                    comment(backgroundState(task, context.live, ZoneId.systemDefault())).applyToComponent { toolTipText = task.end?.summary }
+                }
+                // What it runs, under its description: a workflow's script file, else the command or prompt on one line.
+                row {
+                    icon(EmptyIcon.create(kindIcon))
+                    val script = task.script
+                    if (script != null) link(script.name) { openFile(project, script) }.applyToComponent { toolTipText = script.toString() }.shrinkable()
+                    else {
+                        val command = checkNotNull(task.command) { "${task.kind} task ${task.id} without a command" }
+                        // Grey as a comment, but a click shows it whole, to select and copy.
+                        cell(commentLabel(command.trim().replace(WHITESPACE, " ")).apply {
+                            toolTipText = "Show the whole ${if (task.kind == BackgroundTask.Kind.AGENT) "prompt" else "command"}"
+                            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                            addMouseListener(object : MouseAdapter() {
+                                override fun mouseClicked(e: MouseEvent) {
+                                    CommandDialog(project, task.description, command).show()
+                                }
+                            })
+                        }).shrinkable()
+                    }
+                }
             }
         }
         if (context.mcpServers.isNotEmpty()) card("MCP servers") {
-            paged("MCP servers", context.mcpServers) { server, _ -> icon(AllIcons.Nodes.Plugin); label(server).shrinkable() }
+            paged("MCP servers", context.mcpServers) { server, _ -> row { icon(AllIcons.Nodes.Plugin); label(server).shrinkable() } }
         }
         if (context.skills.isNotEmpty()) card("Skills", indent = false) {
             val (pinned, groups) = skillSections(context.skills, pinnedSkills())
@@ -456,14 +481,16 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     /** A row per file of [files], named by [label], opening it in the editor. */
     private fun Panel.files(key: String, files: List<Path>, label: (Path) -> String) = paged(key, files) { file, _ ->
-        icon(fileIcon(file))
-        link(label(file)) { openFile(project, file) }.applyToComponent { toolTipText = file.toString() }.shrinkable()
+        row {
+            icon(fileIcon(file))
+            link(label(file)) { openFile(project, file) }.applyToComponent { toolTipText = file.toString() }.shrinkable()
+        }
     }
 
-    /** A row per item of [items], filled by [fill] with the item and its index; [FILES_SHOWN] of them until Show more, kept by [key]. */
-    private fun <T> Panel.paged(key: String, items: List<T>, fill: Row.(T, Int) -> Unit) {
+    /** The rows of each item of [items], added by [fill] with the item and its index; [FILES_SHOWN] items until Show more, kept by [key]. */
+    private fun <T> Panel.paged(key: String, items: List<T>, fill: Panel.(T, Int) -> Unit) {
         val all = key in fullLists
-        for ((index, item) in (if (all) items else items.take(FILES_SHOWN)).withIndex()) row { fill(item, index) }
+        for ((index, item) in (if (all) items else items.take(FILES_SHOWN)).withIndex()) fill(item, index)
         if (items.size > FILES_SHOWN) row {
             link(if (all) "Show less" else "Show more (${items.size})") {
                 if (all) fullLists -= key else fullLists += key
@@ -493,6 +520,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         private const val FILES_SHOWN = 5
         private const val CARD_GAP = 4
         private val KIND_LETTERS = mapOf(Kind.ADDED to "A", Kind.MODIFIED to "M", Kind.DELETED to "D", Kind.UNTRACKED to "U")
+        private val WHITESPACE = Regex("\\s+")
+
         private val BACKGROUND_ICONS = mapOf(
             BackgroundTask.Kind.SHELL to AllIcons.Nodes.Console, BackgroundTask.Kind.MONITOR to AllIcons.Actions.Show,
             BackgroundTask.Kind.AGENT to AllIcons.Actions.Execute, BackgroundTask.Kind.WORKFLOW to AllIcons.Actions.RunAll,

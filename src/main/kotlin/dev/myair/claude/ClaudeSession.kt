@@ -55,10 +55,13 @@ data class Artifact(val id: String, val title: String, val url: String, val path
  * the file `claude` writes its output to, as its launch or final notification names it. [end]: null while no final
  * notification has come. [model]: the model an agent runs on. [events]: how many event notifications a monitor sent,
  * the last at [lastEvent]. [usage]: what an agent or workflow used, as its latest final notification counts it.
+ * [command]: what it runs, a shell's or monitor's command or an agent's prompt; [script]: the file `claude` saved a
+ * workflow's script to.
  */
 data class BackgroundTask(
     val id: String, val kind: Kind, val description: String, val started: Instant, val output: Path? = null, val end: End? = null,
     val model: String? = null, val events: Int = 0, val lastEvent: Instant? = null, val usage: Usage? = null,
+    val command: String? = null, val script: Path? = null,
 ) {
     enum class Kind { SHELL, MONITOR, AGENT, WORKFLOW }
 

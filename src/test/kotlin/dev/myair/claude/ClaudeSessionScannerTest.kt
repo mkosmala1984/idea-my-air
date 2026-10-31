@@ -208,13 +208,13 @@ class ClaudeSessionScannerTest {
             call("t5", "Bash", """{"command":"sleep 9","run_in_background":true}""", sidechain = true),
             result("t5", """{"stdout":"","stderr":"","backgroundTaskId":"b2"}""", sidechain = true),
             call("t6", "Workflow", """{"script":"x"}"""),
-            result("t6", """{"status":"async_launched","taskId":"w1","taskType":"local_workflow","summary":"Review all"}"""),
+            result("t6", """{"status":"async_launched","taskId":"w1","taskType":"local_workflow","summary":"Review all","scriptPath":"C:\\Temp\\w1.js"}"""),
         )
         val scanner = ClaudeSessionScanner(dir)
-        val b1 = BackgroundTask("b1", BackgroundTask.Kind.SHELL, "Run the sandbox", started, Path.of("C:\\Temp\\my dir\\tasks\\b1.output"))
-        val a1 = BackgroundTask("a1", BackgroundTask.Kind.AGENT, "Final review", started, Path.of("C:\\Temp\\a1.output"))
-        val m1 = BackgroundTask("m1", BackgroundTask.Kind.MONITOR, "errors in log", started)
-        val w1 = BackgroundTask("w1", BackgroundTask.Kind.WORKFLOW, "Review all", started)
+        val b1 = BackgroundTask("b1", BackgroundTask.Kind.SHELL, "Run the sandbox", started, Path.of("C:\\Temp\\my dir\\tasks\\b1.output"), command = "gradlew runIde")
+        val a1 = BackgroundTask("a1", BackgroundTask.Kind.AGENT, "Final review", started, Path.of("C:\\Temp\\a1.output"), command = "p")
+        val m1 = BackgroundTask("m1", BackgroundTask.Kind.MONITOR, "errors in log", started, command = "tail -f log")
+        val w1 = BackgroundTask("w1", BackgroundTask.Kind.WORKFLOW, "Review all", started, script = Path.of("C:\\Temp\\w1.js"))
         assertEquals(listOf(b1, a1, m1, w1), scanner.scan().single().background)
 
         // A monitor's event carries no status; a final notification does, whatever it is, and may name the output file.
@@ -247,7 +247,7 @@ class ClaudeSessionScannerTest {
             call("t1", "Agent", """{"description":"Review","prompt":"p"}"""),
             result("t1", """{"isAsync":true,"status":"async_launched","agentId":"a1","description":"Review","prompt":"p","resolvedModel":"claude-opus-5-5"}"""),
             call("t2", "Workflow", """{"script":"x"}"""),
-            result("t2", """{"status":"async_launched","taskId":"w1","taskType":"local_workflow","summary":"Review all"}"""),
+            result("t2", """{"status":"async_launched","taskId":"w1","taskType":"local_workflow","summary":"Review all","scriptPath":"C:\\Temp\\w1.js"}"""),
             call("t3", "Monitor", """{"command":"tail -f log","description":"errors","timeout_ms":1000}"""),
             result("t3", """{"taskId":"m1","timeoutMs":1000,"persistent":false}"""),
             call("t4", "Monitor", """{"command":"tail -f log","description":"quiet","timeout_ms":1000}"""),
@@ -294,7 +294,19 @@ class ClaudeSessionScannerTest {
             call("t1", "PowerShell", """{"command":"Start-Sleep 60\nGet-Date","run_in_background":true}"""),
             result("t1", """{"stdout":"","stderr":"","backgroundTaskId":"b1"}"""),
         )
-        assertEquals(listOf("Start-Sleep 60"), parse(file)!!.background.map { it.description })
+        assertEquals(listOf("Start-Sleep 60" to "Start-Sleep 60\nGet-Date"), parse(file)!!.background.map { it.description to it.command })
+    }
+
+    @Test
+    fun `an agent launched without a prompt or a workflow without its script file fails loudly`() {
+        val agent = write("s1", user("\"prompt\""),
+            result("t1", """{"isAsync":true,"status":"async_launched","agentId":"a1","description":"Review"}"""),
+        )
+        assertFailsWith<IllegalStateException> { parse(agent) }
+        val workflow = write("s2", user("\"prompt\""),
+            result("t1", """{"status":"async_launched","taskId":"w1","taskType":"local_workflow","summary":"Review all"}"""),
+        )
+        assertFailsWith<IllegalStateException> { parse(workflow) }
     }
 
     @Test
@@ -601,7 +613,7 @@ class ClaudeSessionScannerTest {
             call("t3", "Bash", """{"command":"gradlew runIde","description":"Run","run_in_background":true}"""),
             result("t3", """{"stdout":"","stderr":"","backgroundTaskId":"b1"}""", content = """Output is being written to: C:\\Temp\\b1.output"""),
             call("t4", "Workflow", """{"script":"x"}"""),
-            result("t4", """{"status":"async_launched","taskId":"w1","taskType":"local_workflow","summary":"Review all"}"""),
+            result("t4", """{"status":"async_launched","taskId":"w1","taskType":"local_workflow","summary":"Review all","scriptPath":"C:\\Temp\\w1.js"}"""),
             enqueue("<task-notification>\n<task-id>w1</task-id>\n<status>completed</status>\n<summary>Workflow completed</summary>\n" +
                 "<usage><agent_count>2</agent_count><agents_done>2</agents_done><agents_error>0</agents_error><subagent_tokens>9</subagent_tokens><tool_uses>3</tool_uses></usage>\n</task-notification>", "2026-10-24T10:06:00Z"),
             call("t5", "Monitor", """{"command":"tail -f log","description":"errors","timeout_ms":1000}"""),

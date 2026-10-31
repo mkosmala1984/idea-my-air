@@ -346,21 +346,24 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 call != null -> {
                     val kind = if (call.tool == MONITOR) BackgroundTask.Kind.MONITOR else BackgroundTask.Kind.SHELL
                     (result["backgroundTaskId"] ?: result["taskId"].takeIf { kind == BackgroundTask.Kind.MONITOR })?.let {
-                        // A shell call may come without a description; its command's first line names it then. A call
-                        // the tool rejects may have neither, and never runs.
-                        val description = line.check(
-                            call.input["description"]?.asString ?: call.input["command"]?.asString?.lineSequence()?.first(), "background task without a description",
-                        )
+                        // A call the tool rejects may have no command, and never runs.
+                        val command = line.check(call.input["command"]?.asString, "background task without a command")
+                        // A shell call may come without a description; its command's first line names it then.
+                        val description = call.input["description"]?.asString ?: command.lineSequence().first()
                         val output = item["content"].takeIf { c -> c.isJsonPrimitive }?.let { c -> SHELL_OUTPUT.find(c.asString) }
-                        BackgroundTask(it.asString, kind, description, time(line.json), output?.let { m -> Path.of(m.groupValues[1]) })
+                        BackgroundTask(it.asString, kind, description, time(line.json), output?.let { m -> Path.of(m.groupValues[1]) }, command = command)
                     }
                 }
                 result["status"]?.asString != "async_launched" -> null
                 result.has("agentId") -> BackgroundTask(
                     result["agentId"].asString, BackgroundTask.Kind.AGENT, result["description"].asString, time(line.json),
                     result["outputFile"]?.asString?.let(Path::of), model = result["resolvedModel"]?.asString,
+                    command = line.check(result["prompt"]?.asString, "agent launched without a prompt"),
                 )
-                else -> BackgroundTask(result["taskId"].asString, BackgroundTask.Kind.WORKFLOW, result["summary"].asString, time(line.json))
+                else -> BackgroundTask(
+                    result["taskId"].asString, BackgroundTask.Kind.WORKFLOW, result["summary"].asString, time(line.json),
+                    script = Path.of(line.check(result["scriptPath"]?.asString, "workflow launched without a scriptPath")),
+                )
             }
         }.associateBy { it.id }
 
