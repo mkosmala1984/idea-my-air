@@ -14,12 +14,14 @@ import java.time.Instant
  * [artifacts]: the artifacts the main conversation published, in the order first published.
  * [background]: the tasks the main conversation sent to the background, in the order launched; those without an
  * [BackgroundTask.end] also end with their process, which the transcript does not record.
+ * [skills]: the skills `claude` listed to the main conversation, in its order. [mcpServers]: the MCP servers whose tools
+ * it currently offers, sorted, without those waiting for a sign-in ([mcpServers] of the tool names).
  */
 data class ClaudeSession(
     val id: String, val cwd: Path, val title: String, val lastMessage: Instant, val changedFiles: List<Path>, val prompts: List<String>,
     val brief: Brief? = null, val project: Path = cwd, val desktop: Boolean = false, val addedDirs: List<Path> = emptyList(),
     val model: String? = null, val effort: String? = null, val artifacts: List<Artifact> = emptyList(),
-    val background: List<BackgroundTask> = emptyList(),
+    val background: List<BackgroundTask> = emptyList(), val skills: List<String> = emptyList(), val mcpServers: List<String> = emptyList(),
 ) {
     /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
     fun matches(query: String): Boolean =
@@ -31,6 +33,15 @@ data class ClaudeSession(
     /** TreeState matches nodes by toString(), so a session keeps its selection while its title and time change. */
     override fun toString() = id
 }
+
+/** The tools a server waiting for a sign-in offers, and nothing else. */
+private val AUTH_TOOLS = setOf("authenticate", "complete_authentication")
+
+/** The servers of MCP [tools] (`mcp__<server>__<tool>`), sorted, but those offering only [AUTH_TOOLS]. */
+fun mcpServers(tools: Collection<String>): List<String> = tools
+    .map { name -> name.split("__", limit = 3).also { check(it.size == 3 && it[0] == "mcp") { "not an MCP tool: $name" } } }
+    .groupBy({ it[1] }, { it[2] })
+    .filterValues { !AUTH_TOOLS.containsAll(it) }.keys.sorted()
 
 /** An artifact as its latest publish named it; [path] is the local file published. */
 data class Artifact(val id: String, val title: String, val url: String, val path: Path)
