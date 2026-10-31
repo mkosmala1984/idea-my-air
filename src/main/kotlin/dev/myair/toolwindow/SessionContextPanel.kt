@@ -21,6 +21,8 @@ import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.ui.JBColor
+import com.intellij.ui.components.ActionLink
+import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
@@ -151,30 +153,28 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         isOpaque = false
         add(ContextCard(header(context, live, unread)))
         card("Environment") {
+            // The project, the folder the session runs in when it is another one (a worktree as a rule), and opening that folder.
             row {
                 icon(AllIcons.Nodes.Folder)
-                label(context.project)
-                comment(context.projectPath.toString()).shrinkable()
+                label(context.project).applyToComponent { toolTipText = context.projectPath.toString() }
+                if (context.worktree) comment(fileLabel(context.cwd, context.projectPath)).applyToComponent { toolTipText = context.cwd.toString() }.shrinkable()
+                else comment(context.projectPath.toString()).shrinkable()
+                if (context.cwdExists) {
+                    link("IDEA") { openInIdea(project, context.cwd) }.applyToComponent { toolTipText = "Open in IDEA" }
+                    link("Terminal") { openInTerminal(project, context.cwd) }.applyToComponent { toolTipText = "Open in Terminal" }
+                }
             }
             context.git?.let { git ->
-                // The folder the session runs in, named after the branch it has checked out, when it is not the project's.
+                // The branch of that folder and the base its changes are counted against; the base gives way first.
                 row {
                     icon(AllIcons.Vcs.Branch)
-                    label(git.branch)
-                    if (context.worktree) {
-                        comment(fileLabel(context.cwd, context.projectPath)).applyToComponent { toolTipText = context.cwd.toString() }.shrinkable()
-                        comment("Worktree").align(AlignX.RIGHT)
+                    val base = git.base?.let { base ->
+                        // A detached HEAD has no branch to store a base for.
+                        if (git.detached) commentLabel(base)
+                        else ActionLink(base + if (git.baseStored) "" else " (default)") { pickBase(git, it.source as JComponent) }
+                            .apply { toolTipText = "The base branch the changes are counted against" }
                     }
-                }
-                git.base?.let { base ->
-                    indent {
-                        row {
-                            // A detached HEAD has no branch to store a base for.
-                            if (git.detached) comment("base: $base").shrinkable()
-                            else link("base: $base" + if (git.baseStored) "" else " (default)") { pickBase(git, it.source as JComponent) }
-                                .applyToComponent { toolTipText = "The branch the changes are counted against" }.shrinkable()
-                        }
-                    }
+                    cell(ShrinkingLine(listOfNotNull(JBLabel(git.branch), base?.let { commentLabel(" → ") }, base))).shrinkable()
                 }
             }
             if (context.desktop) row { comment("Runs in Claude Desktop") }
@@ -188,10 +188,6 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     comment(dir.toString()).shrinkable()
                 }
                 branch?.exceptionOrNull()?.let { row { comment(it.message.orEmpty()) } }
-            }
-            if (context.cwdExists) row {
-                link("Open in IDEA") { openInIdea(project, context.cwd) }
-                link("Open in Terminal") { openInTerminal(project, context.cwd) }
             }
         }
         val failure = git?.exceptionOrNull()

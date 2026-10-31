@@ -1,5 +1,6 @@
 package dev.myair.toolwindow
 
+import com.intellij.ui.components.JBLabel
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.MAX_LINE_LENGTH_WORD_WRAP
 import com.intellij.ui.dsl.builder.panel
@@ -58,6 +59,30 @@ class ContextCardsTest {
         layOut(panel, 400)
         assertEquals(path.preferredSize.width, path.width)
         assertEquals(400, counts.x + counts.width)
+    }
+
+    @Test
+    fun `a shrinking line gives way from its last part, then the one before, keeping the links after it in the pane`() {
+        val branch = JBLabel("TR-11866-reuse-steps-config-on-tenant-import")
+        val arrow = JBLabel(" → ")
+        val base = JBLabel("origin/release/agc-migration")
+        lateinit var terminal: JComponent
+        val panel = panel {
+            row {
+                cell(ShrinkingLine(listOf(branch, arrow, base))).shrinkable()
+                link("IDEA") {}
+                terminal = link("Terminal") {}.component
+            }
+        }
+        val full = branch.preferredSize.width + arrow.preferredSize.width + base.preferredSize.width
+        layOut(panel, full)
+        assertTrue(base.width in 1 until base.preferredSize.width)
+        assertEquals(branch.preferredSize.width, branch.width)
+        assertEquals(full, terminal.x + terminal.width)
+        layOut(panel, branch.preferredSize.width / 2)
+        assertEquals(0, base.width)
+        assertEquals(0, arrow.width)
+        assertTrue(branch.width in 1 until branch.preferredSize.width)
     }
 
     @Test
