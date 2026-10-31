@@ -127,44 +127,135 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         }
     }
 
-    /** What a transcript says up to [offset], the byte after its last complete line. */
+    /**
+     * What a transcript says up to [offset], the byte after its last complete line, one part per concern; each part
+     * takes every line and returns itself for a line that says nothing to it.
+     */
     data class Transcript(
-        val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val prompts: List<String>,
-        val changedFiles: List<String>, val lastMessage: Instant?, val brief: Brief?, val briefCalls: Map<String, BriefCall>,
-        val addedDirs: List<String>, val model: String?, val effort: String?, val artifacts: Map<String, Artifact>,
-        val shellCalls: Map<String, ShellCall>, val background: Map<String, BackgroundTask>, val skills: List<String>,
-        val mcpTools: List<String>, val workDir: String?, val startBranch: String?,
+        val offset: Long, val conversation: Conversation, val messages: Messages, val environment: Environment,
+        val artifacts: Map<String, Artifact>, val calls: Map<String, Call>, val background: Map<String, BackgroundTask>, val brief: Brief?,
     ) {
+        internal fun next(line: Line): Transcript {
+            val (pending, answers) = answered(calls.recorded(line), line)
+            return copy(
+                conversation = conversation.next(line), messages = messages.next(line), environment = environment.next(line),
+                artifacts = artifacts.published(line), calls = pending, background = background.launched(answers).notified(line),
+                brief = answers.fold(brief) { brief, (call, item) ->
+                    if (call == null || !BRIEF_TOOL.matches(call.tool) || item["is_error"]?.asBoolean == true) brief
+                    else Brief.next(brief, call.tool, call.input)
+                },
+            )
+        }
+
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
         fun toSession(file: Path, desktopProject: Path? = null): ClaudeSession? {
-            val title = customTitle ?: aiTitle ?: prompts.firstOrNull()?.lineSequence()?.first()?.take(80) ?: return null
-            val cwd = Path.of(checkNotNull(cwd) { "titled session without cwd: $file" })
-            val lastMessage = checkNotNull(lastMessage) { "titled session without a message: $file" }
+            val c = conversation
+            val title = c.customTitle ?: c.aiTitle ?: c.prompts.firstOrNull()?.lineSequence()?.first()?.take(80) ?: return null
+            val cwd = Path.of(checkNotNull(c.cwd) { "titled session without cwd: $file" })
+            val lastMessage = checkNotNull(messages.last) { "titled session without a message: $file" }
+            val env = environment
             return ClaudeSession(
-                file.nameWithoutExtension, cwd, title, lastMessage, changedFiles.map(Path::of), prompts, brief, desktopProject ?: cwd,
-                desktop = desktopProject != null, addedDirs = addedDirs.map(Path::of).filter { it != cwd }, model = model, effort = effort,
-                artifacts = artifacts.values.toList(), background = background.values.toList(), skills = skills, mcpServers = mcpServers(mcpTools),
+                file.nameWithoutExtension, cwd, title, lastMessage, c.changedFiles.map(Path::of), c.prompts, brief, desktopProject ?: cwd,
+                desktop = desktopProject != null, addedDirs = env.addedDirs.map(Path::of).filter { it != cwd }, model = messages.model,
+                effort = messages.effort, artifacts = artifacts.values.toList(), background = background.values.toList(), skills = env.skills,
+                mcpServers = mcpServers(env.mcpTools),
                 // A transcript without an environment snapshot comes from a `claude` that wrote none: it works where it started.
-                workDir = workDir?.let(Path::of) ?: cwd, startBranch = startBranch,
+                workDir = env.workDir?.let(Path::of) ?: cwd, startBranch = c.startBranch,
             )
         }
 
         companion object {
             val EMPTY = Transcript(
-                0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList(), null, null, emptyMap(), emptyMap(), emptyMap(),
-                emptyList(), emptyList(), null, null,
+                0, Conversation(null, null, null, null, emptyList(), emptyList()), Messages(null, null, null),
+                Environment(null, emptyList(), emptyList(), emptyList()), emptyMap(), emptyMap(), emptyMap(), null,
             )
         }
     }
 
     /**
-     * A brief or plan call whose result is not read yet: it counts only if the tool accepted it. Calls made in one message
-     * are all written before their results, so the transcript keeps them by id.
+     * The titles, the folder the session started in and the branch checked out there, its first [PROMPTS] human
+     * prompts and the files it wrote, first touch first.
      */
-    data class BriefCall(val id: String, val tool: String, val input: JsonObject)
+    data class Conversation(
+        val customTitle: String?, val aiTitle: String?, val cwd: String?, val startBranch: String?, val prompts: List<String>,
+        val changedFiles: List<String>,
+    ) {
+        internal fun next(line: Line): Conversation = when {
+            line.text.startsWith(CUSTOM_TITLE) -> copy(customTitle = line.json["customTitle"].asString)
+            line.text.startsWith(AI_TITLE) -> copy(aiTitle = line.json["aiTitle"].asString)
+            ASSISTANT in line && EDIT_TOOL_USE.containsMatchIn(line.text) -> copy(changedFiles = (changedFiles + editedFiles(line.json)).distinct())
+            (cwd == null || prompts.size < PROMPTS) && CWD in line && line.main -> {
+                val o = line.json
+                val prompt = if (prompts.size < PROMPTS && o["type"]?.asString == "user" && o["isMeta"]?.asBoolean != true) promptText(o) else null
+                val prompts = prompts + listOfNotNull(prompt)
+                // `HEAD` when no branch is checked out, or outside a repository.
+                if (cwd == null) copy(cwd = o["cwd"]?.asString, startBranch = o["gitBranch"]?.asString?.takeIf { it != "HEAD" }, prompts = prompts)
+                else copy(prompts = prompts)
+            }
+            else -> this
+        }
+    }
 
-    /** A shell or monitor call whose result has not said yet whether it went to the background. */
-    data class ShellCall(val kind: BackgroundTask.Kind, val description: String?)
+    /** The time of the latest message of the main conversation, and the [model] and [effort] of the latest reply of the model. */
+    data class Messages(val last: Instant?, val model: String?, val effort: String?) {
+        internal fun next(line: Line): Messages {
+            if (MESSAGE_HINTS.none { it in line }) return this
+            val message = message(line.text) ?: return this
+            return Messages(message.time, message.model ?: model, message.effort ?: effort)
+        }
+    }
+
+    /**
+     * What `claude` offers the main conversation, as its attachments say: the directory it works in (following `cd` and
+     * `EnterWorktree`), the directories added to it, the skills listed and the MCP tools.
+     */
+    data class Environment(val workDir: String?, val addedDirs: List<String>, val skills: List<String>, val mcpTools: List<String>) {
+        internal fun next(line: Line): Environment = when {
+            ENVIRONMENT in line && line.main -> {
+                val snapshot = line.json.getAsJsonObject("attachment").getAsJsonObject("snapshot")
+                copy(
+                    addedDirs = line.check(snapshot.getAsJsonArray("additionalWorkingDirectories"), "environment without additionalWorkingDirectories")
+                        .map { it.asString },
+                    workDir = line.check(snapshot["workingDirectory"]?.asString, "environment without workingDirectory"),
+                )
+            }
+            SKILL_LISTING in line && line.main -> {
+                val listing = line.json.getAsJsonObject("attachment")
+                val names = line.check(listing.getAsJsonArray("names"), "skill listing without names").map { it.asString }
+                val initial = line.check(listing["isInitial"], "skill listing without isInitial").asBoolean
+                copy(skills = if (initial) names else (skills + names).distinct())
+            }
+            DEFERRED_TOOLS in line && line.main -> {
+                val delta = line.json.getAsJsonObject("attachment")
+                fun names(key: String) = line.check(delta.getAsJsonArray(key), "deferred tools delta without $key")
+                    .map { it.asString }.filter { it.startsWith(MCP_TOOL) }
+                copy(mcpTools = (mcpTools - names("removedNames").toSet() + names("addedNames")).distinct())
+            }
+            else -> this
+        }
+    }
+
+    /**
+     * A call of the main conversation whose result is not read yet: a brief or plan call counts only if the tool accepted
+     * it, a shell or monitor call names its background task only in its input. Calls made in one message are all written
+     * before their results, so the transcript keeps them by id.
+     */
+    data class Call(val tool: String, val input: JsonObject)
+
+    /** A `tool_result` [item] of [line], with the [call] it answers when that was kept. */
+    internal data class Answer(val call: Call?, val item: JsonObject, val line: Line)
+
+    /** A line of a transcript, parsed once, by the first part that needs more than its text. */
+    internal class Line(val text: String) {
+        val json: JsonObject by lazy(LazyThreadSafetyMode.NONE) { JsonParser.parseString(text).asJsonObject }
+
+        /** Not a subagent's: sidechain lines belong to the agents the main conversation started. */
+        val main: Boolean get() = json["isSidechain"]?.asBoolean != true
+
+        operator fun contains(hint: String) = hint in text
+
+        fun <T : Any> check(value: T?, problem: String): T = checkNotNull(value) { "$problem: ${text.take(200)}" }
+    }
 
     companion object {
         private const val CUSTOM_TITLE = "{\"type\":\"custom-title\""
@@ -187,14 +278,14 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
 
         /** The MCP server's name comes from the user's config, so the brief tool is matched by its suffix. */
         private val BRIEF_TOOL = Regex("mcp__[^\"]*__${Brief.SET_BRIEF}|${Brief.UPDATE_PLAN}")
-        private val BRIEF_TOOL_USE = Regex("\"name\":\"(${BRIEF_TOOL.pattern})\",\"input\"")
         private const val TOOL_RESULT = "\"type\":\"tool_result\""
 
         private const val MONITOR = "Monitor"
 
         /** Calls that may run in the background and name it only in their input; agents and workflows name it in their result. */
         private val SHELL_TOOLS = setOf("Bash", "PowerShell", MONITOR)
-        private val SHELL_TOOL_USE = Regex("\"name\":\"(${SHELL_TOOLS.joinToString("|")})\",\"input\"")
+        /** The calls kept until their result says what they did: [SHELL_TOOLS] and [BRIEF_TOOL]. */
+        private val KEPT_TOOL_USE = Regex("\"name\":\"(${SHELL_TOOLS.joinToString("|")}|${BRIEF_TOOL.pattern})\",\"input\"")
         private const val ASYNC_LAUNCHED = "\"status\":\"async_launched\""
 
         /** The line `claude` writes when a notification is queued for the conversation, before the model reads it. */
@@ -227,147 +318,85 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
 
         /** Continues [from] with the complete lines after its offset; a line still being written is left for the next read. */
         fun read(file: Path, from: Transcript): Transcript {
-            var customTitle = from.customTitle
-            var aiTitle = from.aiTitle
-            var cwd = from.cwd
-            val prompts = from.prompts.toMutableList()
-            val changedFiles = LinkedHashSet(from.changedFiles)
-            var lastMessage = from.lastMessage
-            var brief = from.brief
-            val briefCalls = LinkedHashMap(from.briefCalls)
-            var addedDirs = from.addedDirs
-            var model = from.model
-            var effort = from.effort
-            // A republished artifact keeps the position of its first publish.
-            val artifacts = LinkedHashMap(from.artifacts)
-            // By tool_use id: shell and monitor calls whose result has not told yet whether they went to the background.
-            val shellCalls = HashMap(from.shellCalls)
-            val background = LinkedHashMap(from.background)
-            var skills = from.skills
-            val mcpTools = LinkedHashSet(from.mcpTools)
-            var workDir = from.workDir
-            var startBranch = from.startBranch
-            val offset = forEachCompleteLine(file, from.offset) { line ->
-                if (SKILL_LISTING in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
-                    val listing = o.getAsJsonObject("attachment")
-                    val names = checkNotNull(listing.getAsJsonArray("names")) { "skill listing without names: $file" }.map { it.asString }
-                    val initial = checkNotNull(listing["isInitial"]) { "skill listing without isInitial: $file" }.asBoolean
-                    skills = if (initial) names else (skills + names).distinct()
-                }
-                if (DEFERRED_TOOLS in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
-                    val delta = o.getAsJsonObject("attachment")
-                    fun names(key: String) = checkNotNull(delta.getAsJsonArray(key)) { "deferred tools delta without $key: $file" }
-                        .map { it.asString }.filter { it.startsWith(MCP_TOOL) }
-                    mcpTools -= names("removedNames").toSet()
-                    mcpTools += names("addedNames")
-                }
-                // Outside the `when` below: the line also carries a cwd.
-                if (ENVIRONMENT in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
-                    val snapshot = o.getAsJsonObject("attachment").getAsJsonObject("snapshot")
-                    addedDirs = checkNotNull(snapshot.getAsJsonArray("additionalWorkingDirectories")) { "environment without additionalWorkingDirectories: $file" }
-                        .map { it.asString }
-                    workDir = checkNotNull(snapshot["workingDirectory"]?.asString) { "environment without workingDirectory: $file" }
-                }
-                if (ARTIFACT in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.getAsJsonObject("toolUseResult")?.let { r ->
-                    fun field(name: String) = checkNotNull(r[name]?.asString) { "artifact result without $name: $file" }
-                    artifacts[field("artifact_id")] = Artifact(field("artifact_id"), field("title"), field("url"), Path.of(field("path")))
-                }
-                if (ASSISTANT in line && SHELL_TOOL_USE.containsMatchIn(line)) json(line).takeIf { it["isSidechain"]?.asBoolean != true }
-                    ?.let { o -> toolUses(o).filter { it["name"].asString in SHELL_TOOLS } }
-                    ?.forEach { use ->
-                        val input = use.getAsJsonObject("input")
-                        val kind = if (use["name"].asString == MONITOR) BackgroundTask.Kind.MONITOR else BackgroundTask.Kind.SHELL
+            var transcript = from
+            val offset = forEachCompleteLine(file, from.offset) { transcript = transcript.next(Line(it)) }
+            return transcript.copy(offset = offset)
+        }
+
+        /** [this] with the shell, monitor, brief and plan calls of [line], when it is an assistant message of the main conversation. */
+        private fun Map<String, Call>.recorded(line: Line): Map<String, Call> {
+            if (ASSISTANT !in line || !KEPT_TOOL_USE.containsMatchIn(line.text) || !line.main) return this
+            return this + toolUses(line.json).filter { it["name"].asString.let { name -> name in SHELL_TOOLS || BRIEF_TOOL.matches(name) } }
+                .map { it["id"].asString to Call(it["name"].asString, it.getAsJsonObject("input")) }
+        }
+
+        /** The calls still waiting after [line], and its `tool_result` items when one answers a kept call or launched an agent or workflow. */
+        private fun answered(calls: Map<String, Call>, line: Line): Pair<Map<String, Call>, List<Answer>> {
+            if (TOOL_RESULT !in line || (calls.keys.none { "\"$it\"" in line.text } && ASYNC_LAUNCHED !in line) || !line.main) return calls to emptyList()
+            val items = line.json.getAsJsonObject("message").getAsJsonArray("content").map { it.asJsonObject }.filter { it["type"].asString == "tool_result" }
+            return calls - items.map { it["tool_use_id"].asString }.toSet() to items.map { Answer(calls[it["tool_use_id"].asString], it, line) }
+        }
+
+        /** [this] with the tasks [answers] sent to the background: a shell or monitor call's, an agent or workflow launched. */
+        private fun Map<String, BackgroundTask>.launched(answers: List<Answer>): Map<String, BackgroundTask> = this + answers.mapNotNull { (call, item, line) ->
+            val result = line.json["toolUseResult"] as? JsonObject
+            when {
+                call != null && call.tool !in SHELL_TOOLS -> null
+                result == null -> null
+                call != null -> {
+                    val kind = if (call.tool == MONITOR) BackgroundTask.Kind.MONITOR else BackgroundTask.Kind.SHELL
+                    (result["backgroundTaskId"] ?: result["taskId"].takeIf { kind == BackgroundTask.Kind.MONITOR })?.let {
                         // A shell call may come without a description; its command's first line names it then. A call
                         // the tool rejects may have neither, and never runs.
-                        shellCalls[use["id"].asString] = ShellCall(kind, input["description"]?.asString ?: input["command"]?.asString?.lineSequence()?.first())
-                    }
-                if (TOOL_RESULT in line && (shellCalls.keys.any { "\"$it\"" in line } || ASYNC_LAUNCHED in line)) json(line)
-                    .takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
-                        val result = o["toolUseResult"] as? JsonObject
-                        val started = time(o)
-                        o.getAsJsonObject("message").getAsJsonArray("content").map { it.asJsonObject }
-                            .filter { it["type"].asString == "tool_result" }
-                            .forEach { item ->
-                                val call = shellCalls.remove(item["tool_use_id"].asString)
-                                val task = when {
-                                    result == null -> null
-                                    call != null -> (result["backgroundTaskId"] ?: result["taskId"].takeIf { call.kind == BackgroundTask.Kind.MONITOR })
-                                        ?.let {
-                                            val description = checkNotNull(call.description) { "background task without a description: $file" }
-                                            val output = item["content"].takeIf { c -> c.isJsonPrimitive }?.let { c -> SHELL_OUTPUT.find(c.asString) }
-                                            BackgroundTask(it.asString, call.kind, description, started, output?.let { m -> Path.of(m.groupValues[1]) })
-                                        }
-                                    result["status"]?.asString != "async_launched" -> null
-                                    result.has("agentId") -> BackgroundTask(
-                                        result["agentId"].asString, BackgroundTask.Kind.AGENT, result["description"].asString, started,
-                                        result["outputFile"]?.asString?.let(Path::of), model = result["resolvedModel"]?.asString,
-                                    )
-                                    else -> BackgroundTask(result["taskId"].asString, BackgroundTask.Kind.WORKFLOW, result["summary"].asString, started)
-                                }
-                                if (task != null) background[task.id] = task
-                            }
-                    }
-                if (line.startsWith(ENQUEUE) && TASK_NOTIFICATION in line) {
-                    val o = json(line)
-                    val content = o["content"].asString
-                    // A monitor's events carry no status, but for the last ones its stream ended with; the notification
-                    // that ends a task does. An agent sent another message notifies again, and its latest end counts.
-                    val status = tag(content, "status")
-                    val id = tag(content, "task-id")
-                    if (status != null) checkNotNull(id) { "final notification without a task id: $file" }
-                    if (id != null) background[id]?.let { task ->
-                        val event = tag(content, "event")
-                        background[id] = when {
-                            event != null && event.startsWith(MONITOR_EXPIRED) -> task.copy(end = BackgroundTask.End(time(o), BackgroundTask.Status.EXPIRED, event))
-                            else -> {
-                                val counted = if (event == null) task else task.copy(events = task.events + 1, lastEvent = time(o))
-                                if (status == null) counted else counted.copy(
-                                    output = tag(content, "output-file")?.let(Path::of) ?: task.output,
-                                    end = BackgroundTask.End(
-                                        time(o), BackgroundTask.Status.valueOf(status.uppercase()),
-                                        checkNotNull(tag(content, "summary")) { "final notification without a summary: $file" },
-                                    ),
-                                    // After an agent's result, whose text may hold anything.
-                                    usage = content.lastIndexOf("<usage>").takeIf { it >= 0 }?.let { usage(content.substring(it)) } ?: task.usage,
-                                )
-                            }
-                        }
+                        val description = line.check(
+                            call.input["description"]?.asString ?: call.input["command"]?.asString?.lineSequence()?.first(), "background task without a description",
+                        )
+                        val output = item["content"].takeIf { c -> c.isJsonPrimitive }?.let { c -> SHELL_OUTPUT.find(c.asString) }
+                        BackgroundTask(it.asString, kind, description, time(line.json), output?.let { m -> Path.of(m.groupValues[1]) })
                     }
                 }
-                if (MESSAGE_HINTS.any { it in line }) message(line)?.let {
-                    lastMessage = it.time
-                    model = it.model ?: model
-                    effort = it.effort ?: effort
-                }
-                if (ASSISTANT in line && BRIEF_TOOL_USE.containsMatchIn(line)) json(line).takeIf { it["isSidechain"]?.asBoolean != true }
-                    ?.let { o -> toolUses(o).filter { BRIEF_TOOL.matches(it["name"].asString) } }
-                    ?.forEach { briefCalls[it["id"].asString] = BriefCall(it["id"].asString, it["name"].asString, it.getAsJsonObject("input")) }
-                if (TOOL_RESULT in line && briefCalls.keys.any { "\"$it\"" in line }) {
-                    json(line).getAsJsonObject("message").getAsJsonArray("content").map { it.asJsonObject }
-                        .filter { it["type"].asString == "tool_result" }
-                        .forEach { result ->
-                            val call = briefCalls.remove(result["tool_use_id"].asString) ?: return@forEach
-                            if (result["is_error"]?.asBoolean != true) brief = Brief.next(brief, call.tool, call.input)
-                        }
-                }
-                when {
-                    line.startsWith(CUSTOM_TITLE) -> customTitle = json(line)["customTitle"].asString
-                    line.startsWith(AI_TITLE) -> aiTitle = json(line)["aiTitle"].asString
-                    ASSISTANT in line && EDIT_TOOL_USE.containsMatchIn(line) -> changedFiles += editedFiles(json(line))
-                    (cwd == null || prompts.size < PROMPTS) && CWD in line -> {
-                        val o = json(line)
-                        if (o["isSidechain"]?.asBoolean != true) {
-                            if (cwd == null) {
-                                cwd = o["cwd"]?.asString
-                                // `HEAD` when no branch is checked out, or outside a repository.
-                                startBranch = o["gitBranch"]?.asString?.takeIf { it != "HEAD" }
-                            }
-                            if (prompts.size < PROMPTS && o["type"]?.asString == "user" && o["isMeta"]?.asBoolean != true) promptText(o)?.let(prompts::add)
-                        }
-                    }
-                }
+                result["status"]?.asString != "async_launched" -> null
+                result.has("agentId") -> BackgroundTask(
+                    result["agentId"].asString, BackgroundTask.Kind.AGENT, result["description"].asString, time(line.json),
+                    result["outputFile"]?.asString?.let(Path::of), model = result["resolvedModel"]?.asString,
+                )
+                else -> BackgroundTask(result["taskId"].asString, BackgroundTask.Kind.WORKFLOW, result["summary"].asString, time(line.json))
             }
-            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs, model, effort, artifacts, shellCalls, background, skills, mcpTools.toList(), workDir, startBranch)
+        }.associateBy { it.id }
+
+        /**
+         * [this] after [line] when it queues a task notification. A monitor's events carry no status, but for the last ones
+         * its stream ended with; the notification that ends a task does. An agent sent another message notifies again,
+         * and its latest end counts.
+         */
+        private fun Map<String, BackgroundTask>.notified(line: Line): Map<String, BackgroundTask> {
+            if (!line.text.startsWith(ENQUEUE) || TASK_NOTIFICATION !in line) return this
+            val o = line.json
+            val content = o["content"].asString
+            val status = tag(content, "status")
+            val id = tag(content, "task-id")
+            if (status != null) line.check(id, "final notification without a task id")
+            val task = id?.let(::get) ?: return this
+            val event = tag(content, "event")
+            val counted = if (event == null) task else task.copy(events = task.events + 1, lastEvent = time(o))
+            return this + (task.id to when {
+                event != null && event.startsWith(MONITOR_EXPIRED) -> task.copy(end = BackgroundTask.End(time(o), BackgroundTask.Status.EXPIRED, event))
+                status == null -> counted
+                else -> counted.copy(
+                    output = tag(content, "output-file")?.let(Path::of) ?: task.output,
+                    end = BackgroundTask.End(time(o), BackgroundTask.Status.valueOf(status.uppercase()), line.check(tag(content, "summary"), "final notification without a summary")),
+                    // After an agent's result, whose text may hold anything.
+                    usage = content.lastIndexOf("<usage>").takeIf { it >= 0 }?.let { usage(content.substring(it)) } ?: task.usage,
+                )
+            })
+        }
+
+        /** [this] with the artifact of [line] when it is an Artifact publish of the main conversation; a republished one keeps its place. */
+        private fun Map<String, Artifact>.published(line: Line): Map<String, Artifact> {
+            if (ARTIFACT !in line || !line.main) return this
+            val r = line.json.getAsJsonObject("toolUseResult") ?: return this
+            fun field(name: String) = line.check(r[name]?.asString, "artifact result without $name")
+            return this + (field("artifact_id") to Artifact(field("artifact_id"), field("title"), field("url"), Path.of(field("path"))))
         }
 
         /** A message of the main conversation: its [time], and for a reply of the model the [model] and [effort] it ran with. */
@@ -439,8 +468,6 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 }
             }
         }
-
-        private fun json(line: String): JsonObject = JsonParser.parseString(line).asJsonObject
 
         private fun time(o: JsonObject): Instant = Instant.parse(checkNotNull(o["timestamp"]) { "line without timestamp: $o" }.asString)
 

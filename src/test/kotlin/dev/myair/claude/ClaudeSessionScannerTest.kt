@@ -437,11 +437,11 @@ class ClaudeSessionScannerTest {
             assistant(toolUse("Write", """{"file_path":"C:\\b.kt","content":"y"}""")),
         )
         val first = ClaudeSessionScanner.read(file, ClaudeSessionScanner.Transcript.EMPTY)
-        assertEquals(listOf("C:\\a.kt", "C:\\b.kt"), first.changedFiles)
+        assertEquals(listOf("C:\\a.kt", "C:\\b.kt"), first.conversation.changedFiles)
 
         file.appendText(assistant(toolUse("MultiEdit", """{"file_path":"C:\\a.kt","edits":[]}"""), toolUse("NotebookEdit", """{"notebook_path":"C:\\n.ipynb"}""")) + "\n")
         val next = ClaudeSessionScanner.read(file, first)
-        assertEquals(listOf("C:\\a.kt", "C:\\b.kt", "C:\\n.ipynb"), next.changedFiles)
+        assertEquals(listOf("C:\\a.kt", "C:\\b.kt", "C:\\n.ipynb"), next.conversation.changedFiles)
         assertEquals(listOf(Path.of("C:\\a.kt"), Path.of("C:\\b.kt"), Path.of("C:\\n.ipynb")), next.toSession(file)!!.changedFiles)
     }
 
@@ -545,7 +545,7 @@ class ClaudeSessionScannerTest {
 
         file.appendText("""tle":"Done","sessionId":"s1"}""" + "\n")
         val complete = ClaudeSessionScanner.read(file, partial)
-        assertEquals("Done", complete.customTitle)
+        assertEquals("Done", complete.conversation.customTitle)
         assertEquals(Files.size(file), complete.offset)
     }
 
@@ -607,8 +607,7 @@ class ClaudeSessionScannerTest {
             call("t5", "Monitor", """{"command":"tail -f log","description":"errors","timeout_ms":1000}"""),
         )
         val transcript = ClaudeSessionScanner.read(file, ClaudeSessionScanner.Transcript.EMPTY)
-        assertEquals(listOf("t2"), transcript.briefCalls.keys.toList())
-        assertEquals(listOf("t5"), transcript.shellCalls.keys.toList())
+        assertEquals(listOf("t2", "t5"), transcript.calls.keys.toList())
         assertEquals(listOf("b1", "w1"), transcript.background.keys.toList())
         assertEquals(2, transcript.background.getValue("w1").usage?.agents?.done)
 
