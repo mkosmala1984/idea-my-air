@@ -16,12 +16,16 @@ import java.time.Instant
  * [BackgroundTask.end] also end with their process, which the transcript does not record.
  * [skills]: the skills `claude` listed to the main conversation, in its order. [mcpServers]: the MCP servers whose tools
  * it currently offers, sorted, without those waiting for a sign-in ([mcpServers] of the tool names).
+ * [workDir]: where it works now, as its latest environment snapshot says; it follows `cd` into subfolders and
+ * `EnterWorktree` into another work tree, while [cwd] stays where it started. [startBranch]: the branch checked out
+ * when it started, null when none was.
  */
 data class ClaudeSession(
     val id: String, val cwd: Path, val title: String, val lastMessage: Instant, val changedFiles: List<Path>, val prompts: List<String>,
     val brief: Brief? = null, val project: Path = cwd, val desktop: Boolean = false, val addedDirs: List<Path> = emptyList(),
     val model: String? = null, val effort: String? = null, val artifacts: List<Artifact> = emptyList(),
     val background: List<BackgroundTask> = emptyList(), val skills: List<String> = emptyList(), val mcpServers: List<String> = emptyList(),
+    val workDir: Path = cwd, val startBranch: String? = null,
 ) {
     /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
     fun matches(query: String): Boolean =

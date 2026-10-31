@@ -1,5 +1,6 @@
 package dev.myair.toolwindow
 
+import dev.myair.actions.Git
 import dev.myair.actions.GitState
 import dev.myair.claude.BackgroundTask
 import dev.myair.claude.Brief
@@ -8,10 +9,12 @@ import dev.myair.claude.TaskStatus
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.SkillOrigin
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
+import kotlin.io.path.createDirectories
 import kotlin.test.assertEquals
 
 class SessionContextTest {
@@ -45,6 +48,36 @@ class SessionContextTest {
         val context = contextOf(session(main.resolve(".claude/worktrees/x")), cwdExists = true, live = false, git = null)
         assertEquals("my-air" to true, context.project to context.worktree)
         assertEquals(false, contextOf(session(main), cwdExists = true, live = false, git = null).worktree)
+    }
+
+    @Test
+    fun `a session moved to another work tree shows that one and where it started, a changed branch the one it started on`() {
+        val worktree = main.resolve(".claude/worktrees/x")
+        val started = session(main).copy(workDir = worktree, startBranch = "main")
+        val git = GitState("worktree-x", false, worktree, "main", true, null, emptyList(), null)
+        val moved = contextOf(started, cwdExists = true, live = false, git = git, workTree = worktree)
+        assertEquals(listOf(worktree, true, main, "main"), listOf(moved.cwd, moved.worktree, moved.startedIn, moved.startBranch))
+        val stayed = contextOf(started, cwdExists = true, live = false, git = git.copy(branch = "main", root = main))
+        assertEquals(listOf(main, false, null, null), listOf(stayed.cwd, stayed.worktree, stayed.startedIn, stayed.startBranch))
+        // Before git is read the branch now is unknown, so no start branch is told.
+        assertEquals(null, contextOf(started, cwdExists = true, live = false, git = null).startBranch)
+    }
+
+    @Test
+    fun `a cd within the work tree it started in moves nothing, entering a linked worktree moves the session there`(@TempDir dir: Path) {
+        val repo = dir.resolve("repo").createDirectories()
+        fun git(vararg args: String) = Git.run(repo, "-c", "user.name=t", "-c", "user.email=t@t", *args)
+        git("init", "-b", "main")
+        git("commit", "--allow-empty", "-m", "first")
+        val sub = repo.resolve("src").createDirectories()
+        val worktree = repo.resolve(".claude/worktrees/x")
+        git("worktree", "add", "-b", "worktree-x", worktree.toString())
+        val repoRoot = checkNotNull(Git.root(sub))
+        val worktreeRoot = checkNotNull(Git.root(worktree))
+        assertEquals(repo, workTreeOf(repo, sub, repoRoot))
+        assertEquals(sub, workTreeOf(sub, repo, repoRoot))
+        assertEquals(worktreeRoot, workTreeOf(repo, worktree, worktreeRoot))
+        assertEquals(repoRoot, workTreeOf(worktree, repo, repoRoot))
     }
 
     @Test
