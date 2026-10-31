@@ -3,6 +3,8 @@ package dev.myair.toolwindow
 import com.intellij.openapi.vcs.FileStatus
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.Cell
 import com.intellij.util.ui.GraphicsUtil
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
@@ -14,14 +16,13 @@ import javax.swing.JComponent
 import javax.swing.JPanel
 
 private val CARD_BACKGROUND = JBColor.namedColor("Editor.background", JBColor(0xFFFFFF, 0x1E1F22))
-private val CARD_BORDER = JBColor(0xEBECF0, 0x393B40)
 private val CHIP_BACKGROUND = JBColor(0xEBECF0, 0x393B40)
 
-/** A white card with a rounded border holding [content], as the context pane lays out each of its sections. */
+/** A white rounded card without an outline holding [content], as the context pane lays out each of its sections. */
 class ContextCard(content: JComponent) : JPanel(BorderLayout()) {
     init {
         isOpaque = false
-        border = JBUI.Borders.empty(8, 12)
+        border = JBUI.Borders.empty(4, 8)
         add(content, BorderLayout.CENTER)
     }
 
@@ -31,9 +32,7 @@ class ContextCard(content: JComponent) : JPanel(BorderLayout()) {
             GraphicsUtil.setupAAPainting(g2)
             val arc = JBUI.scale(ARC)
             g2.color = CARD_BACKGROUND
-            g2.fillRoundRect(0, 0, width - 1, height - 1, arc, arc)
-            g2.color = CARD_BORDER
-            g2.drawRoundRect(0, 0, width - 1, height - 1, arc, arc)
+            g2.fillRoundRect(0, 0, width, height, arc, arc)
         } finally {
             g2.dispose()
         }
@@ -43,6 +42,13 @@ class ContextCard(content: JComponent) : JPanel(BorderLayout()) {
         const val ARC = 16
     }
 }
+
+/**
+ * A cell that gives up width when its row is wider than the pane, down to nothing, so the cells after it stay in view;
+ * a label or link then ends in an ellipsis. It takes the row's spare width, so the cells after it go to the right edge.
+ */
+fun <T : JComponent> Cell<T>.shrinkable(): Cell<T> =
+    resizableColumn().align(AlignX.LEFT).applyToComponent { minimumSize = Dimension(0, minimumSize.height) }
 
 /** A small grey rounded label: the model and effort under a session's title. */
 class Chip(text: String) : JBLabel(text) {

@@ -12,6 +12,8 @@
   <extensions defaultExtensionNs="com.intellij">
     <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"
                 factoryClass="dev.myair.toolwindow.SessionsToolWindowFactory"/>
+    <toolWindow id="Session Context" anchor="right" secondary="true" icon="AllIcons.Actions.Preview"
+                factoryClass="dev.myair.toolwindow.SessionContextToolWindowFactory"/>
     <fileEditorProvider implementation="dev.myair.editor.ClaudeSessionEditorProvider"/>
     <virtualFileSystem key="myair-session" implementationClass="dev.myair.editor.ClaudeSessionFileSystem"/>
     <fileIconProvider order="first" implementation="dev.myair.editor.ClaudeSessionFileIconProvider"/>

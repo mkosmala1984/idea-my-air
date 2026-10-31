@@ -291,6 +291,24 @@ class GitTest {
     }
 
     @Test
+    fun `the contained bases of a branch are the branches its history holds, not those that went their own way`() {
+        val repo = init("repo")
+        git(repo, "branch", "old")
+        git(repo, "commit", "--allow-empty", "-m", "second")
+        git(repo, "checkout", "-b", "side", "old")
+        git(repo, "commit", "--allow-empty", "-m", "side")
+        git(repo, "checkout", "-b", "feature", "main")
+        git(repo, "commit", "--allow-empty", "-m", "third")
+        assertEquals(setOf("main", "old"), Git.containedBases(repo, "feature").toSet())
+    }
+
+    @Test
+    fun `branchOf names the checked-out branch and is null outside a repository`() {
+        assertEquals("main", Git.branchOf(init("repo")))
+        assertEquals(null, Git.branchOf(dir.resolve("plain").createDirectories()))
+    }
+
+    @Test
     fun `state outside a repository is null`() {
         assertEquals(null, Git.state(dir.resolve("plain").createDirectories()))
     }
