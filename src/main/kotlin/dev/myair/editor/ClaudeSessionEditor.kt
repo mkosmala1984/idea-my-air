@@ -79,9 +79,9 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
     private fun restoreBlocker(): JComponent? {
         if (!file.cwd.isDirectory()) return notice("Session directory no longer exists:\n${file.cwd}")
         val live = LiveSessionRegistry(Homes.claude.resolve("sessions")).read()[file.sessionId] ?: return null
-        val host = ClaudeSessionOpener.hostElsewhere(live, file.cwd)
-        val switch = host?.let { "Switch to Window" to { SessionHosts.bringToFront(it) } }
-        return notice(ClaudeSessionOpener.runningElsewhereMessage(file.title, live, host), listOfNotNull(switch, "Open Anyway" to ::openAnyway))
+        val running = RunningElsewhere(file.title, live, file.cwd)
+        val switch = running.host?.let { "Switch to Window" to { SessionHosts.bringToFront(it) } }
+        return notice(running.message, listOfNotNull(switch, "Open Anyway" to ::openAnyway))
     }
 
     private fun openAnyway() {
