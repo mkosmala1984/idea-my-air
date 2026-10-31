@@ -1,5 +1,6 @@
 package dev.myair.toolwindow
 
+import dev.myair.actions.Git
 import dev.myair.actions.GitState
 import dev.myair.claude.Artifact
 import dev.myair.claude.BackgroundTask
@@ -12,6 +13,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.io.path.exists
 import kotlin.io.path.extension
 
 /** The file types of the session's own writing, as Claude Desktop's Outputs lists them: plans, notes, pages. */
@@ -23,24 +25,39 @@ val OUTPUT_EXTENSIONS = setOf("md", "html")
  * first touch first, since the work tree's show among the changes; [outputs] the [OUTPUT_EXTENSIONS] ones of all it wrote,
  * the newest first; [background] its tasks, the unended ones first in the order launched, then the ended ones, the
  * latest end first; [live] whether it has a process; [git] null outside a work tree and while it is being read.
+ * [cwd] is the folder it works in: where it started, unless it moved to another work tree, whose root it is then.
+ * [startedIn] is where it started when that is another work tree; [startBranch] the branch it started on when that is
+ * not the one checked out now.
  */
 data class SessionContext(
     val title: String, val lastMessage: Instant, val model: String?, val effort: String?,
-    val project: String, val projectPath: Path, val cwd: Path, val worktree: Boolean, val desktop: Boolean,
+    val project: String, val projectPath: Path, val cwd: Path, val worktree: Boolean, val startedIn: Path?, val startBranch: String?,
+    val desktop: Boolean,
     val addedDirs: List<Path>, val brief: Brief?, val files: List<Path>, val outputs: List<Path>, val artifacts: List<Artifact>,
     val background: List<BackgroundTask>, val live: Boolean, val cwdExists: Boolean, val git: GitState?,
     val mcpServers: List<String>, val skills: List<String>,
 )
 
-/** [ClaudeSession.changedFiles] keeps the order files were first written, without repeats. */
-fun contextOf(session: ClaudeSession, cwdExists: Boolean, live: Boolean, git: GitState?) = SessionContext(
+/**
+ * [workTree]: the folder the session works in, [ClaudeSession.cwd] unless [git] was read in another work tree than the
+ * one it started in. [ClaudeSession.changedFiles] keeps the order files were first written, without repeats.
+ */
+fun contextOf(session: ClaudeSession, cwdExists: Boolean, live: Boolean, git: GitState?, workTree: Path = session.cwd) = SessionContext(
     session.title, session.lastMessage, session.model, session.effort,
-    (session.project.fileName ?: session.project).toString(), session.project, session.cwd, session.cwd != session.project,
+    (session.project.fileName ?: session.project).toString(), session.project, workTree, workTree != session.project,
+    session.cwd.takeIf { it != workTree }, session.startBranch?.takeIf { git != null && it != git.branch },
     session.desktop, session.addedDirs, session.brief, session.changedFiles.filterNot { git != null && it.startsWith(git.root) },
     session.changedFiles.filter { it.extension.lowercase() in OUTPUT_EXTENSIONS }.reversed(), session.artifacts,
     session.background.sortedWith(compareBy(nullsFirst(reverseOrder())) { it.end?.time }),
     live, cwdExists, git, session.mcpServers, session.skills,
 )
+
+/**
+ * The folder a session that started in [cwd] works in now that it is in [workDir], [root] being the root of the work
+ * tree [workDir] is in: [root] when the session moved to another work tree, as `EnterWorktree` moves it, else [cwd]; a
+ * `cd` within the tree it started in moves nothing.
+ */
+fun workTreeOf(cwd: Path, workDir: Path, root: Path): Path = if (workDir != cwd && (!cwd.exists() || Git.root(cwd) != root)) root else cwd
 
 /** The group of skills that come from no plugin: the user's, the project's and `claude`'s own. */
 const val NO_PLUGIN = "No plugin"

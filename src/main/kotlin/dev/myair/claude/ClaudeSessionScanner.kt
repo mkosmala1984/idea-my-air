@@ -129,7 +129,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         val changedFiles: List<String>, val lastMessage: Instant?, val brief: Brief?, val briefCalls: Map<String, BriefCall>,
         val addedDirs: List<String>, val model: String?, val effort: String?, val artifacts: Map<String, Artifact>,
         val shellCalls: Map<String, ShellCall>, val background: Map<String, BackgroundTask>, val skills: List<String>,
-        val mcpTools: List<String>,
+        val mcpTools: List<String>, val workDir: String?, val startBranch: String?,
     ) {
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
         fun toSession(file: Path, desktopProject: Path? = null): ClaudeSession? {
@@ -140,13 +140,15 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 file.nameWithoutExtension, cwd, title, lastMessage, changedFiles.map(Path::of), prompts, brief, desktopProject ?: cwd,
                 desktop = desktopProject != null, addedDirs = addedDirs.map(Path::of).filter { it != cwd }, model = model, effort = effort,
                 artifacts = artifacts.values.toList(), background = background.values.toList(), skills = skills, mcpServers = mcpServers(mcpTools),
+                // A transcript without an environment snapshot comes from a `claude` that wrote none: it works where it started.
+                workDir = workDir?.let(Path::of) ?: cwd, startBranch = startBranch,
             )
         }
 
         companion object {
             val EMPTY = Transcript(
                 0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList(), null, null, emptyMap(), emptyMap(), emptyMap(),
-                emptyList(), emptyList(),
+                emptyList(), emptyList(), null, null,
             )
         }
     }
@@ -204,7 +206,10 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         /** In the `toolUseResult` of an Artifact publish, which names the artifact's url, title and local file. */
         private const val ARTIFACT = "\"artifact_id\":"
 
-        /** The attachment `claude` writes with the session's environment: cwd, worktree, the directories added to it. */
+        /**
+         * The attachment `claude` writes with the session's environment: the directory it works in (following `cd` and
+         * `EnterWorktree`), whether that is a worktree, the directories added to it.
+         */
         private const val ENVIRONMENT = "\"attachment\":{\"type\":\"environment\",\"snapshot\":"
 
         /** The attachment listing the skills: all of them at the start (`isInitial`), the ones added later after it. */
@@ -236,6 +241,8 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             val background = LinkedHashMap(from.background)
             var skills = from.skills
             val mcpTools = LinkedHashSet(from.mcpTools)
+            var workDir = from.workDir
+            var startBranch = from.startBranch
             val offset = forEachCompleteLine(file, from.offset) { line ->
                 if (SKILL_LISTING in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
                     val listing = o.getAsJsonObject("attachment")
@@ -255,6 +262,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                     val snapshot = o.getAsJsonObject("attachment").getAsJsonObject("snapshot")
                     addedDirs = checkNotNull(snapshot.getAsJsonArray("additionalWorkingDirectories")) { "environment without additionalWorkingDirectories: $file" }
                         .map { it.asString }
+                    workDir = checkNotNull(snapshot["workingDirectory"]?.asString) { "environment without workingDirectory: $file" }
                 }
                 if (ARTIFACT in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.getAsJsonObject("toolUseResult")?.let { r ->
                     fun field(name: String) = checkNotNull(r[name]?.asString) { "artifact result without $name: $file" }
@@ -345,13 +353,17 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                     (cwd == null || prompts.size < PROMPTS) && CWD in line -> {
                         val o = json(line)
                         if (o["isSidechain"]?.asBoolean != true) {
-                            cwd = cwd ?: o["cwd"]?.asString
+                            if (cwd == null) {
+                                cwd = o["cwd"]?.asString
+                                // `HEAD` when no branch is checked out, or outside a repository.
+                                startBranch = o["gitBranch"]?.asString?.takeIf { it != "HEAD" }
+                            }
                             if (prompts.size < PROMPTS && o["type"]?.asString == "user" && o["isMeta"]?.asBoolean != true) promptText(o)?.let(prompts::add)
                         }
                     }
                 }
             }
-            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs, model, effort, artifacts, shellCalls, background, skills, mcpTools.toList())
+            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs, model, effort, artifacts, shellCalls, background, skills, mcpTools.toList(), workDir, startBranch)
         }
 
         /** A message of the main conversation: its [time], and for a reply of the model the [model] and [effort] it ran with. */

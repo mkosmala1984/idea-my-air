@@ -88,6 +88,9 @@ object Git {
 
     private fun inRepo(dir: Path) = generateSequence(dir.toAbsolutePath()) { it.parent }.any { it.resolve(".git").exists() }
 
+    /** The root of the work tree [dir] is in; null when neither [dir] nor a folder above it has a `.git`. */
+    fun root(dir: Path): Path? = if (inRepo(dir)) Path.of(run(dir, "rev-parse", "--show-toplevel").trim()) else null
+
     /** [currentBranch] of [dir]; null when neither [dir] nor a folder above it has a `.git`. */
     fun branchOf(dir: Path): String? = if (inRepo(dir)) currentBranch(dir) else null
 

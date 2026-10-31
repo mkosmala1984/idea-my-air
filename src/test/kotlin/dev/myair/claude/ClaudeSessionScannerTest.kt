@@ -64,8 +64,8 @@ class ClaudeSessionScannerTest {
         assertEquals(Path.of("E:\\dev\\projects\\rtm-cloud") to false, scanner.scan().single().let { it.project to it.desktop })
     }
 
-    private fun environment(vararg dirs: String, sidechain: Boolean = false) =
-        """{"parentUuid":"p","isSidechain":$sidechain,"attachment":{"type":"environment","snapshot":{"workingDirectory":"E:\\dev\\projects\\rtm-cloud",""" +
+    private fun environment(vararg dirs: String, sidechain: Boolean = false, workDir: String = "E:\\dev\\projects\\rtm-cloud") =
+        """{"parentUuid":"p","isSidechain":$sidechain,"attachment":{"type":"environment","snapshot":{"workingDirectory":"${workDir.replace("\\", "\\\\")}",""" +
             """"additionalWorkingDirectories":[${dirs.joinToString(",") { "\"${it.replace("\\", "\\\\")}\"" }}]}},"type":"attachment",$cwdLine,"sessionId":"s1"}"""
 
     @Test
@@ -77,6 +77,26 @@ class ClaudeSessionScannerTest {
         assertEquals(listOf(Path.of("E:\\plans")), scanner.scan().single().addedDirs)
         file.appendText(environment() + "\n")
         assertEquals(emptyList(), scanner.scan().single().addedDirs)
+    }
+
+    private fun firstLine(branch: String) =
+        """{"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":"prompt"},$cwdLine,"gitBranch":"$branch","sessionId":"s1","timestamp":"2026-10-24T09:00:00Z"}"""
+
+    @Test
+    fun `a session works where its latest environment snapshot says, and started on the branch of its first line`() {
+        val start = Path.of("E:\\dev\\projects\\rtm-cloud")
+        val worktree = "E:\\dev\\projects\\rtm-cloud\\.claude\\worktrees\\x"
+        val file = write("s1", firstLine("main"))
+        val scanner = ClaudeSessionScanner(dir)
+        assertEquals(listOf(start, start, "main"), scanner.scan().single().let { listOf(it.cwd, it.workDir, it.startBranch) })
+        file.appendText(environment(workDir = worktree) + "\n" + environment(sidechain = true, workDir = "E:\\other") + "\n")
+        assertEquals(listOf(start, Path.of(worktree), "main"), scanner.scan().single().let { listOf(it.cwd, it.workDir, it.startBranch) })
+    }
+
+    @Test
+    fun `a session started without a branch checked out has no start branch`() {
+        write("s1", firstLine("HEAD"))
+        assertEquals(null, ClaudeSessionScanner(dir).scan().single().startBranch)
     }
 
     private fun quoted(names: List<String>) = names.joinToString(",") { "\"$it\"" }

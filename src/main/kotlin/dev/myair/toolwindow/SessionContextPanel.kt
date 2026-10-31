@@ -86,6 +86,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     /** The session the pane shows and the git state last read for it. */
     private var shownId: String? = null
     private var git: Result<GitState?>? = null
+    /** The folder the session works in, as [contextOf] takes it, read with [git]: null until read. */
+    private var workTree: Path? = null
     /** The branch checked out in each added directory, null outside a repository, read with [git]. */
     private var addedBranches: Map<Path, Result<String?>> = emptyMap()
     /** The session and its live entry [git] was read for: notifications about other sessions read nothing again. */
@@ -129,6 +131,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val id = tab?.sessionId
         if (id != shownId) {
             git = null
+            workTree = null
             addedBranches = emptyMap()
             readFor = null
             fullLists.clear()
@@ -138,15 +141,17 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         render()
         val session = service.sessions.firstOrNull { it.id == id } ?: return
         val key = session to service.live[session.id]
-        if (!isShowing || key == readFor || !session.cwd.exists()) return
+        if (!isShowing || key == readFor || !session.workDir.exists()) return
         readFor = key
         val read = ++reads
         gitReader.execute {
-            val state = runCatching { Git.state(session.cwd) }
+            val state = runCatching { Git.state(session.workDir) }
+            val tree = state.getOrNull()?.let { workTreeOf(session.cwd, session.workDir, it.root) } ?: session.cwd
             val branches = session.addedDirs.associateWith { runCatching { if (it.exists()) Git.branchOf(it) else null } }
             ApplicationManager.getApplication().invokeLater({
                 if (read == reads) {
                     git = state
+                    workTree = tree
                     addedBranches = branches
                     render()
                 }
@@ -161,7 +166,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     private fun render(force: Boolean = false) {
         val id = shownId
         val session = service.sessions.firstOrNull { it.id == id }
-        val context = session?.let { contextOf(it, it.cwd.exists(), it.id in service.live, git?.getOrNull()) }
+        val context = session?.let { contextOf(it, it.workDir.exists(), it.id in service.live, git?.getOrNull(), workTree ?: it.cwd) }
         val shown = listOf(
             id, context, context?.let { shortAge(it.lastMessage, Instant.now()) }, git, addedBranches, fullLists.toSet(), skills.toMap(),
         )
@@ -207,6 +212,12 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     }
                     cell(ShrinkingLine(listOfNotNull(JBLabel(git.branch), base?.let { commentLabel(" → ") }, base))).shrinkable()
                 }
+            }
+            if (context.startedIn != null || context.startBranch != null) row {
+                // Where it was before EnterWorktree or a checkout moved it.
+                val where = context.startedIn?.let { " in " + if (it == context.projectPath) context.project else fileLabel(it, context.projectPath) }
+                comment("Started" + where.orEmpty() + context.startBranch?.let { " on $it" }.orEmpty())
+                    .applyToComponent { toolTipText = context.startedIn?.toString() }.shrinkable()
             }
             if (context.desktop) row { comment("Runs in Claude Desktop") }
             if (!context.cwdExists) row { comment("Folder no longer exists") }
