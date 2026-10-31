@@ -36,6 +36,15 @@ class SessionContextTest {
     }
 
     @Test
+    fun `pinned skills leave their groups and keep the listing's order, pins of skills the session lacks are ignored`() {
+        val skills = listOf("tdd", "superpowers:brainstorming", "pstack:how", "init")
+        assertEquals(
+            listOf("superpowers:brainstorming", "init") to listOf(NO_PLUGIN to listOf("tdd"), "pstack" to listOf("pstack:how")),
+            skillSections(skills, setOf("init", "superpowers:brainstorming", "absent")),
+        )
+    }
+
+    @Test
     fun `an update is told only when the marketplace names a version, and the date it was checked when there is none`() {
         val origin = SkillOrigin("pstack@market", null, "1.15.0", "1.15.0", Instant.parse("2026-10-18T23:30:00Z"))
         assertEquals("up to date as of 2026-10-19", updateState(origin, ZoneOffset.ofHours(2)))

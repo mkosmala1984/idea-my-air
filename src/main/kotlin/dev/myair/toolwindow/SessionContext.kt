@@ -67,6 +67,10 @@ fun skillGroups(skills: List<String>): List<Pair<String, List<String>>> = skills
     .groupBy { if (':' in it) it.substringBeforeLast(':') else NO_PLUGIN }
     .toList().sortedWith(compareBy({ it.first != NO_PLUGIN }, { it.first }))
 
+/** The [pinned] ones of [skills] in the listing's order, shown above every group, and the [skillGroups] of the rest. */
+fun skillSections(skills: List<String>, pinned: Set<String>): Pair<List<String>, List<Pair<String, List<String>>>> =
+    skills.partition { it in pinned }.let { (pins, rest) -> pins to skillGroups(rest) }
+
 /** Whether [origin] has an update, as its marketplace told at its last refresh; null when it does not tell. */
 fun updateState(origin: SkillOrigin, zone: ZoneId): String? = when (origin.latest) {
     null -> null
