@@ -1,6 +1,7 @@
 package dev.myair.toolwindow
 
 import com.intellij.icons.AllIcons
+import com.intellij.ide.RecentProjectIconHelper
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.ColoredTreeCellRenderer
@@ -52,6 +53,14 @@ fun tooltipLines(session: ClaudeSession, live: LiveSession?, unread: Boolean, se
 
 private const val PROMPT_CHARS = 200
 
+private val projectIcons = RecentProjectIconHelper()
+
+/**
+ * The icon the Welcome screen and Air give the project at [dir]: its `.idea/icon.svg`, else [name]'s initials on a colour
+ * picked from the path. The helper caches it per path.
+ */
+private fun projectIcon(dir: Path, name: String) = projectIcons.getProjectIcon(dir, true, 16, name)
+
 /**
  * A session's row in the tree and in the pinned list: status icon, title and task count; [SessionTrailer] adds the age. The
  * tree shows the status as [dots], the pinned list as the tab icons. [projectInRow] names the session's project after
@@ -99,7 +108,7 @@ class SessionRenderer(
         toolTipText = null
         when (val item = node.userObject) {
             is Folder -> {
-                icon = if (item.project == null) AllIcons.Nodes.Folder else AllIcons.Nodes.Module
+                icon = item.project?.let { projectIcon(Path.of(it), item.name) } ?: AllIcons.Nodes.Folder
                 append(item.name)
                 item.project?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
             }
@@ -112,8 +121,8 @@ class SessionRenderer(
                 append(item.toString(), SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
             }
             is Path -> {
-                icon = AllIcons.Nodes.Folder
-                append(item.fileName?.toString() ?: item.toString())
+                icon = projectIcon(item, projectName(item))
+                append(projectName(item))
                 append("  $item", SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
             // Among recent sessions, which mix every project, the row names the project; in a folder not bound to it the tooltip does.
