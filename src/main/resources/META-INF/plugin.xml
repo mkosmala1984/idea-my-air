@@ -59,6 +59,10 @@
       <add-to-group group-id="ToolsMenu" anchor="last"/>
       <keyboard-shortcut keymap="$default" first-keystroke="alt shift K"/>
     </action>
+    <action id="dev.myair.CloseAndSettle" class="dev.myair.editor.CloseAndSettleAction" text="Close and Settle"
+            description="Close the session tab, ending its claude, and mark the session settled" icon="AllIcons.Actions.Checked">
+      <add-to-group group-id="CloseEditorsGroup" anchor="after" relative-to-action="CloseContent"/>
+    </action>
     <group id="dev.myair.MainToolbar">
       <reference ref="dev.myair.NewSessionWithPrompt"/>
       <reference ref="dev.myair.NewClaudeSession"/>
