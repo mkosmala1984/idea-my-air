@@ -50,6 +50,40 @@ class ContextCard(content: JComponent) : JPanel(BorderLayout()) {
 fun <T : JComponent> Cell<T>.shrinkable(): Cell<T> =
     resizableColumn().align(AlignX.LEFT).applyToComponent { minimumSize = Dimension(0, minimumSize.height) }
 
+/** A label in the grey of a DSL comment. */
+fun commentLabel(text: String) = JBLabel(text).apply { foreground = JBUI.CurrentTheme.ContextHelp.FOREGROUND }
+
+/**
+ * [parts] side by side at their preferred widths. Short of width, the last gives way first, down to nothing, then the
+ * one before it; a label or link that gives way ends in an ellipsis.
+ */
+class ShrinkingLine(parts: List<JComponent>) : JPanel(null) {
+    init {
+        isOpaque = false
+        parts.forEach(::add)
+    }
+
+    override fun getPreferredSize() = Dimension(components.sumOf { it.preferredSize.width }, components.maxOf { it.preferredSize.height })
+
+    override fun getMinimumSize() = Dimension(0, preferredSize.height)
+
+    override fun doLayout() {
+        val widths = components.map { it.preferredSize.width }.toIntArray()
+        var excess = widths.sum() - width
+        for (i in widths.indices.reversed()) {
+            val cut = minOf(maxOf(excess, 0), widths[i])
+            widths[i] -= cut
+            excess -= cut
+        }
+        var x = 0
+        components.forEachIndexed { i, part ->
+            val h = part.preferredSize.height
+            part.setBounds(x, (height - h) / 2, widths[i], h)
+            x += widths[i]
+        }
+    }
+}
+
 /** A small grey rounded label: the model and effort under a session's title. */
 class Chip(text: String) : JBLabel(text) {
     init {
