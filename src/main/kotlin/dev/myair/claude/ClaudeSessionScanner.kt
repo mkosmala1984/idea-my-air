@@ -51,8 +51,12 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             val transcript = if (known != null && known.offset == size) known else read(file, known ?: Transcript.EMPTY)
             if (transcript != known) unsaved = true
             cache[file] = transcript
-            transcript.toSession(file, desktopProjects[file.nameWithoutExtension])
-        }.sortedByDescending { it.lastMessage }
+            transcript.toSession(file, desktopProjects[file.nameWithoutExtension])?.let { it to transcript.offset }
+        }
+            // `claude --resume` from another folder, as after EnterWorktree, copies the transcript into that folder's
+            // project directory and writes on in one of the copies: the one with the latest message, else the longest, is the session.
+            .groupBy { it.first.id }.values.map { copies -> copies.maxWith(compareBy({ it.first.lastMessage }, { it.second })).first }
+            .sortedByDescending { it.lastMessage }
         // Live sessions append every second; after a crash, a minute of lines is cheap to read again.
         if (saved != null && System.currentTimeMillis() - savedAt >= SAVE_INTERVAL_MS) save()
         return sessions
