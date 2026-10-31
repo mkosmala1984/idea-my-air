@@ -128,7 +128,8 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         val offset: Long, val customTitle: String?, val aiTitle: String?, val cwd: String?, val prompts: List<String>,
         val changedFiles: List<String>, val lastMessage: Instant?, val brief: Brief?, val briefCalls: Map<String, BriefCall>,
         val addedDirs: List<String>, val model: String?, val effort: String?, val artifacts: Map<String, Artifact>,
-        val shellCalls: Map<String, ShellCall>, val background: Map<String, BackgroundTask>,
+        val shellCalls: Map<String, ShellCall>, val background: Map<String, BackgroundTask>, val skills: List<String>,
+        val mcpTools: List<String>,
     ) {
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
         fun toSession(file: Path, desktopProject: Path? = null): ClaudeSession? {
@@ -138,12 +139,15 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             return ClaudeSession(
                 file.nameWithoutExtension, cwd, title, lastMessage, changedFiles.map(Path::of), prompts, brief, desktopProject ?: cwd,
                 desktop = desktopProject != null, addedDirs = addedDirs.map(Path::of).filter { it != cwd }, model = model, effort = effort,
-                artifacts = artifacts.values.toList(), background = background.values.toList(),
+                artifacts = artifacts.values.toList(), background = background.values.toList(), skills = skills, mcpServers = mcpServers(mcpTools),
             )
         }
 
         companion object {
-            val EMPTY = Transcript(0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList(), null, null, emptyMap(), emptyMap(), emptyMap())
+            val EMPTY = Transcript(
+                0, null, null, null, emptyList(), emptyList(), null, null, emptyMap(), emptyList(), null, null, emptyMap(), emptyMap(), emptyMap(),
+                emptyList(), emptyList(),
+            )
         }
     }
 
@@ -203,6 +207,13 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         /** The attachment `claude` writes with the session's environment: cwd, worktree, the directories added to it. */
         private const val ENVIRONMENT = "\"attachment\":{\"type\":\"environment\",\"snapshot\":"
 
+        /** The attachment listing the skills: all of them at the start (`isInitial`), the ones added later after it. */
+        private const val SKILL_LISTING = "\"attachment\":{\"type\":\"skill_listing\""
+
+        /** The attachment naming the deferred tools added and removed, MCP ones among them, as servers connect and go. */
+        private const val DEFERRED_TOOLS = "\"attachment\":{\"type\":\"deferred_tools_delta\""
+        private const val MCP_TOOL = "mcp__"
+
         fun parse(file: Path): ClaudeSession? = read(file, Transcript.EMPTY).toSession(file)
 
         /** Continues [from] with the complete lines after its offset; a line still being written is left for the next read. */
@@ -223,7 +234,22 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             // By tool_use id: shell and monitor calls whose result has not told yet whether they went to the background.
             val shellCalls = HashMap(from.shellCalls)
             val background = LinkedHashMap(from.background)
+            var skills = from.skills
+            val mcpTools = LinkedHashSet(from.mcpTools)
             val offset = forEachCompleteLine(file, from.offset) { line ->
+                if (SKILL_LISTING in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
+                    val listing = o.getAsJsonObject("attachment")
+                    val names = checkNotNull(listing.getAsJsonArray("names")) { "skill listing without names: $file" }.map { it.asString }
+                    val initial = checkNotNull(listing["isInitial"]) { "skill listing without isInitial: $file" }.asBoolean
+                    skills = if (initial) names else (skills + names).distinct()
+                }
+                if (DEFERRED_TOOLS in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
+                    val delta = o.getAsJsonObject("attachment")
+                    fun names(key: String) = checkNotNull(delta.getAsJsonArray(key)) { "deferred tools delta without $key: $file" }
+                        .map { it.asString }.filter { it.startsWith(MCP_TOOL) }
+                    mcpTools -= names("removedNames").toSet()
+                    mcpTools += names("addedNames")
+                }
                 // Outside the `when` below: the line also carries a cwd.
                 if (ENVIRONMENT in line) json(line).takeIf { it["isSidechain"]?.asBoolean != true }?.let { o ->
                     val snapshot = o.getAsJsonObject("attachment").getAsJsonObject("snapshot")
@@ -325,7 +351,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                     }
                 }
             }
-            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs, model, effort, artifacts, shellCalls, background)
+            return Transcript(offset, customTitle, aiTitle, cwd, prompts, changedFiles.toList(), lastMessage, brief, briefCalls, addedDirs, model, effort, artifacts, shellCalls, background, skills, mcpTools.toList())
         }
 
         /** A message of the main conversation: its [time], and for a reply of the model the [model] and [effort] it ran with. */

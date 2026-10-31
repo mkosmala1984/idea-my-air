@@ -6,6 +6,7 @@ import dev.myair.claude.Brief
 import dev.myair.claude.BriefTask
 import dev.myair.claude.TaskStatus
 import dev.myair.claude.ClaudeSession
+import dev.myair.claude.SkillOrigin
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import java.time.Duration
@@ -18,6 +19,26 @@ class SessionContextTest {
 
     private fun session(cwd: Path, changedFiles: List<Path> = emptyList()) =
         ClaudeSession("s1", cwd, "title", Instant.EPOCH, changedFiles, emptyList(), project = main)
+
+    @Test
+    fun `skills are grouped by their plugin, those of none first, each keeping the listing's order`() {
+        val skills = listOf("tdd", "superpowers:brainstorming", "pstack:how", "init", "superpowers:writing-plans")
+        assertEquals(
+            listOf(
+                NO_PLUGIN to listOf("tdd", "init"), "pstack" to listOf("pstack:how"),
+                "superpowers" to listOf("superpowers:brainstorming", "superpowers:writing-plans"),
+            ),
+            skillGroups(skills),
+        )
+    }
+
+    @Test
+    fun `an update is told only when the marketplace names a version, and the date it was checked when there is none`() {
+        val origin = SkillOrigin("pstack@market", null, "1.15.0", "1.15.0", Instant.parse("2026-10-18T23:30:00Z"))
+        assertEquals("up to date as of 2026-10-19", updateState(origin, ZoneOffset.ofHours(2)))
+        assertEquals("update available: 1.15.0 → 1.16.0", updateState(origin.copy(latest = "1.16.0"), ZoneOffset.UTC))
+        assertEquals(null, updateState(origin.copy(latest = null), ZoneOffset.UTC))
+    }
 
     @Test
     fun `a session in a linked worktree of its project is marked as one`() {
