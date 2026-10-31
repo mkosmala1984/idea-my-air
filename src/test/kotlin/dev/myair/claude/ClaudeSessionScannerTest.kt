@@ -46,6 +46,19 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
+    fun `a transcript copied into another project directory is one session, the copy with the latest message, else the longest`() {
+        val original = write("s1", user("\"prompt\""), """{"type":"custom-title","customTitle":"Old","sessionId":"s1"}""")
+        val copy = dir.resolve("E--dev-projects-rtm-cloud--claude-worktrees-x").createDirectories().resolve("s1.jsonl")
+            .apply { writeText(original.readText()) }
+        val scanner = ClaudeSessionScanner(dir)
+        assertEquals("Old", scanner.scan().single().title)
+        original.appendText("""{"type":"custom-title","customTitle":"Longer","sessionId":"s1"}""" + "\n")
+        assertEquals("Longer", scanner.scan().single().title)
+        copy.appendText(user("\"later\"", at = "2026-10-24T11:00:00Z") + "\n" + """{"type":"custom-title","customTitle":"Later","sessionId":"s1"}""" + "\n")
+        assertEquals("Later" to Instant.parse("2026-10-24T11:00:00Z"), scanner.scan().single().let { it.title to it.lastMessage })
+    }
+
+    @Test
     fun `last ai title wins when there is no custom title`() {
         val s = parse(write("s1",
             """{"type":"ai-title","aiTitle":"Old","sessionId":"s1"}""",
