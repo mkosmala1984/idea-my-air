@@ -16,6 +16,7 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import dev.myair.claude.TaskStatus
+import dev.myair.editor.sessionIcon
 import dev.myair.folders.Folder
 import java.nio.file.Path
 import javax.swing.Icon
@@ -83,7 +84,7 @@ private fun SimpleColoredComponent.appendSession(
         else -> SimpleTextAttributes.REGULAR_ATTRIBUTES
     })
     toolTipText = tooltipLines(item, live, unread, settled, project).takeIf { it.isNotEmpty() }?.joinToString("<br>", "<html>", "</html>") { StringUtil.escapeXmlEntities(it) }
-    icon = density.grow(sessionIcon(live, unread))
+    icon = density.grow(sessionIcon(live?.status, unread))
     briefCount(item.brief)?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
     if (projectInRow) append("  ${item.cwd.fileName ?: item.cwd}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
 }

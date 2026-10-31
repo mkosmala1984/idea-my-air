@@ -37,7 +37,7 @@ class TrailerButton(val icon: Icon, val on: (ClaudeSession) -> Boolean, val togg
 /**
  * The right end of each session row in [component]: the age of its last message, replaced by [buttons] while the pointer
  * is over the row; of each group row, its [summary]. It is painted over the rows, since a tree cell renderer is only as wide as its text, and covers a title
- * running underneath it with the row's [background]. The component calls [paint] after painting itself.
+ * running underneath it with the row's [background]. The buttons' icons are as large as the [density]'s. The component calls [paint] after painting itself.
  */
 class SessionTrailer(
     private val component: JComponent,
@@ -47,6 +47,7 @@ class SessionTrailer(
     private val summary: (row: Int) -> FolderSummary?,
     private val background: (row: Int) -> Color,
     private val buttons: List<TrailerButton>,
+    private val density: () -> Density,
 ) : MouseAdapter() {
     private var pointer: Point? = null
 
@@ -111,7 +112,7 @@ class SessionTrailer(
 
     /** Right-aligned, in the order of [buttons]. */
     private fun buttonRects(r: Rectangle): List<Rectangle> {
-        val size = JBUI.scale(BUTTON)
+        val size = JBUI.scale(density().iconSize + BUTTON_PAD)
         val left = right() - buttons.size * size
         return buttons.indices.map { Rectangle(left + it * size, r.y + (r.height - size) / 2, size, size) }
     }
@@ -132,7 +133,8 @@ class SessionTrailer(
                     g.color = it
                     g.fillRoundRect(rect.x, rect.y, rect.width, rect.height, arc, arc)
                 }
-                button.icon.paintIcon(component, g, rect.x + (rect.width - button.icon.iconWidth) / 2, rect.y + (rect.height - button.icon.iconHeight) / 2)
+                val icon = density().grow(button.icon)
+                icon.paintIcon(component, g, rect.x + (rect.width - icon.iconWidth) / 2, rect.y + (rect.height - icon.iconHeight) / 2)
             }
         } else {
             val text = shortAge(session.lastMessage, Instant.now())
@@ -170,7 +172,8 @@ class SessionTrailer(
         /** Clear of the rounded corners of a selected or hovered row. */
         const val PAD = 12
         const val GAP = 8
-        const val BUTTON = 22
+        /** Around a button's icon, inside its hover background. */
+        const val BUTTON_PAD = 6
         /** Beside the room the 16 px dot icon leaves around its dot. */
         const val DOT_GAP = 2
     }

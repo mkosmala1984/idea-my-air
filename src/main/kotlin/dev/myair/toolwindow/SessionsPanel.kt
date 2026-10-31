@@ -116,7 +116,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             tree, { tree.getClosestRowForLocation(it.x, it.y) }, tree::getRowBounds,
             { (tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession },
             { folderSummary(tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode) { s -> urgencyOf(service.live[s.id], isUnread(s)) } },
-            { DefaultTreeUI.getBackground(tree, tree.getPathForRow(it), it, tree.isRowSelected(it)) ?: tree.background }, trailerButtons,
+            { DefaultTreeUI.getBackground(tree, tree.getPathForRow(it), it, tree.isRowSelected(it)) ?: tree.background }, trailerButtons, ::density,
         )
         pinned.trailer = SessionTrailer(
             pinned, pinned::locationToIndex, { pinned.getCellBounds(it, it) }, { pinned.model.getElementAt(it) }, { null },
@@ -126,7 +126,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 if (pinned.isSelectedIndex(row)) RenderingUtil.getSelectionBackground(pinned)
                 else RenderingUtil.getHoverBackground(pinned).takeIf { ListHoverListener.getHoveredIndex(pinned) == row } ?: RenderingUtil.getBackground(pinned)
             },
-            trailerButtons,
+            trailerButtons, ::density,
         )
         setContent(OnePixelSplitter(true, "dev.myair.pinnedSplitter", 0.25f).apply {
             firstComponent = ScrollPaneFactory.createScrollPane(pinned)

@@ -1,16 +1,9 @@
 package dev.myair.toolwindow
 
-import com.intellij.ui.AnimatedIcon
-import com.intellij.ui.BadgeDotProvider
-import com.intellij.ui.BadgeIcon
 import com.intellij.ui.JBColor
 import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.ui.GraphicsUtil
-import dev.myair.claude.LiveSession
-import dev.myair.claude.SessionStatus
-import dev.myair.editor.CLAUDE_GREY_ICON
-import dev.myair.editor.CLAUDE_ICON
-import dev.myair.editor.icon
+import dev.myair.editor.UNREAD_BLUE
 import java.awt.BasicStroke
 import java.awt.Component
 import java.awt.Graphics
@@ -46,28 +39,12 @@ class StatusDot(private val color: JBColor, private val ring: Boolean = false) :
     }
 }
 
-private val BLUE = JBColor(0x3574F0, 0x548AF7)
-
 val NEEDS_INPUT_DOT = StatusDot(JBColor(0xE56D17, 0xF0883E))
-val UNREAD_DOT = StatusDot(BLUE)
-val WORKING_DOT = StatusDot(BLUE, ring = true)
+val UNREAD_DOT = StatusDot(UNREAD_BLUE)
+val WORKING_DOT = StatusDot(UNREAD_BLUE, ring = true)
 
 val Urgency.dot: Icon get() = when (this) {
     Urgency.NEEDS_INPUT -> NEEDS_INPUT_DOT
     Urgency.UNREAD -> UNREAD_DOT
     Urgency.WORKING -> WORKING_DOT
-}
-
-/** An idle session with an unread reply: the asterisk with the blue dot of [UNREAD_DOT], inside its 16 px so the title stays put. */
-val UNREAD_SESSION_ICON: Icon = BadgeIcon(CLAUDE_ICON, BLUE, BadgeDotProvider(x = 0.75, y = 0.25, radius = 0.15))
-
-/**
- * A session row's one icon, its status: grey asterisk without a process, the spinner while it works, the tabs' warning
- * when it needs input, the asterisk with a blue dot when its reply is unread, else the orange asterisk.
- */
-fun sessionIcon(live: LiveSession?, unread: Boolean): Icon = when (live?.status) {
-    null -> CLAUDE_GREY_ICON
-    SessionStatus.WORKING -> AnimatedIcon.Default.INSTANCE
-    SessionStatus.NEEDS_INPUT -> SessionStatus.NEEDS_INPUT.icon
-    SessionStatus.IDLE -> if (unread) UNREAD_SESSION_ICON else CLAUDE_ICON
 }

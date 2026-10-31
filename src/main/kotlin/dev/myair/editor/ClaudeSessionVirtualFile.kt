@@ -64,13 +64,13 @@ fun tabTitle(title: String, sessionProject: Path, ideBase: Path) =
     if (sessionProject.isAtOrUnder(ideBase.toString())) title else "[${sessionProject.fileName ?: sessionProject}] $title"
 
 /**
- * The tab icon shows the session's status, as the rows of the Claude Sessions tool window do, followed by a branch icon
+ * The tab icon shows the session's status as its rows in the Claude Sessions tool window do ([sessionIcon]), followed by a branch icon
  * when the session runs in a worktree, that is outside its project directory (as `presetOf` tells).
  */
 class ClaudeSessionFileIconProvider : FileIconProvider, DumbAware {
     override fun getIcon(file: VirtualFile, flags: Int, project: Project?): Icon? =
         (file as? ClaudeSessionVirtualFile)?.let {
-            val status = statusIcon(it.status, it.unread) ?: AllIcons.Toolwindows.ToolWindowMessages
+            val status = sessionIcon(it.status, it.unread)
             if (it.cwd == it.project) status else RowIcon(status, AllIcons.Vcs.Branch)
         }
 }
