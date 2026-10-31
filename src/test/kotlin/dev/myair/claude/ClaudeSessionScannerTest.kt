@@ -6,6 +6,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.time.Instant
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.io.path.appendText
 import kotlin.io.path.createDirectories
 import kotlin.io.path.readText
@@ -13,6 +15,7 @@ import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -486,6 +489,36 @@ class ClaudeSessionScannerTest {
         val restarted = ClaudeSessionScanner(dir, ClaudeSessionScanner.Saved(saved, "b1")).scan().single()
         assertEquals("Old" to Instant.parse("2026-10-25T10:00:00Z"), restarted.title to restarted.lastMessage)
         assertEquals("Bad", ClaudeSessionScanner(dir, ClaudeSessionScanner.Saved(saved, "b2")).scan().single().title)
+    }
+
+    private fun jar(name: String, vararg entries: Pair<String, String>): Path = dir.resolve(name).also { jar ->
+        ZipOutputStream(Files.newOutputStream(jar)).use { zip ->
+            for ((entry, content) in entries) {
+                zip.putNextEntry(ZipEntry(entry))
+                zip.write(content.toByteArray())
+            }
+        }
+    }
+
+    @Test
+    fun `a jar's cache keeps its build while the transcript-reading classes stay, and each jar has its own file`() {
+        val scanner = "dev/myair/claude/ClaudeSessionScanner.class" to "v1"
+        val first = ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", scanner, "dev/myair/toolwindow/Panel.class" to "x"))
+        val rebuilt = ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", "dev/myair/toolwindow/Panel.class" to "y", scanner))
+        val changed = ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", "dev/myair/claude/ClaudeSessionScanner.class" to "v2"))
+        val sandbox = ClaudeSessionScanner.Saved.forJar(dir, jar("b.jar", scanner))
+        val file = write("s1", user("\"prompt\""))
+        first.write(mapOf(file to ClaudeSessionScanner.read(file, ClaudeSessionScanner.Transcript.EMPTY)))
+        assertEquals(setOf(file), rebuilt.load().keys)
+        assertEquals(emptySet<Path>(), changed.load().keys)
+        assertEquals(emptySet<Path>(), sandbox.load().keys)
+        assertEquals(first.file, rebuilt.file)
+        assertNotEquals(first.file, sandbox.file)
+    }
+
+    @Test
+    fun `a jar without transcript-reading classes is a broken build`() {
+        assertFailsWith<IllegalStateException> { ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", "dev/myair/toolwindow/Panel.class" to "x")) }
     }
 
     @Test
