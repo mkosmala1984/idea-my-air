@@ -27,30 +27,54 @@ val OUTPUT_EXTENSIONS = setOf("md", "html")
  * latest end first; [live] whether it has a process; [git] null outside a work tree and while it is being read.
  * [cwd] is the folder it works in: where it started, unless it moved to another work tree, whose root it is then.
  * [startedIn] is where it started when that is another work tree; [startBranch] the branch it started on when that is
- * not the one checked out now.
+ * not the one checked out now. [gitError]: why git could not read [cwd].
  */
 data class SessionContext(
     val title: String, val lastMessage: Instant, val model: String?, val effort: String?,
     val project: String, val projectPath: Path, val cwd: Path, val worktree: Boolean, val startedIn: Path?, val startBranch: String?,
     val desktop: Boolean,
-    val addedDirs: List<Path>, val brief: Brief?, val files: List<Path>, val outputs: List<Path>, val artifacts: List<Artifact>,
-    val background: List<BackgroundTask>, val live: Boolean, val cwdExists: Boolean, val git: GitState?,
+    val addedDirs: List<AddedDirBranch>, val brief: Brief?, val files: List<Path>, val outputs: List<Path>, val artifacts: List<Artifact>,
+    val background: List<BackgroundTask>, val live: Boolean, val cwdExists: Boolean, val git: GitState?, val gitError: String?,
     val mcpServers: List<String>, val skills: List<String>,
 )
 
+/** A directory added to a session, with the [branch] checked out in it (null outside a repository) or why git could not tell ([error]). */
+data class AddedDirBranch(val path: Path, val branch: String?, val error: String?)
+
 /**
- * [workTree]: the folder the session works in, [ClaudeSession.cwd] unless [git] was read in another work tree than the
- * one it started in. [ClaudeSession.changedFiles] keeps the order files were first written, without repeats.
+ * What git said of a session, read together: the [state] of the folder it works in, which is [workTree] ([workTreeOf]),
+ * and the branch of each directory added to it.
  */
-fun contextOf(session: ClaudeSession, cwdExists: Boolean, live: Boolean, git: GitState?, workTree: Path = session.cwd) = SessionContext(
-    session.title, session.lastMessage, session.model, session.effort,
-    (session.project.fileName ?: session.project).toString(), session.project, workTree, workTree != session.project,
-    session.cwd.takeIf { it != workTree }, session.startBranch?.takeIf { git != null && it != git.branch },
-    session.desktop, session.addedDirs, session.brief, session.changedFiles.filterNot { git != null && it.startsWith(git.root) },
-    session.changedFiles.filter { it.extension.lowercase() in OUTPUT_EXTENSIONS }.reversed(), session.artifacts,
-    session.background.sortedWith(compareBy(nullsFirst(reverseOrder())) { it.end?.time }),
-    live, cwdExists, git, session.mcpServers, session.skills,
-)
+data class GitRead(val state: Result<GitState?>, val workTree: Path, val addedBranches: Map<Path, Result<String?>>)
+
+/** [git]: null while not read. [ClaudeSession.changedFiles] keeps the order files were first written, without repeats. */
+fun contextOf(session: ClaudeSession, cwdExists: Boolean, live: Boolean, read: GitRead?): SessionContext {
+    val git = read?.state?.getOrNull()
+    val workTree = read?.workTree ?: session.cwd
+    return SessionContext(
+        session.title, session.lastMessage, session.model, session.effort,
+        (session.project.fileName ?: session.project).toString(), session.project, workTree, workTree != session.project,
+        session.cwd.takeIf { it != workTree }, session.startBranch?.takeIf { git != null && it != git.branch },
+        session.desktop,
+        session.addedDirs.map { dir ->
+            val branch = read?.addedBranches?.get(dir)
+            AddedDirBranch(dir, branch?.getOrNull(), branch?.exceptionOrNull()?.let { it.message.orEmpty() })
+        },
+        session.brief, session.changedFiles.filterNot { git != null && it.startsWith(git.root) },
+        session.changedFiles.filter { it.extension.lowercase() in OUTPUT_EXTENSIONS }.reversed(), session.artifacts,
+        session.background.sortedWith(compareBy(nullsFirst(reverseOrder())) { it.end?.time }),
+        live, cwdExists, git, read?.state?.exceptionOrNull()?.let { it.message.orEmpty() }, session.mcpServers, session.skills,
+    )
+}
+
+/** Reads what git says of [session]'s folders, off the EDT; an added directory that is gone has no branch. */
+fun gitRead(session: ClaudeSession): GitRead {
+    val state = runCatching { Git.state(session.workDir) }
+    return GitRead(
+        state, state.getOrNull()?.let { workTreeOf(session.cwd, session.workDir, it.root) } ?: session.cwd,
+        session.addedDirs.associateWith { runCatching { if (it.exists()) Git.branchOf(it) else null } },
+    )
+}
 
 /**
  * The folder a session that started in [cwd] works in now that it is in [workDir], [root] being the root of the work

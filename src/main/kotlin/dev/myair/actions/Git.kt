@@ -3,6 +3,7 @@ package dev.myair.actions
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import kotlin.io.path.exists
+import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readBytes
 
@@ -57,6 +58,7 @@ object Git {
     fun mainRoot(dir: Path): Path = Path.of(run(dir, "rev-parse", "--path-format=absolute", "--git-common-dir").trim()).parent
 
     fun repo(dir: Path): GitRepo {
+        check(dir.isDirectory()) { "$dir is not a directory." }
         val root = mainRoot(dir)
         val local = parseBranches(run(root, "for-each-ref", "--format=%(refname)", "refs/heads"))
         val remote = parseBranches(run(root, "for-each-ref", "--format=%(refname)", "refs/remotes"))

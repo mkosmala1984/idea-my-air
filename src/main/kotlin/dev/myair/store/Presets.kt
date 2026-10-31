@@ -38,6 +38,9 @@ data class Preset(
         require(worktree || base == null) { "preset $name has a base branch without a worktree" }
     }
 
+    /** The directory its sessions start in: [project], else [ideBase], the IDE project's. */
+    fun dir(ideBase: Path): Path = project?.let(Path::of) ?: ideBase
+
     /**
      * The `claude` arguments it adds to `--session-id`, ending with [prompt], the session's first message. It follows
      * `--`: `--add-dir` takes every argument after it, and a prompt naming a subcommand (`mcp`) would run that instead.

@@ -36,6 +36,8 @@ import dev.myair.actions.recentBases
 import dev.myair.actions.startPreset
 import dev.myair.actions.summary
 import dev.myair.editor.projectBase
+import dev.myair.service.LatestRead
+import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.store.EFFORTS
 import dev.myair.store.PresetStore
 import java.awt.BasicStroke
@@ -57,7 +59,6 @@ import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.event.DocumentEvent
-import kotlin.io.path.isDirectory
 
 private val CLAUDE_ICON = IconLoader.getIcon("/icons/claude.svg", PromptPanel::class.java)
 
@@ -95,8 +96,14 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
     private var repo: Result<Repo>? = null
     private var base: String? = null
 
-    /** The directory whose repository [repo] holds or is being read; a read for another one is dropped. */
-    private var repoOf: Path? = null
+    /** Reads the repository of a configuration's directory into [repo], keeping the base while it is among its branches. */
+    private val repoReads = LatestRead.onPool<Path, Repo>(
+        AppExecutorUtil.getAppExecutorService(), { ModalityState.stateForComponent(this) }, { Repo(Git.repo(it), Git.currentBranch(it)) },
+    ) { _, read ->
+        repo = read
+        read.getOrNull()?.let { base = base?.takeIf { b -> b in it.git.branches } ?: choicesOf(it).let { c -> c.items[c.selected] } }
+        update(choice)
+    }
 
     private val presetChip = Chip(AllIcons.Actions.Lightning) { chip ->
         choose(chip, presets, choice.preset, { it.name }, { it.summary() }) { selectPreset(choiceOf(it)) }
@@ -170,20 +177,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
         repo = null
         base = wanted
         update(new)
-        val dir = new.preset.project?.let(Path::of) ?: projectBase(project)
-        repoOf = dir
-        ApplicationManager.getApplication().executeOnPooledThread {
-            val read = runCatching {
-                check(dir.isDirectory()) { "$dir is not a directory." }
-                Repo(Git.repo(dir), Git.currentBranch(dir))
-            }
-            ApplicationManager.getApplication().invokeLater({
-                if (repoOf != dir) return@invokeLater
-                repo = read
-                read.getOrNull()?.let { base = base?.takeIf { b -> b in it.git.branches } ?: choicesOf(it).let { c -> c.items[c.selected] } }
-                update(choice)
-            }, ModalityState.stateForComponent(this))
-        }
+        repoReads.request(new.preset.dir(projectBase(project)))
     }
 
     private fun update(new: Choice) {

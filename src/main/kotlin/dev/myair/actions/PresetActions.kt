@@ -27,7 +27,7 @@ import kotlin.io.path.isDirectory
 
 /** Starts a session as [preset] says, with [prompt] as its first message; a missing directory is reported instead. */
 fun startPreset(project: Project, preset: Preset, where: RelativePoint, prompt: String? = null) {
-    val dir = preset.project?.let(Path::of) ?: projectBase(project)
+    val dir = preset.dir(projectBase(project))
     val missing = (listOf(dir) + preset.addDirs.map(Path::of)).filterNot { it.isDirectory() }
     if (missing.isNotEmpty()) return Messages.showErrorDialog(project, "Directories of \"${preset.name}\" no longer exist:\n${missing.joinToString("\n")}", "Cannot Start Session")
     if (preset.worktree) startInWorktree(project, dir, preset.base, preset.claudeArgs(prompt), where)

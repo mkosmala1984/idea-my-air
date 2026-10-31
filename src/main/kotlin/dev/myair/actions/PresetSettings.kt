@@ -2,7 +2,6 @@ package dev.myair.actions
 
 import com.intellij.ide.DataManager
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.ui.DialogWrapper
@@ -27,6 +26,8 @@ import com.intellij.util.ui.AvatarIcon
 import com.intellij.util.ui.AvatarPalette
 import com.intellij.util.ui.UIUtil
 import dev.myair.editor.projectBase
+import dev.myair.service.LatestRead
+import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.store.EFFORTS
 import dev.myair.store.Preset
 import java.awt.event.MouseEvent
@@ -34,7 +35,6 @@ import java.nio.file.Path
 import javax.swing.JLabel
 import javax.swing.JList
 import javax.swing.event.DocumentEvent
-import kotlin.io.path.isDirectory
 
 /** The presets list of Settings › Tools › My Air: add, edit, remove and reorder, each edit in a [PresetDialog]. */
 class PresetsEditor {
@@ -108,8 +108,9 @@ class PresetDialog(
     private val branches = CollectionComboBoxModel(listOfNotNull(preset?.base).toMutableList())
     private lateinit var branchStatus: JLabel
 
-    /** The directory whose branches the list shows or is reading; a read for another one is dropped. */
-    private var branchesOf: Path? = null
+    private val branchReads = LatestRead.onPool<Path, GitRepo>(
+        AppExecutorUtil.getAppExecutorService(), { ModalityState.stateForComponent(contentPane) }, Git::repo,
+    ) { _, repo -> showBranches(repo) }
     private var addDirs = preset?.addDirs.orEmpty().joinToString("\n")
     private var pinned = preset?.pinned ?: false
 
@@ -166,16 +167,12 @@ class PresetDialog(
     /** Fills the branch list from the repository of [projectText], or of [ideBase] when it is empty, off the EDT. */
     private fun loadBranches(projectText: String) {
         val dir = projectText.trim().takeIf { it.isNotEmpty() }?.let(Path::of) ?: ideBase
-        branchesOf = dir
-        if (dir == null) return showBranches(Result.failure(IllegalStateException("Choose a project to list its branches.")))
-        branchStatus.text = "Reading branches of $dir..."
-        ApplicationManager.getApplication().executeOnPooledThread {
-            val repo = runCatching {
-                check(dir.isDirectory()) { "$dir is not a directory." }
-                Git.repo(dir)
-            }
-            ApplicationManager.getApplication().invokeLater({ if (branchesOf == dir) showBranches(repo) }, ModalityState.stateForComponent(contentPane))
+        if (dir == null) {
+            branchReads.forget()
+            return showBranches(Result.failure(IllegalStateException("Choose a project to list its branches.")))
         }
+        branchStatus.text = "Reading branches of $dir..."
+        branchReads.request(dir)
     }
 
     /** The branches of [repo], keeping the chosen one when it is among them, else the default; a failure empties the list. */

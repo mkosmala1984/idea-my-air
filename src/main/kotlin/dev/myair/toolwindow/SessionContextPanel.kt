@@ -6,7 +6,6 @@ import com.intellij.ide.util.PropertiesComponent
 import com.intellij.ui.InplaceButton
 import dev.myair.editor.ClaudeSessionEditor
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
@@ -45,6 +44,8 @@ import dev.myair.actions.status
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.treeStructure.Tree
 import dev.myair.claude.BackgroundTask
+import dev.myair.claude.ClaudeSession
+import dev.myair.claude.LiveSession
 import dev.myair.claude.SkillFiles
 import dev.myair.claude.TaskStatus
 import dev.myair.claude.skillFiles
@@ -60,6 +61,7 @@ import javax.swing.tree.TreePath
 import kotlin.io.path.name
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.service.LatestRead
 import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import java.awt.BorderLayout
 import java.awt.Cursor
@@ -85,18 +87,19 @@ import kotlin.io.path.exists
 class SessionContextPanel(private val project: Project, parent: Disposable) : JPanel(BorderLayout()), Scrollable {
     private val service = ClaudeSessionsService.getInstance()
     private var shownTab: ClaudeSessionVirtualFile? = null
-    /** The session the pane shows and the git state last read for it. */
+    /** The session the pane shows and what git last said of it. */
     private var shownId: String? = null
-    private var git: Result<GitState?>? = null
-    /** The folder the session works in, as [contextOf] takes it, read with [git]: null until read. */
-    private var workTree: Path? = null
-    /** The branch checked out in each added directory, null outside a repository, read with [git]. */
-    private var addedBranches: Map<Path, Result<String?>> = emptyMap()
-    /** The session and its live entry [git] was read for: notifications about other sessions read nothing again. */
-    private var readFor: Any? = null
-    /** Counts reads, so only the latest one lands. */
-    private var reads = 0
-    private val gitReader = AppExecutorUtil.createBoundedApplicationPoolExecutor("Session context git", 1)
+    private var git: GitRead? = null
+    /**
+     * Keyed by the session and its live entry, so notifications about other sessions read nothing again; on one thread,
+     * so reads never pile up.
+     */
+    private val gitReads = LatestRead.onPool<Pair<ClaudeSession, LiveSession?>, GitRead>(
+        AppExecutorUtil.createBoundedApplicationPoolExecutor("Session context git", 1), { ModalityState.any() }, { gitRead(it.first) },
+    ) { _, read ->
+        git = read.getOrThrow()
+        render()
+    }
     /** The lists showing all their rows, by section; the others show [FILES_SHOWN]. */
     private val fullLists = HashSet<String>()
     /** The opened skills by the session's folder and name, with their files once read (null while reading). */
@@ -133,9 +136,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val id = tab?.sessionId
         if (id != shownId) {
             git = null
-            workTree = null
-            addedBranches = emptyMap()
-            readFor = null
+            gitReads.forget()
             fullLists.clear()
         }
         shownTab = tab
@@ -143,22 +144,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         render()
         val session = service.sessions.firstOrNull { it.id == id } ?: return
         val key = session to service.live[session.id]
-        if (!isShowing || key == readFor || !session.workDir.exists()) return
-        readFor = key
-        val read = ++reads
-        gitReader.execute {
-            val state = runCatching { Git.state(session.workDir) }
-            val tree = state.getOrNull()?.let { workTreeOf(session.cwd, session.workDir, it.root) } ?: session.cwd
-            val branches = session.addedDirs.associateWith { runCatching { if (it.exists()) Git.branchOf(it) else null } }
-            ApplicationManager.getApplication().invokeLater({
-                if (read == reads) {
-                    git = state
-                    workTree = tree
-                    addedBranches = branches
-                    render()
-                }
-            }, ModalityState.any())
-        }
+        if (isShowing && key != gitReads.asked && session.workDir.exists()) gitReads.request(key)
     }
 
     /**
@@ -168,11 +154,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     private fun render(force: Boolean = false) {
         val id = shownId
         val session = service.sessions.firstOrNull { it.id == id }
-        val context = session?.let { contextOf(it, it.workDir.exists(), it.id in service.live, git?.getOrNull(), workTree ?: it.cwd) }
-        val shown = listOf(
-            id, context, context?.let { shortAge(it.lastMessage, Instant.now()) }, git, addedBranches, fullLists.toSet(), skills.toMap(),
-            pinnedSkills(),
-        )
+        val context = session?.let { contextOf(it, it.workDir.exists(), it.id in service.live, git) }
+        val shown = listOf(id, context, context?.let { shortAge(it.lastMessage, Instant.now()) }, fullLists.toSet(), skills.toMap(), pinnedSkills())
         if (!force && shown == rendered) return
         rendered = shown
         val content = when {
@@ -225,18 +208,15 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             if (context.desktop) row { comment("Runs in Claude Desktop") }
             if (!context.cwdExists) row { comment("Folder no longer exists") }
             for (dir in context.addedDirs) {
-                val branch = addedBranches[dir]
                 row {
-                    val name = branch?.getOrNull()
-                    icon(if (name == null) AllIcons.Nodes.Folder else AllIcons.Vcs.Branch)
-                    name?.let { label(it) }
-                    comment(dir.toString()).shrinkable()
+                    icon(if (dir.branch == null) AllIcons.Nodes.Folder else AllIcons.Vcs.Branch)
+                    dir.branch?.let { label(it) }
+                    comment(dir.path.toString()).shrinkable()
                 }
-                branch?.exceptionOrNull()?.let { row { comment(it.message.orEmpty()) } }
+                dir.error?.let { row { comment(it) } }
             }
         }
-        val failure = git?.exceptionOrNull()
-        if (failure != null) card("Changes vs base") { row { comment(failure.message.orEmpty()) } }
+        if (context.gitError != null) card("Changes vs base") { row { comment(context.gitError) } }
         else context.git?.let { git ->
             card("Changes vs base") {
                 val changes = git.changes
@@ -466,7 +446,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             val choices = BaseChoices(bases, bases.size, bases.size, bases.indexOf(git.base).coerceAtLeast(0))
             basePopup("Base Branch of ${git.branch}", choices) { base ->
                 background(project, "Setting base branch", { Git.setBase(git.root, git.branch, base) }) {
-                    readFor = null
+                    gitReads.forget()
                     update()
                 }
             }.show(under)

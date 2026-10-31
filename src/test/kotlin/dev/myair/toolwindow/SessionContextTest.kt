@@ -54,9 +54,9 @@ class SessionContextTest {
 
     @Test
     fun `a session in a linked worktree of its project is marked as one`() {
-        val context = contextOf(session(main.resolve(".claude/worktrees/x")), cwdExists = true, live = false, git = null)
+        val context = contextOf(session(main.resolve(".claude/worktrees/x")), cwdExists = true, live = false, read = null)
         assertEquals("my-air" to true, context.project to context.worktree)
-        assertEquals(false, contextOf(session(main), cwdExists = true, live = false, git = null).worktree)
+        assertEquals(false, contextOf(session(main), cwdExists = true, live = false, read = null).worktree)
     }
 
     @Test
@@ -64,12 +64,12 @@ class SessionContextTest {
         val worktree = main.resolve(".claude/worktrees/x")
         val started = session(main).copy(workDir = worktree, startBranch = "main")
         val git = GitState("worktree-x", false, worktree, "main", true, null, emptyList(), null)
-        val moved = contextOf(started, cwdExists = true, live = false, git = git, workTree = worktree)
+        val moved = contextOf(started, cwdExists = true, live = false, read = GitRead(Result.success(git), worktree, emptyMap()))
         assertEquals(listOf(worktree, true, main, "main"), listOf(moved.cwd, moved.worktree, moved.startedIn, moved.startBranch))
-        val stayed = contextOf(started, cwdExists = true, live = false, git = git.copy(branch = "main", root = main))
+        val stayed = contextOf(started, cwdExists = true, live = false, read = GitRead(Result.success(git.copy(branch = "main", root = main)), main, emptyMap()))
         assertEquals(listOf(main, false, null, null), listOf(stayed.cwd, stayed.worktree, stayed.startedIn, stayed.startBranch))
         // Before git is read the branch now is unknown, so no start branch is told.
-        assertEquals(null, contextOf(started, cwdExists = true, live = false, git = null).startBranch)
+        assertEquals(null, contextOf(started, cwdExists = true, live = false, read = null).startBranch)
     }
 
     @Test
@@ -90,12 +90,30 @@ class SessionContextTest {
     }
 
     @Test
+    fun `a git failure is told instead of changes, and each added directory has its branch or why git could not tell`() {
+        val plans = Path.of("E:/plans")
+        val docs = Path.of("E:/docs")
+        val gone = Path.of("E:/gone")
+        val session = session(main).copy(addedDirs = listOf(plans, docs, gone))
+        val read = GitRead(
+            Result.failure(IllegalStateException("git: not a work tree")), main,
+            mapOf(plans to Result.success("main"), docs to Result.failure(IllegalStateException("git: broken")), gone to Result.success(null)),
+        )
+        val context = contextOf(session, cwdExists = true, live = false, read = read)
+        assertEquals("git: not a work tree" to null, context.gitError to context.git)
+        assertEquals(listOf(AddedDirBranch(plans, "main", null), AddedDirBranch(docs, null, "git: broken"), AddedDirBranch(gone, null, null)), context.addedDirs)
+        val unread = contextOf(session, cwdExists = true, live = false, read = null)
+        assertEquals(null, unread.gitError)
+        assertEquals(listOf(AddedDirBranch(plans, null, null), AddedDirBranch(docs, null, null), AddedDirBranch(gone, null, null)), unread.addedDirs)
+    }
+
+    @Test
     fun `outputs are the markdown and html files written, the newest first`() {
         val plan = main.resolve("docs/superpowers/plans/p.md")
         val description = Path.of("C:/tmp/scratch/pr-description.MD")
         val page = Path.of("C:/tmp/scratch/board.html")
         val written = listOf(plan, main.resolve("src/A.kt"), page, description)
-        assertEquals(listOf(description, page, plan), contextOf(session(main, written), cwdExists = true, live = false, git = null).outputs)
+        assertEquals(listOf(description, page, plan), contextOf(session(main, written), cwdExists = true, live = false, read = null).outputs)
     }
 
     @Test
@@ -104,8 +122,8 @@ class SessionContextTest {
         val outside = Path.of("C:/Users/me/.claude/scripts/s.mjs")
         val written = session(main, listOf(inside, outside))
         val git = GitState("main", false, main, "origin/main", true, null, emptyList(), null)
-        assertEquals(listOf(outside), contextOf(written, cwdExists = true, live = false, git = git).files)
-        assertEquals(listOf(inside, outside), contextOf(written, cwdExists = true, live = false, git = null).files)
+        assertEquals(listOf(outside), contextOf(written, cwdExists = true, live = false, read = GitRead(Result.success(git), main, emptyMap())).files)
+        assertEquals(listOf(inside, outside), contextOf(written, cwdExists = true, live = false, read = null).files)
     }
 
     @Test
@@ -127,7 +145,7 @@ class SessionContextTest {
             task("old", BackgroundTask.Status.COMPLETED, "2026-10-24T10:03:00Z"), task("r1"),
             task("new", BackgroundTask.Status.FAILED, "2026-10-24T10:09:00Z"), task("r2"),
         )
-        val context = contextOf(session(main).copy(background = tasks), cwdExists = true, live = false, git = null)
+        val context = contextOf(session(main).copy(background = tasks), cwdExists = true, live = false, read = null)
         assertEquals(listOf("r1", "r2", "new", "old"), context.background.map { it.id })
     }
 
@@ -175,7 +193,7 @@ class SessionContextTest {
     fun `files are all the files written, first touch first, and the brief is the session's`() {
         val written = listOf(main.resolve("src/A.kt"), main.resolve("docs/p.md"))
         val brief = Brief("Ship it", listOf(BriefTask("Write tests", TaskStatus.COMPLETED)))
-        val context = contextOf(session(main, written).copy(brief = brief), cwdExists = true, live = false, git = null)
+        val context = contextOf(session(main, written).copy(brief = brief), cwdExists = true, live = false, read = null)
         assertEquals(written, context.files)
         assertEquals(brief, context.brief)
     }
