@@ -49,6 +49,14 @@ fun worktreePath(mainRoot: Path, setting: String, name: String): Path = mainRoot
 fun parseBranches(refs: String): List<String> = refs.lines().filter { it.isNotEmpty() && !(it.startsWith("refs/remotes/") && it.endsWith("/HEAD")) }
     .map { it.removePrefix("refs/heads/").removePrefix("refs/remotes/") }
 
+const val MAX_CONTAINED_BASES = 10
+
+/** [parseBranches] of [refs] without [branch] and its copies on remotes, the first [MAX_CONTAINED_BASES] of them. */
+fun containedBases(refs: String, branch: String): List<String> = parseBranches(
+    refs.lines().filterNot { it == "refs/heads/$branch" || it.startsWith("refs/remotes/") && it.removePrefix("refs/remotes/").substringAfter('/') == branch }
+        .joinToString("\n"),
+).take(MAX_CONTAINED_BASES)
+
 /** Copies [files], relative to [mainRoot], to the same relative paths in [worktree]. */
 fun copyIncluded(mainRoot: Path, worktree: Path, files: List<String>) {
     for (file in files) {
