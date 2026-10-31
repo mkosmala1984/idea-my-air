@@ -79,6 +79,45 @@ class ClaudeSessionScannerTest {
         assertEquals(emptyList(), scanner.scan().single().addedDirs)
     }
 
+    private fun quoted(names: List<String>) = names.joinToString(",") { "\"$it\"" }
+
+    private fun skillListing(initial: Boolean, vararg names: String) =
+        """{"parentUuid":"p","isSidechain":false,"attachment":{"type":"skill_listing","content":"- x: y","skillCount":${names.size},""" +
+            """"isInitial":$initial,"names":[${quoted(names.toList())}]},"type":"attachment",$cwdLine,"sessionId":"s1"}"""
+
+    private fun toolsDelta(added: List<String>, removed: List<String> = emptyList()) =
+        """{"parentUuid":"p","isSidechain":false,"attachment":{"type":"deferred_tools_delta","addedNames":[${quoted(added)}],"addedLines":[],""" +
+            """"removedNames":[${quoted(removed)}],"readdedNames":[],"pendingMcpServers":[]},"type":"attachment",$cwdLine,"sessionId":"s1"}"""
+
+    @Test
+    fun `skills are the initial listing plus the later ones, and a new initial listing replaces them`() {
+        val file = write("s1", user("\"prompt\""), skillListing(true, "tdd", "superpowers:brainstorming"))
+        val scanner = ClaudeSessionScanner(dir)
+        assertEquals(listOf("tdd", "superpowers:brainstorming"), scanner.scan().single().skills)
+        file.appendText(skillListing(false, "tracking-work-in-pw", "tdd") + "\n")
+        assertEquals(listOf("tdd", "superpowers:brainstorming", "tracking-work-in-pw"), scanner.scan().single().skills)
+        file.appendText(skillListing(true, "init") + "\n")
+        assertEquals(listOf("init"), scanner.scan().single().skills)
+    }
+
+    @Test
+    fun `MCP servers are those whose tools are offered now, without those waiting for a sign-in`() {
+        val file = write("s1", user("\"prompt\""), toolsDelta(listOf(
+            "CronCreate", "mcp__idea__search_text", "mcp__idea__read_file", "mcp__claude_ai_Figma__get_screenshot",
+            "mcp__claude_ai_Slack__authenticate", "mcp__claude_ai_Slack__complete_authentication",
+        )))
+        val scanner = ClaudeSessionScanner(dir)
+        assertEquals(listOf("claude_ai_Figma", "idea"), scanner.scan().single().mcpServers)
+        file.appendText(toolsDelta(listOf("mcp__claude_ai_Slack__send_message"), removed = listOf("mcp__idea__search_text", "mcp__idea__read_file")) + "\n")
+        assertEquals(listOf("claude_ai_Figma", "claude_ai_Slack"), scanner.scan().single().mcpServers)
+    }
+
+    @Test
+    fun `a skill listing without names fails loudly`() {
+        val line = skillListing(true, "tdd").replace(""","names":["tdd"]""", "")
+        assertFailsWith<IllegalStateException> { parse(write("s1", user("\"prompt\""), line)) }
+    }
+
     private fun reply(model: String, effort: String?, sidechain: Boolean = false) =
         """{"parentUuid":"p","isSidechain":$sidechain,"message":{"model":"$model","type":"message","role":"assistant","content":[]},""" +
             """"type":"assistant",${effort?.let { "\"effort\":\"$it\"," }.orEmpty()}$cwdLine,"sessionId":"s1","timestamp":"2026-10-24T10:01:00Z"}"""

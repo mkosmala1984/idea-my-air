@@ -5,6 +5,7 @@ import dev.myair.claude.Artifact
 import dev.myair.claude.BackgroundTask
 import dev.myair.claude.Brief
 import dev.myair.claude.ClaudeSession
+import dev.myair.claude.SkillOrigin
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -28,6 +29,7 @@ data class SessionContext(
     val project: String, val projectPath: Path, val cwd: Path, val worktree: Boolean, val desktop: Boolean,
     val addedDirs: List<Path>, val brief: Brief?, val files: List<Path>, val outputs: List<Path>, val artifacts: List<Artifact>,
     val background: List<BackgroundTask>, val live: Boolean, val cwdExists: Boolean, val git: GitState?,
+    val mcpServers: List<String>, val skills: List<String>,
 )
 
 /** [ClaudeSession.changedFiles] keeps the order files were first written, without repeats. */
@@ -37,8 +39,23 @@ fun contextOf(session: ClaudeSession, cwdExists: Boolean, live: Boolean, git: Gi
     session.desktop, session.addedDirs, session.brief, session.changedFiles.filterNot { git != null && it.startsWith(git.root) },
     session.changedFiles.filter { it.extension.lowercase() in OUTPUT_EXTENSIONS }.reversed(), session.artifacts,
     session.background.sortedWith(compareBy(nullsFirst(reverseOrder())) { it.end?.time }),
-    live, cwdExists, git,
+    live, cwdExists, git, session.mcpServers, session.skills,
 )
+
+/** The group of skills that come from no plugin: the user's, the project's and `claude`'s own. */
+const val NO_PLUGIN = "No plugin"
+
+/** [skills] grouped by the plugin a `plugin:skill` name comes from, in the listing's order: [NO_PLUGIN] first, then the plugins by name. */
+fun skillGroups(skills: List<String>): List<Pair<String, List<String>>> = skills
+    .groupBy { if (':' in it) it.substringBeforeLast(':') else NO_PLUGIN }
+    .toList().sortedWith(compareBy({ it.first != NO_PLUGIN }, { it.first }))
+
+/** Whether [origin] has an update, as its marketplace told at its last refresh; null when it does not tell. */
+fun updateState(origin: SkillOrigin, zone: ZoneId): String? = when (origin.latest) {
+    null -> null
+    origin.installed -> "up to date" + origin.checked?.let { " as of ${DateTimeFormatter.ISO_LOCAL_DATE.format(it.atZone(zone))}" }.orEmpty()
+    else -> "update available: ${origin.installed} → ${origin.latest}"
+}
 
 private val MODEL_ID = Regex("""claude-([a-z]+)((?:-\d{1,2})+)(?:-\d{8})?""")
 
