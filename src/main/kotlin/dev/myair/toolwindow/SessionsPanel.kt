@@ -59,6 +59,8 @@ import javax.swing.JPanel
 import javax.swing.ToolTipManager
 import javax.swing.Timer
 import javax.swing.event.DocumentEvent
+import javax.swing.event.TreeExpansionEvent
+import javax.swing.event.TreeExpansionListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 
@@ -69,6 +71,10 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     /** The tree hides sessions whose last message is this many days old or older; 0 hides none. */
     private var maxAgeDays = PropertiesComponent.getInstance().getInt(MAX_AGE_DAYS, 0)
     private var shown: List<Any?> = emptyList()
+    /** The nodes the tree shows expanded outside a search, by [foldersMode]; kept in application properties. */
+    private val states = HashMap<Boolean, TreeState>()
+    /** While [render] swaps the model and applies the state, whose expansion events must not replace it. */
+    private var rendering = false
     private val tree = DropLineTree().apply {
         isRootVisible = false
         // Double-click opens a session, so it must not also expand its changed files.
@@ -98,6 +104,10 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         // Both take their tooltips from the renderer, which sets one per session row.
         listOf(tree, pinned).forEach(ToolTipManager.sharedInstance()::registerComponent)
         tree.transferHandler = FolderDrop(tree, service, ::canEditFolders)
+        tree.addTreeExpansionListener(object : TreeExpansionListener {
+            override fun treeExpanded(event: TreeExpansionEvent) = rememberState()
+            override fun treeCollapsed(event: TreeExpansionEvent) = rememberState()
+        })
         tree.trailer = SessionTrailer(
             tree, { tree.getClosestRowForLocation(it.x, it.y) }, tree::getRowBounds,
             { (tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession },
@@ -336,14 +346,29 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         return true
     }
 
+    private fun stateKey() = "$TREE_STATE." + if (foldersMode) "folders" else "projects"
+
+    private fun state() = states.getOrPut(foldersMode) { treeStateOf(PropertiesComponent.getInstance().getValue(stateKey())) }
+
     /**
-     * Keeps expanded nodes and the selection across rebuilds; a non-empty filter expands everything, so all matches are
-     * visible at once. Folders mode with an unreadable `structure.json` shows the error instead of the tree.
+     * Takes what the user expanded or collapsed as the tree's state; not during a search, which expands everything, so
+     * closing it brings back the tree as it was before.
+     */
+    private fun rememberState() {
+        if (rendering || filter.text.isNotBlank()) return
+        val state = TreeState.createOn(tree)
+        states[foldersMode] = state
+        PropertiesComponent.getInstance().setValue(stateKey(), treeStateXml(state))
+    }
+
+    /**
+     * Keeps expanded nodes across rebuilds and restarts ([state]); a non-empty filter expands
+     * everything, so all matches are visible at once. Folders mode with an unreadable `structure.json` shows the error
+     * instead of the tree.
      */
     private fun render() {
         shown = snapshot()
         val query = filter.text.trim()
-        val state = TreeState.createOn(tree)
         val error = service.foldersError.takeIf { foldersMode }
         tree.emptyText.text = when {
             !service.loaded -> LOADING
@@ -353,20 +378,26 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         tree.dragEnabled = foldersMode
         // The drop shown refers to nodes of the old model; the next pointer move computes it on the new one.
         tree.drop = null
-        tree.model = DefaultTreeModel(
-            when {
-                error != null -> DefaultMutableTreeNode()
-                foldersMode -> foldersTree(service.folders, treeSessions(), query)
-                else -> projectsTree(treeSessions().filter { it.matches(query) })
-            },
-        )
-        if (query.isNotEmpty()) TreeUtil.expandAll(tree) else state.applyTo(tree)
+        rendering = true
+        try {
+            tree.model = DefaultTreeModel(
+                when {
+                    error != null -> DefaultMutableTreeNode()
+                    foldersMode -> foldersTree(service.folders, treeSessions(), query)
+                    else -> projectsTree(treeSessions().filter { it.matches(query) })
+                },
+            )
+            if (query.isNotEmpty()) TreeUtil.expandAll(tree) else state().applyTo(tree)
+        } finally {
+            rendering = false
+        }
     }
 
     companion object {
         private const val FOLDERS_MODE = "dev.myair.foldersMode"
         private const val SHOW_SETTLED = "dev.myair.showSettled"
         private const val MAX_AGE_DAYS = "dev.myair.maxAgeDays"
+        private const val TREE_STATE = "dev.myair.treeState"
         private const val TOOLBAR_CARD = "toolbar"
         private const val SEARCH_CARD = "search"
         private const val LOADING = "Loading sessions..."
