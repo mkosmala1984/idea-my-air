@@ -2,6 +2,7 @@ package dev.myair.toolwindow
 
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
+import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
@@ -92,7 +93,6 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     /** Counts reads, so only the latest one lands. */
     private var reads = 0
     private val gitReader = AppExecutorUtil.createBoundedApplicationPoolExecutor("Session context git", 1)
-    private val expanded = HashMap<String, Boolean>()
     /** The lists showing all their rows, by section; the others show [FILES_SHOWN]. */
     private val fullLists = HashSet<String>()
     /** The opened skills by the session's folder and name, with their files once read (null while reading). */
@@ -459,15 +459,21 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
     }
 
-    /** A collapsible group that stays collapsed or expanded across renders, kept by [key]; [expandedFirst] until toggled. */
+    /**
+     * A collapsible group that stays collapsed or expanded across renders, sessions, windows and restarts, kept by [key]
+     * in application properties; [expandedFirst] until toggled.
+     */
     private fun Panel.section(title: String, key: String = title, expandedFirst: Boolean = true, indent: Boolean = true, init: Panel.() -> Unit) =
         collapsibleGroup(title, indent, init).apply {
-            expanded = this@SessionContextPanel.expanded[key] ?: expandedFirst
-            addExpandedListener { this@SessionContextPanel.expanded[key] = it }
+            expanded = sectionExpanded(sectionStates(), key) ?: expandedFirst
+            addExpandedListener { setSectionStates(withSection(sectionStates(), key, it)) }
         }
 
     companion object {
         private val CLAUDE_HOME = Path.of(System.getProperty("user.home"), ".claude")
+        private const val SECTIONS = "dev.myair.context.sections"
+        private fun sectionStates(): List<String> = PropertiesComponent.getInstance().getList(SECTIONS).orEmpty()
+        private fun setSectionStates(states: List<String>) = PropertiesComponent.getInstance().setList(SECTIONS, states)
         private const val FILES_SHOWN = 5
         private const val CARD_GAP = 4
         private val KIND_LETTERS = mapOf(Kind.ADDED to "A", Kind.MODIFIED to "M", Kind.DELETED to "D", Kind.UNTRACKED to "U")
