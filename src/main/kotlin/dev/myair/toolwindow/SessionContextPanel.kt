@@ -33,6 +33,7 @@ import dev.myair.actions.FileChange.Kind
 import dev.myair.actions.Git
 import dev.myair.actions.GitState
 import dev.myair.actions.background
+import dev.myair.actions.continueSession
 import dev.myair.actions.BaseChoices
 import dev.myair.actions.basePopup
 import dev.myair.actions.openInIdea
@@ -450,6 +451,10 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
         row {
             listOfNotNull(context.model?.let(::modelName), context.effort).forEach { cell(Chip(it)) }
+            // The session is looked up at the click, as the tab is: the pane is not rebuilt for every change of it.
+            if (context.cwdExists) cell(InplaceButton("Continue in a new session: same model, effort and added directories, in ${context.cwd}", AllIcons.General.Add) {
+                continueSession(project, service.sessions.first { it.id == shownId }, context.cwd)
+            })
             comment(shortAge(context.lastMessage, Instant.now())).align(AlignX.RIGHT)
         }
     }.apply { isOpaque = false }

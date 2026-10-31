@@ -21,6 +21,7 @@ import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.projectBase
 import dev.myair.store.Preset
 import dev.myair.store.PresetStore
+import dev.myair.store.continuationPrompt
 import dev.myair.store.presetOf
 import java.nio.file.Path
 import kotlin.io.path.isDirectory
@@ -28,10 +29,26 @@ import kotlin.io.path.isDirectory
 /** Starts a session as [preset] says, with [prompt] as its first message; a missing directory is reported instead. */
 fun startPreset(project: Project, preset: Preset, where: RelativePoint, prompt: String? = null) {
     val dir = preset.dir(projectBase(project))
-    val missing = (listOf(dir) + preset.addDirs.map(Path::of)).filterNot { it.isDirectory() }
-    if (missing.isNotEmpty()) return Messages.showErrorDialog(project, "Directories of \"${preset.name}\" no longer exist:\n${missing.joinToString("\n")}", "Cannot Start Session")
+    if (!allExist(project, preset, dir)) return
     if (preset.worktree) startInWorktree(project, dir, preset.base, preset.claudeArgs(prompt), where)
     else ClaudeSessionOpener.startNew(project, dir, args = preset.claudeArgs(prompt))
+}
+
+/**
+ * Starts a session continuing [session] in [workTree], the folder it works in now (its worktree too, no new one), with
+ * its model, effort and added directories; the first message names [session] ([continuationPrompt]).
+ */
+fun continueSession(project: Project, session: ClaudeSession, workTree: Path) {
+    val preset = presetOf(session, session.title).copy(worktree = false)
+    if (!allExist(project, preset, workTree)) return
+    ClaudeSessionOpener.startNew(project, session.project, workTree, args = preset.claudeArgs(continuationPrompt(session)))
+}
+
+/** Whether [dir] and [preset]'s added directories all exist; the missing ones are reported. */
+private fun allExist(project: Project, preset: Preset, dir: Path): Boolean {
+    val missing = (listOf(dir) + preset.addDirs.map(Path::of)).filterNot { it.isDirectory() }
+    if (missing.isNotEmpty()) Messages.showErrorDialog(project, "Directories of \"${preset.name}\" no longer exist:\n${missing.joinToString("\n")}", "Cannot Start Session")
+    return missing.isEmpty()
 }
 
 /** What a preset sets, for its tooltip. */

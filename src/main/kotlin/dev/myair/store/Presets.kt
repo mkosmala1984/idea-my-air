@@ -65,6 +65,15 @@ fun presetOf(session: ClaudeSession, name: String) = Preset(
     addDirs = session.addedDirs.map { it.toString() },
 )
 
+/**
+ * The first message of a session that continues [session]: its id, its title on one line and where its transcript lies,
+ * so the new session can read how the previous one ended.
+ */
+fun continuationPrompt(session: ClaudeSession) =
+    "This session continues Claude Code session ${session.id} (${session.title.replace(Regex("\\s+"), " ").trim()}). " +
+        "Its transcript is ~/.claude/projects/*/${session.id}.jsonl. Read its end, sum up in a few lines where that session " +
+        "stopped and what was left to do, then wait for my instructions."
+
 fun checkPresets(presets: List<Preset>) {
     val names = presets.map { it.name }
     check(names.toSet().size == names.size) { "preset names repeat: $names" }

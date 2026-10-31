@@ -62,6 +62,15 @@ class PresetsTest {
     }
 
     @Test
+    fun `a continuation's first message names the session, its title on one line, and its transcript`() {
+        val session = ClaudeSession("3fb8-id", Path.of("E:/dev/rtm"), "Fix the\n  login bug ", Instant.EPOCH, emptyList(), emptyList())
+        val prompt = continuationPrompt(session)
+        assertTrue(prompt.startsWith("This session continues Claude Code session 3fb8-id (Fix the login bug). "), prompt)
+        assertTrue("~/.claude/projects/*/3fb8-id.jsonl" in prompt, prompt)
+        assertTrue('\n' !in prompt, prompt)
+    }
+
+    @Test
     fun `the store reads what it wrote, sees a later change, and reports a broken file`(@TempDir dir: Path) {
         val store = PresetStore(dir.resolve("presets.json"))
         assertEquals(emptyList(), store.read().getOrThrow())
