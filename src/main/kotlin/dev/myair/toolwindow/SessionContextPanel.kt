@@ -39,8 +39,22 @@ import dev.myair.actions.reviewInPlannotator
 import dev.myair.actions.showBaseChangesTree
 import dev.myair.actions.showCombinedBaseDiff
 import dev.myair.actions.status
+import com.intellij.ui.ColoredTreeCellRenderer
+import com.intellij.ui.treeStructure.Tree
 import dev.myair.claude.BackgroundTask
+import dev.myair.claude.SkillFiles
 import dev.myair.claude.TaskStatus
+import dev.myair.claude.skillFiles
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
+import javax.swing.Icon
+import javax.swing.JTree
+import javax.swing.event.TreeExpansionEvent
+import javax.swing.event.TreeExpansionListener
+import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.tree.DefaultTreeModel
+import javax.swing.tree.TreePath
+import kotlin.io.path.name
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.service.ClaudeSessionsService
 import java.awt.BorderLayout
@@ -58,7 +72,7 @@ import javax.swing.SwingConstants
 import kotlin.io.path.exists
 
 /**
- * The environment, brief, files, outputs, artifacts, background tasks and git changes of the session in the selected
+ * The environment, brief, files, outputs, artifacts, background tasks, MCP servers, skills and git changes of the session in the selected
  * session tab of [project]'s window. Follows tab selection and every service change, which also carries a tab's switch
  * to another session (`/clear`); a selected file that is no session tab keeps the session shown while its tab stays
  * open, so an output opened from here does not empty the pane.
@@ -79,6 +93,12 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     private val expanded = HashMap<String, Boolean>()
     /** The lists showing all their rows, by section; the others show [FILES_SHOWN]. */
     private val fullLists = HashSet<String>()
+    /** The opened skills by the session's folder and name, with their files once read (null while reading). */
+    private val skills = HashMap<Pair<Path, String>, Result<SkillFiles?>?>()
+    /** The folders opened in each skill's tree. */
+    private val skillFolders = HashMap<Pair<Path, String>, MutableSet<Path>>()
+    /** What the pane was last built from, by [render]. */
+    private var rendered: Any? = null
 
     init {
         border = JBUI.Borders.empty(CARD_GAP)
@@ -86,7 +106,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             override fun selectionChanged(event: FileEditorManagerEvent) = update()
         })
         service.subscribe(parent, ::update)
-        PaneFont.subscribe(parent, ::render)
+        PaneFont.subscribe(parent) { render(force = true) }
         // A hidden pane reads nothing; it catches up when shown.
         addHierarchyListener { if (it.changeFlags and HierarchyEvent.SHOWING_CHANGED.toLong() != 0L && isShowing) update() }
         update()
@@ -132,13 +152,23 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
     }
 
-    private fun render() {
+    /**
+     * Builds the pane anew, unless all it shows is as last built ([force]: the font changed): the service notifies about
+     * every session, and a rebuild loses the scroll position of whatever the pane holds.
+     */
+    private fun render(force: Boolean = false) {
         val id = shownId
         val session = service.sessions.firstOrNull { it.id == id }
+        val context = session?.let { contextOf(it, it.cwd.exists(), it.id in service.live, git?.getOrNull()) }
+        val shown = listOf(
+            id, context, context?.let { shortAge(it.lastMessage, Instant.now()) }, git, addedBranches, fullLists.toSet(), skills.toMap(),
+        )
+        if (!force && shown == rendered) return
+        rendered = shown
         val content = when {
             id == null -> panel { row { comment("No session tab selected") } }
-            session == null -> panel { row { comment("Starting...") } }
-            else -> content(contextOf(session, session.cwd.exists(), session.id in service.live, git?.getOrNull()))
+            context == null -> panel { row { comment("Starting...") } }
+            else -> content(context)
         }
         PaneFont.growAll(content)
         removeAll()
@@ -249,7 +279,119 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 comment(backgroundState(task, context.live, ZoneId.systemDefault())).applyToComponent { toolTipText = task.end?.summary }
             }
         }
+        if (context.mcpServers.isNotEmpty()) card("MCP servers") {
+            paged("MCP servers", context.mcpServers) { server, _ -> icon(AllIcons.Nodes.Plugin); label(server).shrinkable() }
+        }
+        if (context.skills.isNotEmpty()) card("Skills", indent = false) {
+            for ((plugin, skills) in skillGroups(context.skills)) {
+                section("$plugin (${skills.size})", key = "Skills/$plugin", expandedFirst = false, indent = false) {
+                    for (skill in skills) skill(context.cwd to skill)
+                }
+            }
+        }
     }
+
+    /** The row of a skill, and once opened its description and files. */
+    private fun Panel.skill(key: Pair<Path, String>) {
+        val open = key in skills
+        row {
+            icon(if (open) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight)
+            link(key.second.substringAfterLast(':')) { toggleSkill(key) }.shrinkable()
+        }
+        if (!open) return
+        val read = skills[key]
+        val files = read?.getOrNull()
+        // The top-level builder: inside a Panel, `panel` would add a nested one to this panel's grid.
+        val details = com.intellij.ui.dsl.builder.panel {
+            when {
+                read == null -> row { comment("Reading...") }
+                read.isFailure -> row { comment(read.exceptionOrNull()?.message.orEmpty()) }
+                files == null -> row { comment("Built into claude, no files") }
+                else -> skillFiles(key, files)
+            }
+        }.apply { isOpaque = false }
+        // In a plain panel: the grid of a card makes room for what its cells paint past their bounds, and the
+        // description and the tree made it move every row of the card to the right.
+        val wrapper = JPanel(BorderLayout())
+        wrapper.isOpaque = false
+        wrapper.add(details, BorderLayout.CENTER)
+        row { cell(wrapper).align(AlignX.FILL) }
+    }
+
+    /** A skill's description and its files: a command's one file, a skill's directory as a tree. */
+    private fun Panel.skillFiles(key: Pair<Path, String>, files: SkillFiles) {
+        files.description.fold(
+            { description -> row { if (description == null) comment("No description") else text(description, MAX_LINE_LENGTH_WORD_WRAP) } },
+            { row { comment("Invalid frontmatter: ${it.message}") } },
+        )
+        files.origin?.let { origin ->
+            row {
+                comment(listOfNotNull(origin.source, origin.installed).joinToString(" ")).shrinkable()
+                updateState(origin, ZoneId.systemDefault())?.let { state ->
+                    if (origin.latest == origin.installed) comment(state) else label(state).bold()
+                }
+                origin.url?.let { url -> link("GitHub") { BrowserUtil.browse(url) }.applyToComponent { toolTipText = url } }
+            }
+        }
+        row {
+            if (files.files.isEmpty()) {
+                icon(fileIcon(files.definition))
+                link(files.definition.name) { openFile(project, files.definition) }.applyToComponent { toolTipText = files.definition.toString() }
+            } else cell(skillTree(key, files)).align(AlignX.FILL)
+        }
+    }
+
+    /** Opens or closes the skill [key], reading its files off the EDT. */
+    private fun toggleSkill(key: Pair<Path, String>) {
+        if (key in skills) skills -= key
+        else {
+            skills[key] = null
+            background(project, "Reading skill", { runCatching { skillFiles(key.second, CLAUDE_HOME, key.first) } }) {
+                if (key in skills) skills[key] = it
+                render()
+            }
+        }
+        render()
+    }
+
+    /** The files under a skill's directory as a tree, folders first; a click on a file opens it, opened folders stay open across renders. */
+    private fun skillTree(key: Pair<Path, String>, files: SkillFiles): Tree {
+        val nodes = HashMap<Path, DefaultMutableTreeNode>()
+        val root = DefaultMutableTreeNode(files.definition).also { nodes[files.definition] = it }
+        for (path in files.files) nodes.getValue(path.parent).add(DefaultMutableTreeNode(path).also { nodes[path] = it })
+        for (node in nodes.values) {
+            val children = node.children().toList().map { it as DefaultMutableTreeNode }
+                .sortedWith(compareBy({ it.isLeaf }, { (it.userObject as Path).name.lowercase() }))
+            node.removeAllChildren()
+            children.forEach(node::add)
+        }
+        val opened = skillFolders.getOrPut(key) { HashSet() }
+        return Tree(DefaultTreeModel(root)).apply {
+            isRootVisible = false
+            showsRootHandles = true
+            isOpaque = false
+            cellRenderer = object : ColoredTreeCellRenderer() {
+                override fun customizeCellRenderer(tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean) {
+                    val path = (value as DefaultMutableTreeNode).userObject as Path
+                    icon = if (leaf) fileIcon(path) else AllIcons.Nodes.Folder
+                    append(path.name)
+                }
+            }
+            for (folder in opened.sortedBy { it.nameCount }) nodes[folder]?.let { expandPath(TreePath(it.path)) }
+            addTreeExpansionListener(object : TreeExpansionListener {
+                override fun treeExpanded(event: TreeExpansionEvent) { opened.add(folderOf(event)) }
+                override fun treeCollapsed(event: TreeExpansionEvent) { opened.remove(folderOf(event)) }
+            })
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(event: MouseEvent) {
+                    val node = getPathForLocation(event.x, event.y)?.lastPathComponent as? DefaultMutableTreeNode ?: return
+                    if (node.isLeaf) openFile(project, node.userObject as Path)
+                }
+            })
+        }
+    }
+
+    private fun folderOf(event: TreeExpansionEvent) = (event.path.lastPathComponent as DefaultMutableTreeNode).userObject as Path
 
     /** The session: its title, the model and effort of its latest reply, and how long ago its last message came. */
     private fun header(context: SessionContext) = panel {
@@ -261,8 +403,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     }.apply { isOpaque = false }
 
     /** A card holding a section that stays collapsed or expanded across renders. */
-    private fun JPanel.card(title: String, init: Panel.() -> Unit) {
-        add(ContextCard(panel { section(title, init) }.apply { isOpaque = false }))
+    private fun JPanel.card(title: String, indent: Boolean = true, init: Panel.() -> Unit) {
+        add(ContextCard(panel { section(title, indent = indent, init = init) }.apply { isOpaque = false }))
     }
 
     /**
@@ -287,7 +429,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     /** A row per file of [files], named by [label], opening it in the editor. */
     private fun Panel.files(key: String, files: List<Path>, label: (Path) -> String) = paged(key, files) { file, _ ->
-        icon(FileTypeManager.getInstance().getFileTypeByFileName(file.fileName.toString()).icon ?: AllIcons.FileTypes.Any_type)
+        icon(fileIcon(file))
         link(label(file)) { openFile(project, file) }.applyToComponent { toolTipText = file.toString() }.shrinkable()
     }
 
@@ -303,13 +445,15 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
     }
 
-    /** A collapsible group that stays collapsed or expanded across renders. */
-    private fun Panel.section(title: String, init: Panel.() -> Unit) = collapsibleGroup(title, init = init).apply {
-        expanded = this@SessionContextPanel.expanded[title] ?: true
-        addExpandedListener { this@SessionContextPanel.expanded[title] = it }
-    }
+    /** A collapsible group that stays collapsed or expanded across renders, kept by [key]; [expandedFirst] until toggled. */
+    private fun Panel.section(title: String, key: String = title, expandedFirst: Boolean = true, indent: Boolean = true, init: Panel.() -> Unit) =
+        collapsibleGroup(title, indent, init).apply {
+            expanded = this@SessionContextPanel.expanded[key] ?: expandedFirst
+            addExpandedListener { this@SessionContextPanel.expanded[key] = it }
+        }
 
     companion object {
+        private val CLAUDE_HOME = Path.of(System.getProperty("user.home"), ".claude")
         private const val FILES_SHOWN = 5
         private const val CARD_GAP = 4
         private val KIND_LETTERS = mapOf(Kind.ADDED to "A", Kind.MODIFIED to "M", Kind.DELETED to "D", Kind.UNTRACKED to "U")
@@ -321,6 +465,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 }
 
 /** Opens [path] in an editor of [project], or says it is gone. */
+fun fileIcon(path: Path): Icon = FileTypeManager.getInstance().getFileTypeByFileName(path.name).icon ?: AllIcons.FileTypes.Any_type
+
 fun openFile(project: Project, path: Path) {
     val file = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
     if (file == null) Messages.showErrorDialog(project, "File no longer exists:\n$path", "Cannot Open File")
