@@ -57,7 +57,9 @@ import javax.swing.tree.TreePath
 import kotlin.io.path.name
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.service.ClaudeSessionsService
+import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import java.awt.BorderLayout
+import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Point
 import java.awt.Rectangle
@@ -393,9 +395,21 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     private fun folderOf(event: TreeExpansionEvent) = (event.path.lastPathComponent as DefaultMutableTreeNode).userObject as Path
 
-    /** The session: its title, the model and effort of its latest reply, and how long ago its last message came. */
+    /** The session: its title, opening its tab on a click, the model and effort of its latest reply, and how long ago its last message came. */
     private fun header(context: SessionContext) = panel {
-        row { text(context.title, MAX_LINE_LENGTH_WORD_WRAP).applyToComponent { font = JBFont.label().biggerOn(2f).asBold() } }
+        row {
+            text(context.title, MAX_LINE_LENGTH_WORD_WRAP).applyToComponent {
+                font = JBFont.label().biggerOn(2f).asBold()
+                cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                toolTipText = "Open session tab"
+                // The tab is read at the click: the pane is not rebuilt when only the tab showing the session changes.
+                addMouseListener(object : MouseAdapter() {
+                    override fun mouseClicked(event: MouseEvent) {
+                        FileEditorManager.getInstance(project).openFile(checkNotNull(shownTab), true)
+                    }
+                })
+            }.customize(UnscaledGaps(bottom = 6)) // The text cell's default gaps without the top one, flush with the card's top.
+        }
         row {
             listOfNotNull(context.model?.let(::modelName), context.effort).forEach { cell(Chip(it)) }
             comment(shortAge(context.lastMessage, Instant.now())).align(AlignX.RIGHT)
