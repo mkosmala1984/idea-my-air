@@ -1,5 +1,6 @@
 package dev.myair.tabs
 
+import dev.myair.store.Homes
 import com.intellij.ide.impl.ProjectUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationActivationListener
@@ -19,12 +20,11 @@ import dev.myair.editor.projectBase
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.IdeTabs
 import dev.myair.store.TabStore
-import java.nio.file.Path
 
 /** This IDE's side of [TabStore]: publishes its session tabs and shows a tab when another IDE asks. */
 @Service(Service.Level.APP)
 class TabsSync : Disposable {
-    private val store = TabStore(Path.of(System.getProperty("user.home"), ".my-air"))
+    private val store = TabStore(Homes.myAir)
     private val self = ProcessHandle.current().pid()
 
     private val requests = store.receiveRequests { sessionId ->

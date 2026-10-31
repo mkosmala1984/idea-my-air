@@ -130,6 +130,6 @@ class PresetStore(val file: Path) {
     }
 
     companion object {
-        val INSTANCE = PresetStore(Path.of(System.getProperty("user.home"), ".my-air", "presets.json"))
+        val INSTANCE = PresetStore(Homes.myAir.resolve("presets.json"))
     }
 }

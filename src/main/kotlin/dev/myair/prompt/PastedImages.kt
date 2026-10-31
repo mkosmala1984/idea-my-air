@@ -1,5 +1,6 @@
 package dev.myair.prompt
 
+import dev.myair.store.Homes
 import java.awt.Image
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
@@ -17,7 +18,7 @@ import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.listDirectoryEntries
 
 /** Where pasted images are saved, for `claude` to read when the session starts. */
-val PASTED_IMAGES: Path = Path.of(System.getProperty("user.home"), ".my-air", "images")
+val PASTED_IMAGES: Path = Homes.myAir.resolve("images")
 
 /** How long a pasted image is kept: its session has read it long before, unless a draft holding it waited that long. */
 val IMAGES_KEPT: Duration = Duration.ofDays(30)

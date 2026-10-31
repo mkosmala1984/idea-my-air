@@ -1,5 +1,6 @@
 package dev.myair.toolwindow
 
+import dev.myair.store.Homes
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.ide.util.PropertiesComponent
@@ -360,7 +361,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         if (key in skills) skills -= key
         else {
             skills[key] = null
-            background(project, "Reading skill", { runCatching { skillFiles(key.second, CLAUDE_HOME, key.first) } }) {
+            background(project, "Reading skill", { runCatching { skillFiles(key.second, Homes.claude, key.first) } }) {
                 if (key in skills) skills[key] = it
                 render()
             }
@@ -482,7 +483,6 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
 
     companion object {
-        private val CLAUDE_HOME = Path.of(System.getProperty("user.home"), ".claude")
         /** The skills pinned in every session's pane of this IDE, by full name. */
         private const val PINNED_SKILLS = "dev.myair.context.pinnedSkills"
         private fun pinnedSkills(): Set<String> = PropertiesComponent.getInstance().getList(PINNED_SKILLS).orEmpty().toSet()

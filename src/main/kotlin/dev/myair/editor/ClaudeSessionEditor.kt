@@ -1,5 +1,6 @@
 package dev.myair.editor
 
+import dev.myair.store.Homes
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.fileEditor.FileEditor
@@ -24,7 +25,6 @@ import org.jetbrains.plugins.terminal.ShellTerminalWidget
 import java.beans.PropertyChangeListener
 import java.awt.BorderLayout
 import java.awt.GridBagLayout
-import java.nio.file.Path
 import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlin.io.path.isDirectory
@@ -78,7 +78,7 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
     /** What a restored tab shows instead of starting: its directory is gone, or its session already runs elsewhere. */
     private fun restoreBlocker(): JComponent? {
         if (!file.cwd.isDirectory()) return notice("Session directory no longer exists:\n${file.cwd}")
-        val live = LiveSessionRegistry(Path.of(System.getProperty("user.home"), ".claude", "sessions")).read()[file.sessionId] ?: return null
+        val live = LiveSessionRegistry(Homes.claude.resolve("sessions")).read()[file.sessionId] ?: return null
         val host = ClaudeSessionOpener.hostElsewhere(live, file.cwd)
         val switch = host?.let { "Switch to Window" to { SessionHosts.bringToFront(it) } }
         return notice(ClaudeSessionOpener.runningElsewhereMessage(file.title, live, host), listOfNotNull(switch, "Open Anyway" to ::openAnyway))

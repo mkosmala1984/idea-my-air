@@ -1,5 +1,6 @@
 package dev.myair.service
 
+import dev.myair.store.Homes
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PathManager
@@ -31,8 +32,8 @@ import kotlin.io.path.isRegularFile
  */
 @Service(Service.Level.APP)
 class ClaudeSessionsService : Disposable {
-    private val claudeHome = Path.of(System.getProperty("user.home"), ".claude")
-    private val structure = StructureStore(Path.of(System.getProperty("user.home"), ".my-air", "structure.json"))
+    private val claudeHome = Homes.claude
+    private val structure = StructureStore(Homes.myAir.resolve("structure.json"))
     private val scanner = ClaudeSessionScanner(claudeHome.resolve("projects"), ClaudeSessionScanner.Saved.forJar(structure.file.parent, pluginJar()))
     private val registry = LiveSessionRegistry(claudeHome.resolve("sessions"))
     private val desktop = DesktopSessionReader(Path.of(checkNotNull(System.getenv("LOCALAPPDATA")) { "LOCALAPPDATA is not set" }, "Claude-Data"))

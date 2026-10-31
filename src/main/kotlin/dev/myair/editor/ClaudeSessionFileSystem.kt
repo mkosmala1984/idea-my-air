@@ -1,19 +1,19 @@
 package dev.myair.editor
 
+import dev.myair.store.Homes
 import com.intellij.openapi.vfs.DeprecatedVirtualFileSystem
 import com.intellij.openapi.vfs.NonPhysicalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
-import java.nio.file.Path
 
 /**
  * Gives session tabs a URL, `myair-session://<sessionTabPath>`, which the platform saves with the open tabs and resolves
  * on startup, so the tabs come back after a restart in their order, split and pin state, as Air's thread tabs do.
  */
 class ClaudeSessionFileSystem : DeprecatedVirtualFileSystem(), NonPhysicalFileSystem {
-    private val claudeHome = Path.of(System.getProperty("user.home"), ".claude")
+    private val claudeHome = Homes.claude
 
     override fun getProtocol() = PROTOCOL
 
