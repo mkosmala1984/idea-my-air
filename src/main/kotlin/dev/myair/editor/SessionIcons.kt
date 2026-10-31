@@ -14,4 +14,7 @@ val SessionStatus.icon: Icon
     }
 
 /** An idle session with an unread reply: the idle icon with the taskbar's blue "Unread" dot (`taskbar/Theme.cs`). */
-val UNREAD_ICON: Icon = BadgeIcon(SessionStatus.IDLE.icon, JBColor(0x005FB8, 0x4CC2FF))
+private val UNREAD_ICON: Icon = BadgeIcon(SessionStatus.IDLE.icon, JBColor(0x005FB8, 0x4CC2FF))
+
+/** The icon of a session in [status], null without a process; [unread] marks an idle one whose reply the user has not seen. */
+fun statusIcon(status: SessionStatus?, unread: Boolean): Icon? = if (status == SessionStatus.IDLE && unread) UNREAD_ICON else status?.icon

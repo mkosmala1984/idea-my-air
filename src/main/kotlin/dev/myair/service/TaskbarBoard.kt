@@ -33,13 +33,7 @@ fun boardSessions(sessions: List<ClaudeSession>, live: Map<String, LiveSession>,
     val unscanned = (live.keys - sessions.map { it.id }.toSet()).map { id ->
         live.getValue(id).let { BoardSession(id, NEW_SESSION_TITLE, null, it.status, it.waitingFor, null, false, null) }
     }
-    return (scanned + unscanned).sortedBy {
-        when (it.status) {
-            SessionStatus.NEEDS_INPUT -> 0
-            SessionStatus.IDLE -> 1
-            SessionStatus.WORKING -> 2
-        }
-    }
+    return (scanned + unscanned).sortedBy { it.status.waitRank }
 }
 
 /** A session for the flyout's "Recent" group, with or without a process; [lastMessage] is epoch ms. */

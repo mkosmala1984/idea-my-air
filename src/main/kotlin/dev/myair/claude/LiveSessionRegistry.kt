@@ -6,7 +6,16 @@ import java.time.Instant
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.readText
 
-enum class SessionStatus { WORKING, NEEDS_INPUT, IDLE }
+enum class SessionStatus {
+    WORKING, NEEDS_INPUT, IDLE;
+
+    /** How soon the user should look at a session in this status, lowest first: one needing input, then an idle one, then a working one. */
+    val waitRank: Int get() = when (this) {
+        NEEDS_INPUT -> 0
+        IDLE -> 1
+        WORKING -> 2
+    }
+}
 
 /**
  * [pid] is the `claude` process running the session; it keeps its pid when `/clear` or `/resume` switch it to another

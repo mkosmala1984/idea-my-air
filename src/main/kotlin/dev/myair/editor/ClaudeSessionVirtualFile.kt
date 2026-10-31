@@ -70,7 +70,7 @@ fun tabTitle(title: String, sessionProject: Path, ideBase: Path) =
 class ClaudeSessionFileIconProvider : FileIconProvider, DumbAware {
     override fun getIcon(file: VirtualFile, flags: Int, project: Project?): Icon? =
         (file as? ClaudeSessionVirtualFile)?.let {
-            val status = if (it.unread) UNREAD_ICON else it.status?.icon ?: AllIcons.Toolwindows.ToolWindowMessages
+            val status = statusIcon(it.status, it.unread) ?: AllIcons.Toolwindows.ToolWindowMessages
             if (it.cwd == it.project) status else RowIcon(status, AllIcons.Vcs.Branch)
         }
 }

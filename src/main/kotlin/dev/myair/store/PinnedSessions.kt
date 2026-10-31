@@ -76,12 +76,7 @@ private fun hidden(session: ClaudeSession, at: Long, live: Map<String, LiveSessi
  */
 fun pinnedSessions(sessions: List<ClaudeSession>, live: Map<String, LiveSession>, pins: Pins): List<ClaudeSession> =
     sessions.filter { (it.id in pins.sessions || it.id in live) && pins.dismissed[it.id]?.let { at -> hidden(it, at, live) } != true }.sortedBy {
-        when (live[it.id]?.status) {
-            SessionStatus.NEEDS_INPUT -> 0
-            SessionStatus.IDLE -> 1
-            SessionStatus.WORKING -> 2
-            null -> 3
-        }
+        live[it.id]?.status?.waitRank ?: Int.MAX_VALUE
     }
 
 /** `~/.my-air/pins.json`, shared by every IDE. */
