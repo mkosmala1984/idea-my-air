@@ -1,10 +1,17 @@
 package dev.myair.editor
 
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.util.IconLoader
 import com.intellij.ui.BadgeIcon
 import com.intellij.ui.JBColor
 import dev.myair.claude.SessionStatus
 import javax.swing.Icon
+
+/** Claude's orange asterisk. */
+val CLAUDE_ICON: Icon = IconLoader.getIcon("/icons/claude.svg", SessionStatus::class.java)
+
+/** The asterisk greyed, for a session without a process. */
+val CLAUDE_GREY_ICON: Icon = IconLoader.getDisabledIcon(CLAUDE_ICON)
 
 val SessionStatus.icon: Icon
     get() = when (this) {
