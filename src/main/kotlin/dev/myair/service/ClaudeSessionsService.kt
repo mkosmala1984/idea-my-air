@@ -44,27 +44,30 @@ class ClaudeSessionsService : Disposable {
     var loaded = false
         private set
 
-    var sessions = emptyList<ClaudeSession>()
-        private set
+    /** What the last refresh read, compared whole to tell whether it changed. */
+    private data class State(
+        val sessions: List<ClaudeSession> = emptyList(), val live: Map<String, LiveSession> = emptyMap(), val pins: Pins = Pins(),
+        val folders: SessionFolders = SessionFolders(), val foldersError: String? = null,
+    )
+
+    private var state = State()
+
+    val sessions get() = state.sessions
 
     /** Session id to its running `claude` process; a session absent here has no process. */
-    var live = emptyMap<String, LiveSession>()
-        private set
+    val live get() = state.live
 
-    var folders = SessionFolders()
-        private set
+    val folders get() = state.folders
 
     /** Why `structure.json` could not be read; Folders mode shows it instead of the tree and allows no changes meanwhile. */
-    var foldersError: String? = null
-        private set
+    val foldersError get() = state.foldersError
 
     /** Running idle sessions with a message the user has not seen, as the taskbar's "Unread" group lists them. */
     var unread = emptySet<String>()
         private set
 
     /** Pinned and dismissed sessions; see [pinnedSessions] for what the list shows. */
-    var pins = Pins()
-        private set
+    val pins get() = state.pins
 
     val structureFile: Path get() = structure.file
 
@@ -114,16 +117,13 @@ class ClaudeSessionsService : Disposable {
                 val pinned = pinStore.update { it.prune(scanned, current) }
                 // Before the check below: a session the user looked at changes the board and nothing else.
                 val unreadChanged = updateBoard(scanned, current, pinned.settled)
-                if (loaded && !unreadChanged && scanned == sessions && current == live && read == folders && error == foldersError && pinned == pins) return@invokeLater
+                val next = State(scanned, current, pinned, read, error)
+                if (loaded && !unreadChanged && next == state) return@invokeLater
                 if (failure != null && error != foldersError) thisLogger().error("Cannot read ${structure.file}", failure)
                 loaded = true
-                sessions = scanned
-                live = current
-                pins = pinned
-                folders = read
-                foldersError = error
+                state = next
                 retargetTabs()
-                listeners.forEach { it() }
+                changed()
             }
         }
     }
@@ -132,7 +132,7 @@ class ClaudeSessionsService : Disposable {
     fun lookedAt() {
         if (!updateBoard(sessions, live, pins.settled)) return
         retargetTabs()
-        listeners.forEach { it() }
+        changed()
     }
 
     /** Writes the board ([BoardWriter.update]); returns whether [unread] changed. */
@@ -145,17 +145,19 @@ class ClaudeSessionsService : Disposable {
     /** Applies [op] to the folders as they are on disk now and shows the result in every panel of this IDE. */
     fun updateFolders(source: ChangeSource, op: (SessionFolders) -> SessionFolders) {
         check(foldersError == null) { "folders cannot change while ${structure.file} is unreadable: $foldersError" }
-        folders = structure.update(source, op)
-        listeners.forEach { it() }
+        state = state.copy(folders = structure.update(source, op))
+        changed()
     }
 
     /** Applies [op] to the pins as they are on disk now and shows the result in every panel of this IDE. */
     fun updatePins(op: (Pins) -> Pins) {
-        pins = pinStore.update(op)
+        state = state.copy(pins = pinStore.update(op))
         // Settling a session takes it out of the flyout's "Recent" group.
         if (updateBoard(sessions, live, pins.settled)) retargetTabs()
-        listeners.forEach { it() }
+        changed()
     }
+
+    private fun changed() = listeners.forEach { it() }
 
     private fun retargetTabs() {
         val titles = sessions.associate { it.id to it.title }
