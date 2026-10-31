@@ -14,6 +14,8 @@ import java.nio.channels.Channels
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
+import java.util.zip.ZipFile
 import java.io.StringReader
 import java.time.Instant
 import kotlin.io.path.createDirectories
@@ -83,8 +85,30 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             writeAtomically(file, gson.toJson(mapOf("build" to build, "transcripts" to transcripts.mapKeys { it.key.toString() })))
         }
 
-        private companion object {
-            fun <T> asString(parse: (String) -> T): TypeAdapter<T> = object : TypeAdapter<T>() {
+        companion object {
+            /**
+             * The cache of the plugin in [jar], in [dir]. Each jar (the installed plugin, a sandbox's) gets a file of its
+             * own, so IDEs running different builds do not discard each other's; its build is a hash of the classes of
+             * this package, which read the transcripts, so a rebuild that leaves them as they were keeps the cache.
+             */
+            fun forJar(dir: Path, jar: Path): Saved {
+                val classes = ZipFile(jar.toFile()).use { zip ->
+                    zip.entries().asSequence().filter { it.name.startsWith(CLASSES) && it.name.endsWith(".class") }
+                        .sortedBy { it.name }.map { it.name to zip.getInputStream(it).readBytes() }.toList()
+                }
+                check(classes.isNotEmpty()) { "no $CLASSES classes in $jar" }
+                val build = MessageDigest.getInstance("SHA-256")
+                classes.forEach { (name, bytes) -> build.update(name.toByteArray()); build.update(bytes) }
+                return Saved(dir.resolve("scan-cache-${hex(sha256(jar.toAbsolutePath().toString().toByteArray())).take(8)}.json"), hex(build.digest()))
+            }
+
+            private const val CLASSES = "dev/myair/claude/"
+
+            private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes)
+
+            private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
+
+            private fun <T> asString(parse: (String) -> T): TypeAdapter<T> = object : TypeAdapter<T>() {
                 override fun write(out: JsonWriter, value: T) {
                     out.value(value.toString())
                 }
@@ -92,7 +116,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 override fun read(reader: JsonReader): T = parse(reader.nextString())
             }.nullSafe()
 
-            val gson: Gson = GsonBuilder()
+            private val gson: Gson = GsonBuilder()
                 .registerTypeAdapter(Instant::class.java, asString(Instant::parse))
                 .registerTypeHierarchyAdapter(Path::class.java, asString(Path::of))
                 .create()

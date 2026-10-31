@@ -23,8 +23,6 @@ import dev.myair.store.Pins
 import dev.myair.store.pinnedSessions
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
-import kotlin.io.path.fileSize
-import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.isRegularFile
 
 /**
@@ -35,7 +33,7 @@ import kotlin.io.path.isRegularFile
 class ClaudeSessionsService : Disposable {
     private val claudeHome = Path.of(System.getProperty("user.home"), ".claude")
     private val structure = StructureStore(Path.of(System.getProperty("user.home"), ".my-air", "structure.json"))
-    private val scanner = ClaudeSessionScanner(claudeHome.resolve("projects"), ClaudeSessionScanner.Saved(structure.file.resolveSibling("scan-cache.json"), pluginBuild()))
+    private val scanner = ClaudeSessionScanner(claudeHome.resolve("projects"), ClaudeSessionScanner.Saved.forJar(structure.file.parent, pluginJar()))
     private val registry = LiveSessionRegistry(claudeHome.resolve("sessions"))
     private val desktop = DesktopSessionReader(Path.of(checkNotNull(System.getenv("LOCALAPPDATA")) { "LOCALAPPDATA is not set" }, "Claude-Data"))
     private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
@@ -177,10 +175,10 @@ class ClaudeSessionsService : Disposable {
     }
 }
 
-/** The plugin's jar, as its path, size and modification time: every `buildPlugin` and every install changes it. */
-private fun pluginBuild(): String {
+/** The jar the plugin's classes come from. */
+private fun pluginJar(): Path {
     // The plugin class loader defines classes without a code source location.
     val jar = Path.of(checkNotNull(PathManager.getJarPathForClass(ClaudeSessionScanner::class.java)) { "no jar for ${ClaudeSessionScanner::class.java}" })
     check(jar.isRegularFile()) { "plugin classes are not loaded from a jar: $jar" }
-    return "$jar ${jar.fileSize()} ${jar.getLastModifiedTime()}"
+    return jar
 }
