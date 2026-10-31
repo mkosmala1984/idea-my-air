@@ -1,7 +1,6 @@
 package dev.myair.toolwindow
 
 import com.intellij.icons.AllIcons
-import com.intellij.ide.RecentProjectIconHelper
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.ColoredTreeCellRenderer
@@ -16,6 +15,7 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import dev.myair.claude.TaskStatus
+import dev.myair.editor.projectIcon
 import dev.myair.editor.sessionIcon
 import dev.myair.folders.Folder
 import java.nio.file.Path
@@ -54,8 +54,6 @@ fun tooltipLines(session: ClaudeSession, live: LiveSession?, unread: Boolean, se
 
 private const val PROMPT_CHARS = 200
 
-private val projectIcons = RecentProjectIconHelper()
-
 /** How roomy the session lists are: [COMPACT] as the IDE's own trees, [LOOSE] as Air's, with larger icons, taller rows and wider gaps. */
 enum class Density(val rowHeight: Int, val iconSize: Int, val iconTextGap: Int) {
     COMPACT(26, 16, 6), LOOSE(34, 20, 10);
@@ -63,12 +61,6 @@ enum class Density(val rowHeight: Int, val iconSize: Int, val iconTextGap: Int) 
     /** A 16 px [icon] at [iconSize]. */
     fun grow(icon: Icon): Icon = IconUtil.scale(icon, null, iconSize / 16f)
 }
-
-/**
- * The icon the Welcome screen and Air give the project at [dir]: its `.idea/icon.svg`, else [name]'s initials on a colour
- * picked from the path. The helper caches it per path.
- */
-private fun projectIcon(dir: Path, name: String, size: Int) = projectIcons.getProjectIcon(dir, true, size, name)
 
 /**
  * A session's row in the tree and in the pinned list: its status as one [sessionIcon], title and task count; [SessionTrailer]

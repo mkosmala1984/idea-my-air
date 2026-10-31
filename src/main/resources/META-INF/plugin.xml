@@ -23,6 +23,7 @@
     <fileIconProvider order="first" implementation="dev.myair.editor.ClaudeSessionFileIconProvider"/>
     <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>
     <editorTabTitleProvider implementation="dev.myair.editor.ClaudeSessionTabTitleProvider"/>
+    <editorTabColorProvider implementation="dev.myair.editor.ClaudeSessionTabColorProvider"/>
     <postStartupActivity implementation="dev.myair.tabs.TabsSyncStartup"/>
     <editorEmptyStateComponentProvider implementation="dev.myair.prompt.PromptEmptyState"/>
   </extensions>
