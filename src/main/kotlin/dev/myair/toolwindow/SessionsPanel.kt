@@ -19,6 +19,7 @@ import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.ui.popup.IconButton
+import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.DoubleClickListener
 import com.intellij.ui.InplaceButton
@@ -68,18 +69,21 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private var showSettled = PropertiesComponent.getInstance().getBoolean(SHOW_SETTLED)
     /** The tree hides sessions whose last message is this many days old or older; 0 hides none. */
     private var maxAgeDays = PropertiesComponent.getInstance().getInt(MAX_AGE_DAYS, 0)
+    private var density = PropertiesComponent.getInstance().getValue(DENSITY)?.let(Density::valueOf) ?: Density.COMPACT
     private var shown: List<Any?> = emptyList()
     private val tree = DropLineTree().apply {
         isRootVisible = false
         // Double-click opens a session, so it must not also expand its changed files.
         toggleClickCount = 0
-        cellRenderer = SessionRenderer({ service.live[it.id] }, ::isSettled, ::isUnread)
+        cellRenderer = SessionRenderer({ service.live[it.id] }, ::isSettled, ::isUnread, ::density)
+        allowSpinner()
         dropMode = DropMode.ON_OR_INSERT
         // The room above the first row the design leaves.
         border = JBUI.Borders.emptyTop(4)
     }
     private val pinned = TrailerList().apply {
-        cellRenderer = PinnedRenderer({ service.live[it.id] }, ::isSettled, ::isUnread)
+        cellRenderer = PinnedRenderer({ service.live[it.id] }, ::isSettled, ::isUnread, ::density)
+        allowSpinner()
     }
     private val trailerButtons = listOf(SETTLE, PIN).map { mark ->
         TrailerButton(mark.icon, { it.id in mark.marked(service.pins) }) { session ->
@@ -190,7 +194,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             templatePresentation.icon = AllIcons.Actions.Properties
             addAll(
                 mode, showAll, Separator.create("Hide Sessions Older Than"),
-                MaxAge(3), MaxAge(7), MaxAge(14), MaxAge(30), Separator.getInstance(),
+                MaxAge(3), MaxAge(7), MaxAge(14), MaxAge(30), Separator.create("Density"),
+                *Density.entries.map(::DensityOption).toTypedArray(), Separator.getInstance(),
                 FontSize("Increase Font Size") { it + 1 }, FontSize("Decrease Font Size") { it - 1 }, FontSize("Reset Font Size") { 0 },
                 Separator.getInstance(), refresh,
             )
@@ -246,13 +251,28 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         }
     }
 
-    /** Both session lists in the label font grown by [PaneFont]; tree rows grow with the font's height. */
+    /** Both session lists in the label font grown by [PaneFont]; their rows are as high as [density] says, grown with the font's height. */
     private fun applyFontSize() {
         val base = JBFont.label()
         val font = PaneFont.grow(base)
         tree.font = font
         pinned.font = font
-        tree.rowHeight = JBUI.scale(ROW_HEIGHT) + tree.getFontMetrics(font).height - tree.getFontMetrics(base).height
+        tree.rowHeight = JBUI.scale(density.rowHeight) + tree.getFontMetrics(font).height - tree.getFontMetrics(base).height
+        pinned.fixedCellHeight = tree.rowHeight
+    }
+
+    /** Sets [density] to [option] and lays both lists out anew. */
+    private inner class DensityOption(private val option: Density) :
+        ToggleAction(option.name.lowercase().replaceFirstChar(Char::uppercase)), DumbAware {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+        override fun isSelected(e: AnActionEvent) = density == option
+        override fun setSelected(e: AnActionEvent, state: Boolean) {
+            density = option
+            PropertiesComponent.getInstance().setValue(DENSITY, option.name)
+            applyFontSize()
+            tree.repaint()
+            pinned.repaint()
+        }
     }
 
     /** Sets [PaneFont.points] to [next] of it; disabled where that leaves it as it is or outside [PaneFont.RANGE]. */
@@ -367,10 +387,13 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         private const val FOLDERS_MODE = "dev.myair.foldersMode"
         private const val SHOW_SETTLED = "dev.myair.showSettled"
         private const val MAX_AGE_DAYS = "dev.myair.maxAgeDays"
+        private const val DENSITY = "dev.myair.density"
         private const val TOOLBAR_CARD = "toolbar"
         private const val SEARCH_CARD = "search"
         private const val LOADING = "Loading sessions..."
         /** A tree row at the label font, taller than the platform's for the design's spacing. */
-        private const val ROW_HEIGHT = 26
     }
 }
+
+/** A working session's spinner turns only where the renderer's parent allows it. */
+private fun JComponent.allowSpinner() = putClientProperty(AnimatedIcon.ANIMATION_IN_RENDERER_ALLOWED, true)

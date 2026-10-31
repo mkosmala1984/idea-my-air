@@ -1,10 +1,16 @@
 package dev.myair.toolwindow
 
+import com.intellij.ui.AnimatedIcon
+import com.intellij.ui.BadgeDotProvider
+import com.intellij.ui.BadgeIcon
 import com.intellij.ui.JBColor
 import com.intellij.ui.scale.JBUIScale
-import com.intellij.util.ui.EmptyIcon
 import com.intellij.util.ui.GraphicsUtil
 import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
+import dev.myair.editor.CLAUDE_GREY_ICON
+import dev.myair.editor.CLAUDE_ICON
+import dev.myair.editor.icon
 import java.awt.BasicStroke
 import java.awt.Component
 import java.awt.Graphics
@@ -40,10 +46,11 @@ class StatusDot(private val color: JBColor, private val ring: Boolean = false) :
     }
 }
 
+private val BLUE = JBColor(0x3574F0, 0x548AF7)
+
 val NEEDS_INPUT_DOT = StatusDot(JBColor(0xE56D17, 0xF0883E))
-val UNREAD_DOT = StatusDot(JBColor(0x3574F0, 0x548AF7))
-val WORKING_DOT = StatusDot(JBColor(0x3574F0, 0x548AF7), ring = true)
-val IDLE_DOT = StatusDot(JBColor(0xC9CCD6, 0x5A5D63))
+val UNREAD_DOT = StatusDot(BLUE)
+val WORKING_DOT = StatusDot(BLUE, ring = true)
 
 val Urgency.dot: Icon get() = when (this) {
     Urgency.NEEDS_INPUT -> NEEDS_INPUT_DOT
@@ -51,8 +58,16 @@ val Urgency.dot: Icon get() = when (this) {
     Urgency.WORKING -> WORKING_DOT
 }
 
-/** A session without a live process: no dot, but its room, so the titles of a folder line up. */
-private val NO_DOT: Icon = EmptyIcon.create(16)
+/** An idle session with an unread reply: the asterisk with the blue dot of [UNREAD_DOT], inside its 16 px so the title stays put. */
+val UNREAD_SESSION_ICON: Icon = BadgeIcon(CLAUDE_ICON, BLUE, BadgeDotProvider(x = 0.75, y = 0.25, radius = 0.15))
 
-/** The dot of a session row: the idle one for a live session that calls for nothing. */
-fun dotOf(live: LiveSession?, unread: Boolean): Icon = live?.let { urgencyOf(it, unread)?.dot ?: IDLE_DOT } ?: NO_DOT
+/**
+ * A session row's one icon, its status: grey asterisk without a process, the spinner while it works, the tabs' warning
+ * when it needs input, the asterisk with a blue dot when its reply is unread, else the orange asterisk.
+ */
+fun sessionIcon(live: LiveSession?, unread: Boolean): Icon = when (live?.status) {
+    null -> CLAUDE_GREY_ICON
+    SessionStatus.WORKING -> AnimatedIcon.Default.INSTANCE
+    SessionStatus.NEEDS_INPUT -> SessionStatus.NEEDS_INPUT.icon
+    SessionStatus.IDLE -> if (unread) UNREAD_SESSION_ICON else CLAUDE_ICON
+}

@@ -16,7 +16,6 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.openapi.util.IconLoader
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
@@ -35,6 +34,7 @@ import dev.myair.actions.baseChoices
 import dev.myair.actions.recentBases
 import dev.myair.actions.startPreset
 import dev.myair.actions.summary
+import dev.myair.editor.CLAUDE_ICON
 import dev.myair.editor.projectBase
 import dev.myair.service.LatestRead
 import com.intellij.util.concurrency.AppExecutorUtil
@@ -59,8 +59,6 @@ import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.event.DocumentEvent
-
-private val CLAUDE_ICON = IconLoader.getIcon("/icons/claude.svg", PromptPanel::class.java)
 
 /** The choices of the last start, so the next panel opens on them, and under `.draft` a message not yet sent. */
 private const val LAST = "dev.myair.prompt"
