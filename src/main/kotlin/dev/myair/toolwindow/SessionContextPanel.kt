@@ -20,7 +20,6 @@ import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.concurrency.AppExecutorUtil
-import com.intellij.ui.JBColor
 import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.panels.VerticalLayout
@@ -35,9 +34,12 @@ import dev.myair.actions.basePopup
 import dev.myair.actions.openInIdea
 import dev.myair.actions.openInTerminal
 import dev.myair.actions.showBaseDiff
+import dev.myair.actions.plannotator
+import dev.myair.actions.reviewInPlannotator
+import dev.myair.actions.showBaseChangesTree
+import dev.myair.actions.showCombinedBaseDiff
+import dev.myair.actions.status
 import dev.myair.claude.BackgroundTask
-import dev.myair.claude.LiveSession
-import dev.myair.claude.SessionStatus
 import dev.myair.claude.TaskStatus
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.service.ClaudeSessionsService
@@ -136,10 +138,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val content = when {
             id == null -> panel { row { comment("No session tab selected") } }
             session == null -> panel { row { comment("Starting...") } }
-            else -> content(
-                contextOf(session, session.cwd.exists(), session.id in service.live, git?.getOrNull()),
-                service.live[session.id], session.id in service.unread,
-            )
+            else -> content(contextOf(session, session.cwd.exists(), session.id in service.live, git?.getOrNull()))
         }
         PaneFont.growAll(content)
         removeAll()
@@ -149,9 +148,9 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     }
 
     /** One card per section, the session itself first, as artboard I of the panel's design lays them out. */
-    private fun content(context: SessionContext, live: LiveSession?, unread: Boolean) = JPanel(VerticalLayout(JBUI.scale(CARD_GAP))).apply {
+    private fun content(context: SessionContext) = JPanel(VerticalLayout(JBUI.scale(CARD_GAP))).apply {
         isOpaque = false
-        add(ContextCard(header(context, live, unread)))
+        add(ContextCard(header(context)))
         card("Environment") {
             // The project, the folder the session runs in when it is another one (a worktree as a rule), and opening that folder.
             row {
@@ -200,13 +199,19 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     row {
                         label("+${git.added}").applyToComponent { foreground = FileStatus.ADDED.color }
                         label("−${git.removed}").applyToComponent { foreground = FileStatus.DELETED.color }
-                        if (changes.isNotEmpty()) link("Show diff") { showBaseDiff(project, git, 0) }
-                            .applyToComponent { toolTipText = git.base?.let { "Changes against $it" } }
-                            .align(AlignX.RIGHT)
+                        if (changes.isNotEmpty()) {
+                            link("Show diff") { showCombinedBaseDiff(project, git) }
+                                .applyToComponent { toolTipText = "All files in one tab, against ${git.base}" }
+                                .resizableColumn().align(AlignX.RIGHT)
+                            link("Tree") { showBaseChangesTree(project, git) }
+                                .applyToComponent { toolTipText = "The changed files as a tree of folders, against ${git.base}" }
+                            if (plannotator != null) link("Plannotator") { reviewInPlannotator(project, git) }
+                                .applyToComponent { toolTipText = "Review all changes against ${git.base} in Plannotator, in the browser" }
+                        }
                     }
                     if (git.added + git.removed > 0) row { cell(ChangeBar(git.added, git.removed)).align(AlignX.FILL) }
                     paged("Changes", changes) { change, index ->
-                        label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = KIND_STATUSES.getValue(change.kind).color }
+                        label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = change.kind.status.color }
                         link(change.path) { showBaseDiff(project, git, index) }.shrinkable()
                         comment("+${change.added} −${change.removed}")
                     }
@@ -246,18 +251,13 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
     }
 
-    /** The session: what it is doing and since when, its title, the model and effort of its latest reply. */
-    private fun header(context: SessionContext, live: LiveSession?, unread: Boolean) = panel {
+    /** The session: its title, the model and effort of its latest reply, and how long ago its last message came. */
+    private fun header(context: SessionContext) = panel {
+        row { text(context.title, MAX_LINE_LENGTH_WORD_WRAP).applyToComponent { font = JBFont.label().biggerOn(2f).asBold() } }
         row {
-            icon(dotOf(live, unread))
-            label(statusText(live, unread) ?: "No process").applyToComponent {
-                foreground = if (live?.status == SessionStatus.NEEDS_INPUT) NEEDS_INPUT_TEXT else JBUI.CurrentTheme.Label.disabledForeground()
-            }
+            listOfNotNull(context.model?.let(::modelName), context.effort).forEach { cell(Chip(it)) }
             comment(shortAge(context.lastMessage, Instant.now())).align(AlignX.RIGHT)
         }
-        row { text(context.title, MAX_LINE_LENGTH_WORD_WRAP).applyToComponent { font = JBFont.label().biggerOn(2f).asBold() } }
-        val chips = listOfNotNull(context.model?.let(::modelName), context.effort)
-        if (chips.isNotEmpty()) row { chips.forEach { cell(Chip(it)) } }
     }.apply { isOpaque = false }
 
     /** A card holding a section that stays collapsed or expanded across renders. */
@@ -312,11 +312,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     companion object {
         private const val FILES_SHOWN = 5
         private const val CARD_GAP = 4
-        private val NEEDS_INPUT_TEXT = JBColor(0xB5520E, 0xF0883E)
         private val KIND_LETTERS = mapOf(Kind.ADDED to "A", Kind.MODIFIED to "M", Kind.DELETED to "D", Kind.UNTRACKED to "U")
-        private val KIND_STATUSES = mapOf(
-            Kind.ADDED to FileStatus.ADDED, Kind.MODIFIED to FileStatus.MODIFIED, Kind.DELETED to FileStatus.DELETED, Kind.UNTRACKED to FileStatus.UNKNOWN,
-        )
         private val BACKGROUND_ICONS = mapOf(
             BackgroundTask.Kind.SHELL to AllIcons.Nodes.Console, BackgroundTask.Kind.MONITOR to AllIcons.Actions.Show,
             BackgroundTask.Kind.AGENT to AllIcons.Actions.Execute, BackgroundTask.Kind.WORKFLOW to AllIcons.Actions.RunAll,

@@ -6,6 +6,10 @@
 
   <depends>com.intellij.modules.platform</depends>
   <depends>org.jetbrains.plugins.terminal</depends>
+  <!-- The change views a session's diff against its base opens in. -->
+  <dependencies>
+    <module name="intellij.platform.vcs.impl"/>
+  </dependencies>
   <!-- The folder tools need the IDE's MCP server; without it the rest of the plugin works as before. -->
   <depends optional="true" config-file="my-air-mcp.xml">com.intellij.mcpServer</depends>
 
