@@ -28,7 +28,6 @@ import com.intellij.ui.ScrollPaneFactory
 import com.intellij.ui.SearchTextField
 import com.intellij.ui.hover.ListHoverListener
 import com.intellij.ui.render.RenderingUtil
-import com.intellij.ui.scale.JBUIScale
 import com.intellij.ui.tree.ui.DefaultTreeUI
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
@@ -67,7 +66,6 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private val service = ClaudeSessionsService.getInstance()
     private var foldersMode = PropertiesComponent.getInstance().getBoolean(FOLDERS_MODE)
     private var showSettled = PropertiesComponent.getInstance().getBoolean(SHOW_SETTLED)
-    private var showContext = PropertiesComponent.getInstance().getBoolean(SHOW_CONTEXT, true)
     /** The tree hides sessions whose last message is this many days old or older; 0 hides none. */
     private var maxAgeDays = PropertiesComponent.getInstance().getInt(MAX_AGE_DAYS, 0)
     private var shown: List<Any?> = emptyList()
@@ -116,21 +114,10 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             },
             trailerButtons,
         )
-        val treePane = ScrollPaneFactory.createScrollPane(tree)
-        val contextPane = ScrollPaneFactory.createScrollPane(SessionContextPanel(project, toolWindow.disposable), true)
-        val contextSplitter = OnePixelSplitter(true, "dev.myair.contextSplitter", 0.3f)
-        val splitter = OnePixelSplitter(true, "dev.myair.pinnedSplitter", 0.25f).apply { firstComponent = ScrollPaneFactory.createScrollPane(pinned) }
-        // The tree moves between the two splitters; the inner one lets it go first, or it would not take it back.
-        fun layoutContext() {
-            contextSplitter.secondComponent = null
-            if (showContext) {
-                contextSplitter.firstComponent = contextPane
-                contextSplitter.secondComponent = treePane
-            }
-            splitter.secondComponent = if (showContext) contextSplitter else treePane
-        }
-        layoutContext()
-        setContent(splitter)
+        setContent(OnePixelSplitter(true, "dev.myair.pinnedSplitter", 0.25f).apply {
+            firstComponent = ScrollPaneFactory.createScrollPane(pinned)
+            secondComponent = ScrollPaneFactory.createScrollPane(tree)
+        })
         applyFontSize()
         val refresh = object : DumbAwareAction("Refresh", null, AllIcons.Actions.Refresh) {
             override fun actionPerformed(e: AnActionEvent) = service.refresh()
@@ -152,15 +139,6 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 PropertiesComponent.getInstance().setValue(SHOW_SETTLED, state)
                 renderPinned()
                 render()
-            }
-        }
-        val context = object : ToggleAction("Show Session Context", "Show the environment, outputs and changes of the selected session tab", AllIcons.Actions.Preview), DumbAware {
-            override fun getActionUpdateThread() = ActionUpdateThread.EDT
-            override fun isSelected(e: AnActionEvent) = showContext
-            override fun setSelected(e: AnActionEvent, state: Boolean) {
-                showContext = state
-                PropertiesComponent.getInstance().setValue(SHOW_CONTEXT, state, true)
-                layoutContext()
             }
         }
         val editing = FolderEditing(project, tree, service)
@@ -211,7 +189,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val options = DefaultActionGroup("View Options", true).apply {
             templatePresentation.icon = AllIcons.Actions.Properties
             addAll(
-                mode, showAll, context, Separator.create("Hide Sessions Older Than"),
+                mode, showAll, Separator.create("Hide Sessions Older Than"),
                 MaxAge(3), MaxAge(7), MaxAge(14), MaxAge(30), Separator.getInstance(),
                 FontSize("Increase Font Size") { it + 1 }, FontSize("Decrease Font Size") { it - 1 }, FontSize("Reset Font Size") { 0 },
                 Separator.getInstance(), refresh,
@@ -249,6 +227,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         }
         ages.start()
         Disposer.register(toolWindow.disposable) { ages.stop() }
+        PaneFont.subscribe(toolWindow.disposable, ::applyFontSize)
         service.subscribe(toolWindow.disposable) {
             renderPinned()
             updateTree()
@@ -267,29 +246,28 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         }
     }
 
-    /** Both session lists in the label font plus [FONT_SIZE] points; tree rows grow with the font's height. */
+    /** Both session lists in the label font grown by [PaneFont]; tree rows grow with the font's height. */
     private fun applyFontSize() {
         val base = JBFont.label()
-        val font = base.deriveFont(base.size2D + JBUIScale.scale(PropertiesComponent.getInstance().getInt(FONT_SIZE, 0).toFloat()))
+        val font = PaneFont.grow(base)
         tree.font = font
         pinned.font = font
         tree.rowHeight = JBUI.scale(ROW_HEIGHT) + tree.getFontMetrics(font).height - tree.getFontMetrics(base).height
     }
 
-    /** Sets [FONT_SIZE] to [next] of it; disabled where that leaves it as it is or outside [FONT_SIZES]. */
-    private inner class FontSize(text: String, private val next: (Int) -> Int) : DumbAwareAction(text) {
+    /** Sets [PaneFont.points] to [next] of it; disabled where that leaves it as it is or outside [PaneFont.RANGE]. */
+    private class FontSize(text: String, private val next: (Int) -> Int) : DumbAwareAction(text) {
         init {
             // Several steps in a row, without reopening the menu.
             templatePresentation.keepPopupOnPerform = KeepPopupOnPerform.Always
         }
         override fun getActionUpdateThread() = ActionUpdateThread.EDT
         override fun update(e: AnActionEvent) {
-            val size = PropertiesComponent.getInstance().getInt(FONT_SIZE, 0)
-            e.presentation.isEnabled = next(size).let { it != size && it in FONT_SIZES }
+            val size = PaneFont.points
+            e.presentation.isEnabled = next(size).let { it != size && it in PaneFont.RANGE }
         }
         override fun actionPerformed(e: AnActionEvent) {
-            PropertiesComponent.getInstance().setValue(FONT_SIZE, next(PropertiesComponent.getInstance().getInt(FONT_SIZE, 0)), 0)
-            applyFontSize()
+            PaneFont.points = next(PaneFont.points)
         }
     }
 
@@ -388,11 +366,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     companion object {
         private const val FOLDERS_MODE = "dev.myair.foldersMode"
         private const val SHOW_SETTLED = "dev.myair.showSettled"
-        private const val SHOW_CONTEXT = "dev.myair.showContext"
         private const val MAX_AGE_DAYS = "dev.myair.maxAgeDays"
-        /** Points added to the label font, in [FONT_SIZES]. */
-        private const val FONT_SIZE = "dev.myair.fontSize"
-        private val FONT_SIZES = -4..12
         private const val TOOLBAR_CARD = "toolbar"
         private const val SEARCH_CARD = "search"
         private const val LOADING = "Loading sessions..."

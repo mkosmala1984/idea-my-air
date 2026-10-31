@@ -15,6 +15,7 @@ import com.intellij.openapi.vcs.FileStatus
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.MAX_LINE_LENGTH_WORD_WRAP
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.builder.panel
@@ -27,11 +28,10 @@ import dev.myair.actions.FileChange.Kind
 import dev.myair.actions.Git
 import dev.myair.actions.GitState
 import dev.myair.actions.background
-import dev.myair.actions.baseChoices
+import dev.myair.actions.BaseChoices
 import dev.myair.actions.basePopup
 import dev.myair.actions.openInIdea
 import dev.myair.actions.openInTerminal
-import dev.myair.actions.recentBases
 import dev.myair.actions.showBaseDiff
 import dev.myair.claude.BackgroundTask
 import dev.myair.claude.LiveSession
@@ -40,13 +40,17 @@ import dev.myair.claude.TaskStatus
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.service.ClaudeSessionsService
 import java.awt.BorderLayout
+import java.awt.Dimension
 import java.awt.Point
+import java.awt.Rectangle
 import java.awt.event.HierarchyEvent
 import java.nio.file.Path
 import java.time.Instant
 import java.time.ZoneId
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.Scrollable
+import javax.swing.SwingConstants
 import kotlin.io.path.exists
 
 /**
@@ -55,12 +59,14 @@ import kotlin.io.path.exists
  * to another session (`/clear`); a selected file that is no session tab keeps the session shown while its tab stays
  * open, so an output opened from here does not empty the pane.
  */
-class SessionContextPanel(private val project: Project, parent: Disposable) : JPanel(BorderLayout()) {
+class SessionContextPanel(private val project: Project, parent: Disposable) : JPanel(BorderLayout()), Scrollable {
     private val service = ClaudeSessionsService.getInstance()
     private var shownTab: ClaudeSessionVirtualFile? = null
     /** The session the pane shows and the git state last read for it. */
     private var shownId: String? = null
     private var git: Result<GitState?>? = null
+    /** The branch checked out in each added directory, null outside a repository, read with [git]. */
+    private var addedBranches: Map<Path, Result<String?>> = emptyMap()
     /** The session and its live entry [git] was read for: notifications about other sessions read nothing again. */
     private var readFor: Any? = null
     /** Counts reads, so only the latest one lands. */
@@ -76,10 +82,19 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             override fun selectionChanged(event: FileEditorManagerEvent) = update()
         })
         service.subscribe(parent, ::update)
+        PaneFont.subscribe(parent, ::render)
         // A hidden pane reads nothing; it catches up when shown.
         addHierarchyListener { if (it.changeFlags and HierarchyEvent.SHOWING_CHANGED.toLong() != 0L && isShowing) update() }
         update()
     }
+
+    // The pane takes the width of its scroll pane, never scrolling sideways: long rows give way through [shrinkable] cells.
+    override fun getScrollableTracksViewportWidth() = true
+    override fun getScrollableTracksViewportHeight() = false
+    override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
+    override fun getScrollableUnitIncrement(visible: Rectangle, orientation: Int, direction: Int) = JBUI.scale(16)
+    override fun getScrollableBlockIncrement(visible: Rectangle, orientation: Int, direction: Int) =
+        if (orientation == SwingConstants.VERTICAL) visible.height else visible.width
 
     /** Renders at once with what is known, then again when `git` has read the session's folder. */
     private fun update() {
@@ -88,6 +103,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val id = tab?.sessionId
         if (id != shownId) {
             git = null
+            addedBranches = emptyMap()
             readFor = null
             fullLists.clear()
         }
@@ -101,9 +117,11 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val read = ++reads
         gitReader.execute {
             val state = runCatching { Git.state(session.cwd) }
+            val branches = session.addedDirs.associateWith { runCatching { if (it.exists()) Git.branchOf(it) else null } }
             ApplicationManager.getApplication().invokeLater({
                 if (read == reads) {
                     git = state
+                    addedBranches = branches
                     render()
                 }
             }, ModalityState.any())
@@ -121,6 +139,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 service.live[session.id], session.id in service.unread,
             )
         }
+        PaneFont.growAll(content)
         removeAll()
         add(content, BorderLayout.NORTH)
         revalidate()
@@ -135,26 +154,40 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             row {
                 icon(AllIcons.Nodes.Folder)
                 label(context.project)
-                comment(context.projectPath.toString())
+                comment(context.projectPath.toString()).shrinkable()
             }
             context.git?.let { git ->
+                // The folder the session runs in, named after the branch it has checked out, when it is not the project's.
                 row {
                     icon(AllIcons.Vcs.Branch)
                     label(git.branch)
-                    git.base?.let { base ->
-                        // A detached HEAD has no branch to store a base for.
-                        if (git.detached) comment("base: $base")
-                        else link("base: $base" + if (git.baseStored) "" else " (default)") { pickBase(git, it.source as JComponent) }
-                            .applyToComponent { toolTipText = "The branch the changes are counted against" }
+                    if (context.worktree) {
+                        comment(fileLabel(context.cwd, context.projectPath)).applyToComponent { toolTipText = context.cwd.toString() }.shrinkable()
+                        comment("Worktree").align(AlignX.RIGHT)
                     }
-                    if (context.worktree) comment("Worktree").align(AlignX.RIGHT)
+                }
+                git.base?.let { base ->
+                    indent {
+                        row {
+                            // A detached HEAD has no branch to store a base for.
+                            if (git.detached) comment("base: $base").shrinkable()
+                            else link("base: $base" + if (git.baseStored) "" else " (default)") { pickBase(git, it.source as JComponent) }
+                                .applyToComponent { toolTipText = "The branch the changes are counted against" }.shrinkable()
+                        }
+                    }
                 }
             }
             if (context.desktop) row { comment("Runs in Claude Desktop") }
             if (!context.cwdExists) row { comment("Folder no longer exists") }
-            for (dir in context.addedDirs) row {
-                icon(AllIcons.Nodes.Folder)
-                comment(dir.toString())
+            for (dir in context.addedDirs) {
+                val branch = addedBranches[dir]
+                row {
+                    val name = branch?.getOrNull()
+                    icon(if (name == null) AllIcons.Nodes.Folder else AllIcons.Vcs.Branch)
+                    name?.let { label(it) }
+                    comment(dir.toString()).shrinkable()
+                }
+                branch?.exceptionOrNull()?.let { row { comment(it.message.orEmpty()) } }
             }
             if (context.cwdExists) row {
                 link("Open in IDEA") { openInIdea(project, context.cwd) }
@@ -178,7 +211,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     if (git.added + git.removed > 0) row { cell(ChangeBar(git.added, git.removed)).align(AlignX.FILL) }
                     paged("Changes", changes) { change, index ->
                         label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = KIND_STATUSES.getValue(change.kind).color }
-                        link(change.path) { showBaseDiff(project, git, index) }
+                        link(change.path) { showBaseDiff(project, git, index) }.shrinkable()
                         comment("+${change.added} −${change.removed}")
                     }
                 }
@@ -191,17 +224,17 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         if (context.artifacts.isNotEmpty()) card("Artifacts") {
             for (artifact in context.artifacts) row {
                 icon(AllIcons.General.Web)
-                link(artifact.title) { BrowserUtil.browse(artifact.url) }.applyToComponent { toolTipText = artifact.url }
+                link(artifact.title) { BrowserUtil.browse(artifact.url) }.applyToComponent { toolTipText = artifact.url }.shrinkable()
             }
         }
         context.brief?.let { brief ->
             card("Brief") {
-                brief.goal?.let { goal -> row { text(goal) } }
+                brief.goal?.let { goal -> row { text(goal, MAX_LINE_LENGTH_WORD_WRAP) } }
                 for (task in brief.tasks) row {
                     when (task.status) {
-                        TaskStatus.COMPLETED -> comment(task.line())
-                        TaskStatus.IN_PROGRESS -> label(task.line()).bold()
-                        TaskStatus.PENDING -> label(task.line())
+                        TaskStatus.COMPLETED -> comment(task.line(), MAX_LINE_LENGTH_WORD_WRAP)
+                        TaskStatus.IN_PROGRESS -> text(task.line(), MAX_LINE_LENGTH_WORD_WRAP).bold()
+                        TaskStatus.PENDING -> text(task.line(), MAX_LINE_LENGTH_WORD_WRAP)
                     }
                 }
             }
@@ -210,8 +243,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             paged("Background", context.background) { task, _ ->
                 icon(BACKGROUND_ICONS.getValue(task.kind))
                 val output = task.output
-                if (output == null) label(task.description)
-                else link(task.description) { openFile(project, output) }.applyToComponent { toolTipText = output.toString() }
+                if (output == null) label(task.description).shrinkable()
+                else link(task.description) { openFile(project, output) }.applyToComponent { toolTipText = output.toString() }.shrinkable()
                 comment(backgroundState(task, context.live, ZoneId.systemDefault())).applyToComponent { toolTipText = task.end?.summary }
             }
         }
@@ -226,7 +259,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             }
             comment(shortAge(context.lastMessage, Instant.now())).align(AlignX.RIGHT)
         }
-        row { text(context.title).applyToComponent { font = JBFont.label().biggerOn(2f).asBold() } }
+        row { text(context.title, MAX_LINE_LENGTH_WORD_WRAP).applyToComponent { font = JBFont.label().biggerOn(2f).asBold() } }
         val chips = listOfNotNull(context.model?.let(::modelName), context.effort)
         if (chips.isNotEmpty()) row { chips.forEach { cell(Chip(it)) } }
     }.apply { isOpaque = false }
@@ -237,13 +270,17 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     }
 
     /**
-     * Asks for a new base of [git]'s branch under [anchor] and reads the changes again against it. The point is taken at
-     * the click: the pane may be rebuilt, and [anchor] gone, while the branches are read.
+     * Asks under [anchor] for a new base of [git]'s branch among the branches it contains ([Git.containedBases]) and
+     * reads the changes again against it. The point is taken at the click: the pane may be rebuilt, and [anchor] gone,
+     * while the branches are read.
      */
     private fun pickBase(git: GitState, anchor: JComponent) {
         val under = RelativePoint.fromScreen(Point(anchor.locationOnScreen).apply { y += anchor.height })
-        background(project, "Reading branches", { Git.repo(git.root) }) { repo ->
-            basePopup("Base Branch of ${git.branch}", baseChoices(repo.branches, repo.default, recentBases(repo.mainRoot))) { base ->
+        background(project, "Reading branches", { Git.containedBases(git.root, git.branch) }) { bases ->
+            if (bases.isEmpty()) return@background Messages.showInfoMessage(project, "${git.branch} contains no other branch.", "Base Branch")
+            // No separators: getSeparatorAbove never meets an index past the last item.
+            val choices = BaseChoices(bases, bases.size, bases.size, bases.indexOf(git.base).coerceAtLeast(0))
+            basePopup("Base Branch of ${git.branch}", choices) { base ->
                 background(project, "Setting base branch", { Git.setBase(git.root, git.branch, base) }) {
                     readFor = null
                     update()
@@ -255,7 +292,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     /** A row per file of [files], named by [label], opening it in the editor. */
     private fun Panel.files(key: String, files: List<Path>, label: (Path) -> String) = paged(key, files) { file, _ ->
         icon(FileTypeManager.getInstance().getFileTypeByFileName(file.fileName.toString()).icon ?: AllIcons.FileTypes.Any_type)
-        link(label(file)) { openFile(project, file) }.applyToComponent { toolTipText = file.toString() }
+        link(label(file)) { openFile(project, file) }.applyToComponent { toolTipText = file.toString() }.shrinkable()
     }
 
     /** A row per item of [items], filled by [fill] with the item and its index; [FILES_SHOWN] of them until Show more, kept by [key]. */
@@ -278,7 +315,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     companion object {
         private const val FILES_SHOWN = 5
-        private const val CARD_GAP = 10
+        private const val CARD_GAP = 4
         private val NEEDS_INPUT_TEXT = JBColor(0xB5520E, 0xF0883E)
         private val KIND_LETTERS = mapOf(Kind.ADDED to "A", Kind.MODIFIED to "M", Kind.DELETED to "D", Kind.UNTRACKED to "U")
         private val KIND_STATUSES = mapOf(
