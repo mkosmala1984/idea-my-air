@@ -73,4 +73,16 @@ class WorktreesTest {
     fun `remote HEAD pointers are not branches`() {
         assertEquals(listOf("main", "feature/x", "origin/main"), parseBranches("refs/heads/main\nrefs/heads/feature/x\nrefs/remotes/origin/HEAD\nrefs/remotes/origin/main\n"))
     }
+
+    @Test
+    fun `contained bases keep the order given and leave out the branch, its remote copies and HEAD pointers`() {
+        val refs = "refs/heads/x\nrefs/remotes/origin/x\nrefs/heads/main\nrefs/remotes/origin/HEAD\nrefs/remotes/origin/main\nrefs/heads/feature/x\n"
+        assertEquals(listOf("main", "origin/main", "feature/x"), containedBases(refs, "x"))
+    }
+
+    @Test
+    fun `contained bases stop at ten`() {
+        val refs = (1..12).joinToString("\n") { "refs/heads/b$it" }
+        assertEquals((1..10).map { "b$it" }, containedBases(refs, "x"))
+    }
 }

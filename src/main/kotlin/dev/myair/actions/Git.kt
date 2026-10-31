@@ -69,7 +69,7 @@ object Git {
      * failure throws: git's exit code 128 means every kind of fatal error, not only "no repository".
      */
     fun state(dir: Path): GitState? {
-        if (generateSequence(dir.toAbsolutePath()) { it.parent }.none { it.resolve(".git").exists() }) return null
+        if (!inRepo(dir)) return null
         check(run(dir, "rev-parse", "--is-inside-work-tree").trim() == "true") { "$dir is not in a work tree" }
         val root = Path.of(run(dir, "rev-parse", "--show-toplevel").trim())
         val current = run(root, "branch", "--show-current").trim().ifEmpty { null }
@@ -85,6 +85,18 @@ object Git {
         val mergeBase = run(root, "merge-base", base, "HEAD", ok = setOf(0, 1)).trim().ifEmpty { return problem(base, "Base $base shares no history with $branch") }
         return GitState(branch, current == null, root, base, stored != null, mergeBase, tracked(root, mergeBase) + untracked(root), null)
     }
+
+    private fun inRepo(dir: Path) = generateSequence(dir.toAbsolutePath()) { it.parent }.any { it.resolve(".git").exists() }
+
+    /** [currentBranch] of [dir]; null when neither [dir] nor a folder above it has a `.git`. */
+    fun branchOf(dir: Path): String? = if (inRepo(dir)) currentBranch(dir) else null
+
+    /**
+     * The [MAX_CONTAINED_BASES] local and remote branches whose tips HEAD of [dir] contains, latest commit first:
+     * the branches [branch] grew from, without [branch] itself and its remote copies.
+     */
+    fun containedBases(dir: Path, branch: String): List<String> =
+        containedBases(run(dir, "for-each-ref", "--merged", "HEAD", "--sort=-committerdate", "--format=%(refname)", "refs/heads", "refs/remotes"), branch)
 
     /** [path], relative to [root], as it was in [commit]. */
     fun show(root: Path, commit: String, path: String): ByteArray = bytes(root, "show", "$commit:$path")
