@@ -68,6 +68,13 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
         return CenteredTerminal(widget.component, jediTerm.terminalPanel, jediTerm.settingsProvider) { MyAirSettings.getInstance().terminalColumns }
     }
 
+    /** Types [text] into `claude`'s prompt; false while the tab shows a notice instead of `claude`. */
+    fun type(text: String): Boolean {
+        val widget = widget ?: return false
+        widget.ttyConnectorAccessor.executeWithTtyConnector { it.write(text) }
+        return true
+    }
+
     /** What a restored tab shows instead of starting: its directory is gone, or its session already runs elsewhere. */
     private fun restoreBlocker(): JComponent? {
         if (!file.cwd.isDirectory()) return notice("Session directory no longer exists:\n${file.cwd}")

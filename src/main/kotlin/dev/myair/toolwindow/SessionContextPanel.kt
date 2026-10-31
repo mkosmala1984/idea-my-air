@@ -3,6 +3,8 @@ package dev.myair.toolwindow
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.ide.util.PropertiesComponent
+import com.intellij.ui.InplaceButton
+import dev.myair.editor.ClaudeSessionEditor
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
@@ -169,6 +171,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val context = session?.let { contextOf(it, it.workDir.exists(), it.id in service.live, git?.getOrNull(), workTree ?: it.cwd) }
         val shown = listOf(
             id, context, context?.let { shortAge(it.lastMessage, Instant.now()) }, git, addedBranches, fullLists.toSet(), skills.toMap(),
+            pinnedSkills(),
         )
         if (!force && shown == rendered) return
         rendered = shown
@@ -296,20 +299,31 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             paged("MCP servers", context.mcpServers) { server, _ -> icon(AllIcons.Nodes.Plugin); label(server).shrinkable() }
         }
         if (context.skills.isNotEmpty()) card("Skills", indent = false) {
-            for ((plugin, skills) in skillGroups(context.skills)) {
+            val (pinned, groups) = skillSections(context.skills, pinnedSkills())
+            for (skill in pinned) skill(context.cwd to skill, pinned = true)
+            for ((plugin, skills) in groups) {
                 section("$plugin (${skills.size})", key = "Skills/$plugin", expandedFirst = false, indent = false) {
-                    for (skill in skills) skill(context.cwd to skill)
+                    for (skill in skills) skill(context.cwd to skill, pinned = false)
                 }
             }
         }
     }
 
-    /** The row of a skill, and once opened its description and files. */
-    private fun Panel.skill(key: Pair<Path, String>) {
+    /**
+     * The row of a skill, with buttons pasting its command into the session and pinning it; once opened its description
+     * and files. A pinned skill stands outside its plugin's group, so it is named in full.
+     */
+    private fun Panel.skill(key: Pair<Path, String>, pinned: Boolean) {
         val open = key in skills
+        val name = key.second
         row {
             icon(if (open) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight)
-            link(key.second.substringAfterLast(':')) { toggleSkill(key) }.shrinkable()
+            link(if (pinned) name else name.substringAfterLast(':')) { toggleSkill(key) }.shrinkable()
+            cell(InplaceButton("Paste /$name into the session", AllIcons.Actions.MenuPaste) { pasteCommand("/$name ") })
+            cell(InplaceButton(if (pinned) "Unpin skill" else "Pin skill above the groups", if (pinned) AllIcons.General.PinSelected else AllIcons.General.Pin_tab) {
+                setPinnedSkills(if (pinned) pinnedSkills() - name else pinnedSkills() + name)
+                render()
+            })
         }
         if (!open) return
         val read = skills[key]
@@ -352,6 +366,13 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 link(files.definition.name) { openFile(project, files.definition) }.applyToComponent { toolTipText = files.definition.toString() }
             } else cell(skillTree(key, files)).align(AlignX.FILL)
         }
+    }
+
+    /** Selects the shown session's tab and types [command] into its prompt, to be completed and sent by hand. */
+    private fun pasteCommand(command: String) {
+        val tab = checkNotNull(shownTab) { "skills shown without a session tab" }
+        val editor = FileEditorManager.getInstance(project).openFile(tab, true).filterIsInstance<ClaudeSessionEditor>().single()
+        if (!editor.type(command)) Messages.showInfoMessage(project, "The session's tab does not run claude.", "Paste Skill Command")
     }
 
     /** Opens or closes the skill [key], reading its files off the EDT. */
@@ -482,6 +503,10 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     companion object {
         private val CLAUDE_HOME = Path.of(System.getProperty("user.home"), ".claude")
+        /** The skills pinned in every session's pane of this IDE, by full name. */
+        private const val PINNED_SKILLS = "dev.myair.context.pinnedSkills"
+        private fun pinnedSkills(): Set<String> = PropertiesComponent.getInstance().getList(PINNED_SKILLS).orEmpty().toSet()
+        private fun setPinnedSkills(names: Set<String>) = PropertiesComponent.getInstance().setList(PINNED_SKILLS, names.sorted())
         private const val SECTIONS = "dev.myair.context.sections"
         private fun sectionStates(): List<String> = PropertiesComponent.getInstance().getList(SECTIONS).orEmpty()
         private fun setSectionStates(states: List<String>) = PropertiesComponent.getInstance().setList(SECTIONS, states)
