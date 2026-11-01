@@ -6,7 +6,8 @@
 - **A plan folder is a new kind of folder in the session tree (user's decision):** a folder with a plan, bound to one or more directories (several repositories, user's decision). Under it: milestones › tasks › the sessions of each task, then a `no task` group with its other sessions (user's decision). No separate plan window (user's decision); a Plan card in Session Context stays.
 - **Names (user's decision):** "project" keeps meaning a directory, as in Projects mode and `claude`; the new folder kind is a "plan" folder; a brief names its plan task with `plan_task`, apart from its own `tasks`.
 - **Store:** the plan lives in its folder in `structure.json` (`~/.my-air`, user's decision), so folders and plans share one store, one history and undo. Format version 3.
-- **Tools:** `my_air_plan_get(dir)` and `my_air_plan_apply(dir, changes)` for milestones and tasks; `my_air_folders_apply` adds plans and binds directories; `my_air_set_brief` gets an optional `plan_task`.
+- **Any number of plans per directory (user's decision):** plan folders inside the folder bound to a directory are all its plans.
+- **Tools:** `my_air_plan_get(dir)` returns every plan of the directory, `my_air_plan_apply(plan, changes)` changes one, named by its folder path; `my_air_folders_apply` adds plans and binds directories; `my_air_set_brief` gets an optional `plan_task`.
 - **Assumed, change if wrong:** the agent adds tasks and changes statuses without asking (as the PW skill does); deleting or moving milestones and tasks needs the user's ok. Statuses are PW's: pending, in progress, waiting (for the user), blocked, done, canceled, plus `next`. Task ids are unique across all plans (`T12`). A session naming a task shows under it even when filed elsewhere.
 - **Risks:** two IDEs changing `structure.json` in the same milliseconds lose one change (as today); a session's task comes only from its brief, so an agent that never names one leaves it under `no task`.
 - **Out of scope:** project-nexus (stays separate, user's decision), requirements, ADR pages, sync with Jira.
@@ -45,6 +46,7 @@ SessionFolders(folders, nextId: Int)                            // allocates M/T
 
 - `dirs`: every folder may bind several directories (version 2's `project` reads as a list of one). A directory still binds to one folder; `projectFolder(cwd)` keeps picking the most specific binding.
 - A plan folder is a folder with `plan != null`. It cannot lie inside another plan folder; ordinary subfolders inside it are allowed.
+- The plans of a directory (`planFoldersOf`): the plan folder its bound folder is or lies in; else every plan folder inside its bound folder, in tree order. So a directory gets several plans by binding an ordinary folder and adding plan folders under it.
 - Ids are unique across the whole structure and never reused, so a brief keeps naming the same task after others are deleted, and `T12` alone finds its plan.
 - Parsing stays strict: an unknown field, status or op throws.
 
@@ -54,8 +56,8 @@ In order: under the task its latest brief names in `plan_task`, when that task e
 
 ## MCP tools
 
-- `my_air_plan_get(dir)`: `dir` is any directory (the agent passes its cwd); the plan folder is the one `projectFolder(dir)` finds, or the plan folder above it. Returns the folder's path, its directories, goal, milestones and tasks, and for each task the sessions whose brief names it (id, title, last message, live status). No plan folder: says so and names the op that adds one.
-- `my_air_plan_apply(dir, changes)`: a JSON array applied in order, all or none, returning the plan: `set_goal`, `add_milestone {title, index?}`, `add_task {milestone, title, index?}`, `update {id, title?, status?, next?}`, `move {id, milestone?, index}`, `delete {id}` (a milestone only when its tasks are all done or canceled). One snapshot per call, source `mcp`.
+- `my_air_plan_get(dir)`: `dir` is any directory (the agent passes its cwd). Returns a JSON array of the directory's plans, each with the folder's path, its directories, goal, milestones and tasks, and for each task the sessions whose brief names it (id, title, last message, live status). No plan: says so and names the op that adds one.
+- `my_air_plan_apply(plan, changes)`: `plan` is a folder path from `my_air_plan_get`; a JSON array applied in order, all or none, returning the plan: `set_goal`, `add_milestone {title, index?}`, `add_task {milestone, title, index?}`, `update {id, title?, status?, next?}`, `move {id, milestone?, index}`, `delete {id}` (a milestone only when its tasks are all done or canceled). One snapshot per call, source `mcp`.
 - `my_air_folders_apply`: `create` takes `dirs` (a list) and `plan: true`; new ops `add_plan {path}`, `bind {path, dir}` and `unbind {dir}`. Its rule (only what the user approved) stays.
 - `my_air_set_brief(goal, tasks, plan_task?)`: `plan_task` must exist in the structure; otherwise the call fails listing the open tasks of every plan.
 - `my_air_history_*` covers plans with no change, since they are in `structure.json`.

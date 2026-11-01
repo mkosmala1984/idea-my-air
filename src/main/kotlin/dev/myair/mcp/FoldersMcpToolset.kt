@@ -74,7 +74,8 @@ class FoldersMcpToolset : McpToolset {
         "{\"op\":\"create\",\"path\":\"rtm/my-air\",\"dirs\":[\"E:\\\\dev\\\\my-air\"],\"plan\":true} (dirs optional: directories as " +
         "my_air_sessions_find spells a project; the folder holds their sessions filed in no other folder, new ones too; a directory " +
         "binds to one folder; deleting the folder unbinds them. plan optional: a plan folder, holding milestones and tasks, see " +
-        "my_air_plan_get; no plan folder lies in another), " +
+        "my_air_plan_get; no plan folder lies in another, so a project with several plans has them as plan folders inside " +
+        "its bound folder), " +
         "{\"op\":\"add_plan\",\"path\":\"rtm/my-air\"} (makes an existing folder a plan folder), " +
         "{\"op\":\"bind\",\"path\":\"rtm/my-air\",\"dir\":\"E:\\\\dev\\\\my-air-web\"}, {\"op\":\"unbind\",\"dir\":\"E:\\\\dev\\\\my-air-web\"}, " +
         "{\"op\":\"rename\",\"path\":\"rtm/fixes\",\"name\":\"bugs\"}, " +
@@ -92,17 +93,18 @@ class FoldersMcpToolset : McpToolset {
 
     @McpTool
     @McpDescription(
-        "The plan of the project a directory belongs to: the plan folder bound to the directory or to one above it, or holding " +
-            "the folder bound to it. Returns the folder's path, its directories, the goal, and milestones (status open or done) " +
+        "The plans of the project a directory belongs to, as a JSON array: the plan folder that the folder bound to the " +
+            "directory (or to one above it) is or lies in, else every plan folder below that bound folder. Each plan has folder " +
+            "(its path, which my_air_plan_apply takes), its directories, the goal, and milestones (status open or done) " +
             "with their tasks (id, title, status: pending, in_progress, waiting for the user, blocked by someone else, done or " +
-            "canceled; next: the next step), each task with the sessions whose brief names it. Fails when no plan folder holds the directory.",
+            "canceled; next: the next step), each task with the sessions whose brief names it. Fails when the directory has no plan.",
     )
     suspend fun my_air_plan_get(@McpDescription("A directory of the project, normally the session's working directory.") dir: String): String =
-        withFolders { service, folders -> folders.planJson(planFolder(folders, dir), service.sessions, service.live, ZoneId.systemDefault()) }
+        withFolders { service, folders -> folders.plansJson(planFolders(folders, dir), service.sessions, service.live, ZoneId.systemDefault()) }
 
     @McpTool
     @McpDescription(
-        "Changes the plan my_air_plan_get returns for the same dir, all or none, in one write that leaves a snapshot for undo. " +
+        "Changes one plan my_air_plan_get returned, all or none, in one write that leaves a snapshot for undo. " +
             "Add tasks and keep their status and next step current freely; delete or move milestones and tasks only after the " +
             "user agreed. changes is a JSON array applied in order: " +
             "{\"op\":\"set_goal\",\"goal\":\"...\"} (null clears it), " +
@@ -116,10 +118,10 @@ class FoldersMcpToolset : McpToolset {
             "New ids (M<n>, T<n>) are unique across all plans and never reused. Returns the plan after the change.",
     )
     suspend fun my_air_plan_apply(
-        @McpDescription("A directory of the project, as for my_air_plan_get.") dir: String,
+        @McpDescription("The plan's folder path, as my_air_plan_get gives it.") plan: String,
         @McpDescription("The JSON array of changes.") changes: String,
     ): String = withFolders { service, folders ->
-        val id = planFolder(folders, dir).id
+        val id = requireNotNull(folders.findByPath(plan)?.takeIf { it.plan != null }) { "no plan folder at '$plan'" }.id
         service.updateFolders(ChangeSource.MCP) { PlanChanges.apply(it, id, changes) }
         service.folders.planJson(checkNotNull(service.folders.find(id)), service.sessions, service.live, ZoneId.systemDefault())
     }
@@ -151,11 +153,15 @@ class FoldersMcpToolset : McpToolset {
         service.folders.treeJson()
     }
 
-    /** The plan folder of [dir], or an error telling the agent how one is made. */
-    private fun planFolder(folders: SessionFolders, dir: String): Folder = folders.planFolderOf(Path.of(dir)) ?: throw IllegalArgumentException(
-        "no plan folder holds '$dir'" + (folders.projectFolder(Path.of(dir))?.let { " (it is bound to folder '${folders.pathOf(it.id)}')" } ?: "") +
-            ". With the user's approval, my_air_folders_apply makes a folder a plan folder (add_plan) or creates one bound to the directory.",
-    )
+    /** The plan folders of [dir], or an error telling the agent how one is made. */
+    private fun planFolders(folders: SessionFolders, dir: String): List<Folder> = folders.planFoldersOf(Path.of(dir)).ifEmpty {
+        val bound = folders.projectFolder(Path.of(dir))
+        throw IllegalArgumentException(
+            "'$dir' has no plan" + (bound?.let { " (it is bound to folder '${folders.pathOf(it.id)}')" } ?: "") +
+                ". With the user's approval, my_air_folders_apply creates a plan folder" + (bound?.let { " inside '${folders.pathOf(it.id)}'" } ?: " bound to the directory") +
+                " (create with plan true) or makes a folder a plan folder (add_plan).",
+        )
+    }
 
     /** Runs [block] on the EDT, where the service's state lives; an input error reaches the agent with its message. */
     private suspend fun <T> onEdt(block: (ClaudeSessionsService) -> T): T = withContext(Dispatchers.EDT) {

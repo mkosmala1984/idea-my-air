@@ -114,7 +114,9 @@ class FolderQueriesTest {
             .addMilestone("p", "Export").addTask("M1", "Fields").editTask("T2") { it.copy(status = PlanStatus.IN_PROGRESS, next = "dates") }
         fun briefed(id: String, task: String?) = session(id, id, "/elsewhere", now.minusHours(id.length.toLong())).copy(brief = Brief("g", emptyList(), task))
         val live = mapOf("a" to LiveSession(1, "cli", SessionStatus.WORKING, null, java.time.Instant.EPOCH))
-        val json = JsonParser.parseString(planned.planJson(planned.find("p")!!, listOf(briefed("a", "T2"), briefed("bb", "T2"), briefed("c", null)), live, zone)).asJsonObject
+        val sessionList = listOf(briefed("a", "T2"), briefed("bb", "T2"), briefed("c", null))
+        val json = JsonParser.parseString(planned.planJson(planned.find("p")!!, sessionList, live, zone)).asJsonObject
+        assertEquals(json, JsonParser.parseString(planned.plansJson(listOf(planned.find("p")!!), sessionList, live, zone)).asJsonArray.single())
         assertEquals("plan", json["folder"].asString)
         assertEquals("ship", json["goal"].asString)
         val milestone = json.getAsJsonArray("milestones")[0].asJsonObject

@@ -40,8 +40,8 @@ A group row shows how many sessions it holds and the most urgent status inside i
 | `my_air_sessions_find` | Find sessions by date, folder, filed/unfiled state and words in the title or project path |
 | `my_air_folders_get` | Read the folder structure |
 | `my_air_folders_apply` | Create, rename, move and delete folders, bind and unbind directories, make a folder a plan folder, file sessions — one all-or-nothing write |
-| `my_air_plan_get` | Read the plan of the project a directory belongs to, with the sessions of each task |
-| `my_air_plan_apply` | Add, update, move and delete milestones and tasks of that plan — one all-or-nothing write |
+| `my_air_plan_get` | Read the plans of the project a directory belongs to (every plan folder inside its bound folder), with the sessions of each task |
+| `my_air_plan_apply` | Add, update, move and delete milestones and tasks of one plan, named by its folder path — one all-or-nothing write |
 | `my_air_history_list` | List snapshots of earlier structure changes |
 | `my_air_history_restore` | Undo one of them by name |
 | `my_air_set_brief` | Let a session describe its goal and tasks, and name the plan task it works on, shown in the tree and the context pane |

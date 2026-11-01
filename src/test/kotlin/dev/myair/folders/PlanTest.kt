@@ -85,8 +85,21 @@ class PlanTest {
         assertEquals("rtm", filed.placeOf(session("s1", "/x", "T2")))
         assertEquals("other", filed.placeOf(session("s1", "/x", "T99")))
         assertEquals("rtm", filed.placeOf(session("s2", "/rtm-front/wt")))
-        assertEquals("rtm", filed.planFolderOf(Path.of("/rtm-front"))?.id)
-        assertNull(filed.planFolderOf(Path.of("/elsewhere")))
+        assertEquals(listOf("rtm"), filed.planFoldersOf(Path.of("/rtm-front")).map { it.id })
+        assertEquals(listOf("rtm"), filed.bind("sub", Path.of("/rtm/sub").toString()).planFoldersOf(Path.of("/rtm/sub")).map { it.id })
+        assertEquals(emptyList(), filed.planFoldersOf(Path.of("/elsewhere")))
+    }
+
+    @Test
+    fun `a directory has every plan folder inside its bound folder, in tree order`() {
+        val air = SessionFolders()
+            .createFolder(null, "air", "air", dirs = listOf(Path.of("/air").toString()))
+            .createFolder("air", "a", "a", plan = Plan(null, emptyList()))
+            .createFolder("air", "fixes", "fixes")
+            .createFolder("fixes", "b", "b", plan = Plan(null, emptyList()))
+            .createFolder(null, "c", "c", plan = Plan(null, emptyList()))
+        assertEquals(listOf("a", "b"), air.planFoldersOf(Path.of("/air/.claude/worktrees/x")).map { it.id })
+        assertEquals(emptyList(), air.unbind(Path.of("/air").toString()).planFoldersOf(Path.of("/air")))
     }
 
     @Test

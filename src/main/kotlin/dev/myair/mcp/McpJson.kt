@@ -63,31 +63,36 @@ fun StructureHistory.toJson(): String = gson.toJson(
  * The plan of [folder]: its path, directories, goal, and milestones with their tasks, each task with the sessions whose
  * brief names it, newest first, and their live status (null without a process).
  */
-fun SessionFolders.planJson(folder: Folder, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, zone: ZoneId): String {
+fun SessionFolders.planJson(folder: Folder, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, zone: ZoneId): String =
+    gson.toJson(planMap(folder, sessions, live, zone))
+
+/** The plans of [folders] as a JSON array, each as [planJson] gives it. */
+fun SessionFolders.plansJson(folders: List<Folder>, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, zone: ZoneId): String =
+    gson.toJson(folders.map { planMap(it, sessions, live, zone) })
+
+private fun SessionFolders.planMap(folder: Folder, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, zone: ZoneId): Map<String, Any?> {
     val plan = checkNotNull(folder.plan) { "folder ${folder.id} has no plan" }
     val byTask = sessions.filter { taskOf(it)?.first?.id == folder.id }.groupBy { it.brief!!.planTask!! }
-    return gson.toJson(
-        linkedMapOf(
-            "folder" to pathOf(folder.id),
-            "dirs" to folder.dirs,
-            "goal" to plan.goal,
-            "milestones" to plan.milestones.map { m ->
-                linkedMapOf(
-                    "id" to m.id, "title" to m.title, "status" to if (m.done) "done" else "open", "progress" to progress(m.tasks),
-                    "tasks" to m.tasks.map { t ->
-                        linkedMapOf(
-                            "id" to t.id, "title" to t.title, "status" to t.status.label, "next" to t.next,
-                            "sessions" to byTask[t.id].orEmpty().sortedByDescending { it.lastMessage }.map { s ->
-                                linkedMapOf(
-                                    "id" to s.id, "title" to s.title,
-                                    "lastMessage" to s.lastMessage.atZone(zone).toOffsetDateTime().toString(),
-                                    "status" to live[s.id]?.status?.name?.lowercase(),
-                                )
-                            },
-                        )
-                    },
-                )
-            },
-        ),
+    return linkedMapOf(
+        "folder" to pathOf(folder.id),
+        "dirs" to folder.dirs,
+        "goal" to plan.goal,
+        "milestones" to plan.milestones.map { m ->
+            linkedMapOf(
+                "id" to m.id, "title" to m.title, "status" to if (m.done) "done" else "open", "progress" to progress(m.tasks),
+                "tasks" to m.tasks.map { t ->
+                    linkedMapOf(
+                        "id" to t.id, "title" to t.title, "status" to t.status.label, "next" to t.next,
+                        "sessions" to byTask[t.id].orEmpty().sortedByDescending { it.lastMessage }.map { s ->
+                            linkedMapOf(
+                                "id" to s.id, "title" to s.title,
+                                "lastMessage" to s.lastMessage.atZone(zone).toOffsetDateTime().toString(),
+                                "status" to live[s.id]?.status?.name?.lowercase(),
+                            )
+                        },
+                    )
+                },
+            )
+        },
     )
 }
