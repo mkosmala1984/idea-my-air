@@ -24,7 +24,8 @@ data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: St
          * next pending one, `done`/`start` complete and start steps by number, counted from 1.
          */
         fun next(previous: Brief?, tool: String, input: JsonObject): Brief = when {
-            tool != UPDATE_PLAN -> input(input["goal"].asString, input["tasks"].asString)
+            // An MCP client may send a parameter left out as null.
+            tool != UPDATE_PLAN -> input(input["goal"].asString, input["tasks"].asString, input["plan_task"]?.takeUnless { it.isJsonNull }?.asString)
             input.has("items") -> Brief(null, tasks(input.getAsJsonArray("items")))
             else -> {
                 val brief = checkNotNull(previous) { "plan moved on before it was set: $input" }
@@ -44,8 +45,11 @@ data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: St
             }
         }
 
-        /** The arguments of `my_air_set_brief`, checked against the rules its description gives the agent. */
-        fun input(goal: String, tasks: String): Brief {
+        /**
+         * The arguments of `my_air_set_brief`, checked against the rules its description gives the agent; whether [planTask]
+         * exists is the tool's to check, since a task deleted later leaves an accepted call as it was.
+         */
+        fun input(goal: String, tasks: String, planTask: String? = null): Brief {
             require(goal.isNotBlank() && goal.length <= GOAL_CHARS) { "goal must be one non-blank sentence of at most $GOAL_CHARS chars" }
             val items = try {
                 JsonParser.parseString(tasks).asJsonArray
@@ -56,7 +60,8 @@ data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: St
             val parsed = tasks(items)
             parsed.forEach { require(it.content.isNotBlank() && it.content.length <= TASK_CHARS) { "task content must be non-blank, at most $TASK_CHARS chars: '${it.content}'" } }
             require(parsed.count { it.status == TaskStatus.IN_PROGRESS } <= 1) { "at most one task may be in_progress" }
-            return Brief(goal, parsed)
+            require(planTask == null || PLAN_TASK.matches(planTask)) { "plan_task must be a task id such as T12, got '$planTask'" }
+            return Brief(goal, parsed, planTask)
         }
 
         /** Items as both tools write them: `{"content": ..., "status": "pending" | "in_progress" | "completed"}`. */
@@ -65,6 +70,7 @@ data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: St
             BriefTask(o["content"].asString, requireNotNull(TaskStatus.entries.firstOrNull { it.name.lowercase() == status }) { "unknown task status '$status'" })
         }
 
+        private val PLAN_TASK = Regex("T[1-9][0-9]*")
         const val GOAL_CHARS = 200
         const val TASK_CHARS = 120
         const val MAX_TASKS = 15

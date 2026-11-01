@@ -20,6 +20,16 @@ class BriefTest {
     }
 
     @Test
+    fun `a plan task is an id such as T12, read from the call's input when given and not null`() {
+        assertEquals(Brief("Goal", emptyList(), "T12"), Brief.input("Goal", "[]", "T12"))
+        listOf("12", "t12", "T0", "M3").forEach { assertFailsWith<IllegalArgumentException>(it) { Brief.input("Goal", "[]", it) } }
+        fun call(input: String) = Brief.next(null, "mcp__idea__my_air_set_brief", com.google.gson.JsonParser.parseString(input).asJsonObject)
+        assertEquals("T3", call("""{"goal":"g","tasks":"[]","plan_task":"T3"}""").planTask)
+        assertEquals(null, call("""{"goal":"g","tasks":"[]","plan_task":null}""").planTask)
+        assertEquals(null, call("""{"goal":"g","tasks":"[]"}""").planTask)
+    }
+
+    @Test
     fun `the goal must be one non-blank sentence of at most 200 chars`() {
         assertTrue("goal" in rejected(" ", "[]"))
         assertTrue("goal" in rejected("x".repeat(201), "[]"))

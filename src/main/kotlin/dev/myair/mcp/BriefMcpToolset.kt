@@ -5,7 +5,11 @@ import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import dev.myair.MyAirSettings
+import com.intellij.openapi.application.EDT
 import dev.myair.claude.Brief
+import dev.myair.service.ClaudeSessionsService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Lets the agent of a session describe what the session is for. Nothing is stored here: the call and its arguments land in
@@ -22,6 +26,7 @@ class BriefMcpToolset : McpToolset {
         "Describes this session for the user's session list: what it is for and its tasks with progress. Call it once you " +
         "understand the user's first request, and again whenever the goal changes or a task starts or finishes; every call " +
         "replaces the whole brief. Keep tasks as outcomes the user cares about, not tool steps, and write in the user's language. " +
+        "When the session works on a task of a plan (my_air_plan_get), name it in plan_task, so the session shows under that task. " +
         "Changes nothing but this description.",
     )
     suspend fun my_air_set_brief(
@@ -32,9 +37,18 @@ class BriefMcpToolset : McpToolset {
             "content at most ${Brief.TASK_CHARS} chars, at most one in_progress. [] when there are no tasks yet.",
         )
         tasks: String,
+        @McpDescription("Optional: the id of the plan task this session works on, such as T12; omit it when there is none.")
+        plan_task: String? = null,
     ): String {
         try {
-            Brief.input(goal, tasks)
+            Brief.input(goal, tasks, plan_task)
+            if (plan_task != null) {
+                val folders = withContext(Dispatchers.EDT) { ClaudeSessionsService.getInstance().folders }
+                require(folders.findTask(plan_task) != null) {
+                    val open = folders.all().flatMap { f -> f.plan?.tasks().orEmpty().filterNot { it.status.closed }.map { "${it.id} ${it.title} (${folders.pathOf(f.id)})" } }
+                    "no plan task '$plan_task'; open tasks: " + open.joinToString("; ").ifEmpty { "none" }
+                }
+            }
         } catch (e: IllegalArgumentException) {
             throw McpExpectedError(e.message ?: e.toString())
         }
