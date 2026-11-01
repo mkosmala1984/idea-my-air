@@ -104,7 +104,7 @@ fun targetFolder(path: TreePath): String? = path.path.map { (it as DefaultMutabl
  */
 fun nodeDir(path: TreePath): Path? = when (val item = (path.lastPathComponent as DefaultMutableTreeNode).userObject) {
     is Path -> item
-    is Folder -> path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>().lastOrNull { it.project != null }?.project?.let(Path::of)
+    is Folder -> path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>().lastOrNull { it.dirs.isNotEmpty() }?.dirs?.first()?.let(Path::of)
     else -> null
 }
 
@@ -151,7 +151,7 @@ fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, ch
             val name = projectName(project)
             if (structure.projectFolder(project) != null || structure.nameTaken(parentId, name)) return null
             // Created last among its siblings, where moveFolder counts it after every index the tree can give.
-            { index -> { UUID.randomUUID().toString().let { id -> it.createFolder(parentId, id, name, project.toString()).moveFolder(id, parentId, index) } } }
+            { index -> { UUID.randomUUID().toString().let { id -> it.createFolder(parentId, id, name, listOf(project.toString())).moveFolder(id, parentId, index) } } }
         }
     }
     val siblings = structure.children(parentId)

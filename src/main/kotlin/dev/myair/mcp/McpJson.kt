@@ -33,7 +33,7 @@ fun SessionPage.toJson(structure: SessionFolders, zone: ZoneId): String = gson.t
 fun SessionFolders.treeJson(): String {
     fun node(folder: Folder, prefix: String): Map<String, Any?> = linkedMapOf(
         "path" to prefix + folder.name,
-        "project" to folder.project,
+        "dirs" to folder.dirs,
         "sessions" to folder.items.map { it.id },
         "folders" to folder.folders.map { node(it, "$prefix${folder.name}/") },
     )

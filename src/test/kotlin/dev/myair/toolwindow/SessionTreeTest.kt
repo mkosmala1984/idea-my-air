@@ -116,7 +116,7 @@ class SessionTreeTest {
 
     @Test
     fun `a project row and a folder in a bound project give a directory for a new session, other nodes none`() {
-        val bound = structure.createFolder("empty", "p", "rtm", project = Path.of("/rtm").toString()).createFolder("p", "sub", "sub")
+        val bound = structure.createFolder("empty", "p", "rtm", dirs = listOf(Path.of("/rtm").toString())).createFolder("p", "sub", "sub")
         val root = foldersTree(bound, sessions, "")
         fun pathTo(vararg indices: Int) = TreePath(indices.fold(listOf(root)) { nodes, i -> nodes + nodes.last().getChildAt(i) as DefaultMutableTreeNode }.toTypedArray())
         assertEquals("rtm(fix, s3, s1), empty(p(sub)), recent(s3, s2, s1), sessions(${Path.of("/tf")}(s2))", shape(root))
@@ -146,7 +146,7 @@ class SessionTreeTest {
 
     @Test
     fun `a bound project's folder holds its subfolders, then its sessions filed nowhere else, and leaves sessions`() {
-        val bound = structure.createFolder("empty", "p", "rtm", project = Path.of("/rtm").toString()).createFolder("p", "sub", "sub")
+        val bound = structure.createFolder("empty", "p", "rtm", dirs = listOf(Path.of("/rtm").toString())).createFolder("p", "sub", "sub")
             .assign("s1", null).assign("s4", "sub")
         val all = listOf(session("s4", "/rtm", 4)) + sessions
         assertEquals("rtm(fix, s3), empty(p(sub(s4), s1)), recent(s4, s3, s2, s1), sessions(${Path.of("/tf")}(s2))", shape(foldersTree(bound, all, "")))
@@ -159,7 +159,7 @@ class SessionTreeTest {
         val tf = Path.of("/tf")
         val dropped = dropChange(structure, listOf(tf), empty, -1)!!.change(structure)
         val folder = dropped.children("empty").single()
-        assertEquals("tf" to tf.toString(), folder.name to folder.project)
+        assertEquals("tf" to tf.toString(), folder.name to folder.dirs.single())
         assertEquals(listOf("tf", "rtm", "experiments"), dropChange(structure, listOf(tf), TreePath(root), 0)!!.change(structure).children(null).map { it.name })
         assertNull(dropChange(dropped, listOf(tf), TreePath(root), 0))
         assertNull(dropChange(structure, listOf(Path.of("/x/rtm")), TreePath(root), 0))
@@ -167,7 +167,7 @@ class SessionTreeTest {
 
     @Test
     fun `a session of a bound project cannot be dropped back on sessions`() {
-        val bound = structure.createFolder(null, "p", "tf", project = Path.of("/tf").toString())
+        val bound = structure.createFolder(null, "p", "tf", dirs = listOf(Path.of("/tf").toString()))
         val root = foldersTree(bound, sessions, "")
         val unfiled = TreePath(arrayOf(root, root.lastChild))
         assertNull(dropChange(bound, listOf(sessions[1]), unfiled, -1))
@@ -179,7 +179,7 @@ class SessionTreeTest {
         val worktree = Path.of("/tf/.claude/worktrees/a5bbab5e")
         val all = listOf(session("s4", worktree.toString(), 4)) + sessions
         assertEquals("rtm(fix, s3, s1), empty, recent(s4, s3, s2, s1), sessions($worktree(s4), ${Path.of("/tf")}(s2))", shape(foldersTree(structure, all, "")))
-        val bound = structure.createFolder(null, "p", "tf", project = Path.of("/tf").toString())
+        val bound = structure.createFolder(null, "p", "tf", dirs = listOf(Path.of("/tf").toString()))
         val root = foldersTree(bound, all, "")
         assertEquals("rtm(fix, s3, s1), empty, p(s4, s2), recent(s4, s3, s2, s1), sessions", shape(root))
         assertNull(dropChange(bound, listOf(all.first()), TreePath(arrayOf(root, root.lastChild)), -1))

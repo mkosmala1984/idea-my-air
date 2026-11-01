@@ -35,7 +35,7 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
     fun deleteFolder() {
         val folder = selectedFolder()!!
         val count = service.folders.sessionCount(folder.id)
-        val projects = folder.subtree().mapNotNull { it.project }.toList()
+        val projects = folder.subtree().flatMap { it.dirs }.toList()
         val message = "Delete \"${folder.name}\" and its subfolders?" +
             (if (count > 0) "\n$count session(s) filed there go back to \"sessions\"." else "") +
             (if (projects.isNotEmpty()) "\nThe other sessions of ${projects.joinToString()} go back to \"sessions\"." else "")

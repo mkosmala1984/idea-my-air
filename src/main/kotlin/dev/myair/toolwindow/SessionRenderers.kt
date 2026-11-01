@@ -104,9 +104,9 @@ class SessionRenderer(
         toolTipText = null
         when (val item = node.userObject) {
             is Folder -> {
-                icon = item.project?.let { projectIcon(Path.of(it), item.name, d.iconSize) } ?: d.grow(AllIcons.Nodes.Folder)
+                icon = item.dirs.firstOrNull()?.let { projectIcon(Path.of(it), item.name, d.iconSize) } ?: d.grow(AllIcons.Nodes.Folder)
                 append(item.name)
-                item.project?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
+                if (item.dirs.isNotEmpty()) append("  " + item.dirs.joinToString(), SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
             UnfiledSessions -> {
                 icon = d.grow(AllIcons.Actions.ListFiles)
@@ -126,7 +126,7 @@ class SessionRenderer(
                 RecentSessions -> appendSession(item, liveOf(item), settled(item), unread(item), project = null, projectInRow = true, d)
                 else -> appendSession(
                     item, liveOf(item), settled(item), unread(item),
-                    project = item.cwd.takeIf { parent is Folder && parent.project != item.cwd.toString() }, projectInRow = false, density = d,
+                    project = item.cwd.takeIf { parent is Folder && item.cwd.toString() !in parent.dirs }, projectInRow = false, density = d,
                 )
             }
             is BriefGoal -> {

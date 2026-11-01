@@ -10,9 +10,9 @@ data class BriefTask(val content: String, val status: TaskStatus)
 
 /**
  * What a session is for, as its agent last described it with `my_air_set_brief`; [goal] is null for a Claude Desktop
- * plan (`update_plan`), which lists tasks only.
+ * plan (`update_plan`), which lists tasks only. [planTask] is the id of the plan task the session works on.
  */
-data class Brief(val goal: String?, val tasks: List<BriefTask>) {
+data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: String? = null) {
     val done: Int get() = tasks.count { it.status == TaskStatus.COMPLETED }
 
     val current: BriefTask? get() = tasks.firstOrNull { it.status == TaskStatus.IN_PROGRESS }

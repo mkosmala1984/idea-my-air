@@ -104,13 +104,13 @@ class SessionFoldersTest {
 
     @Test
     fun `a project binds to one folder, which holds its sessions filed nowhere else`() {
-        val bound = tree.createFolder("tf", "app", "app", project = Path.of("/app").toString()).assign("s2", "fix")
+        val bound = tree.createFolder("tf", "app", "app", dirs = listOf(Path.of("/app").toString())).assign("s2", "fix")
         fun at(id: String) = bound.placeOf(ClaudeSession(id, Path.of("/app"), id, java.time.Instant.EPOCH, emptyList(), emptyList()))
         assertEquals("app", at("s1"))
         assertEquals("fix", at("s2"))
         assertEquals(bound, SessionFolders.parse(bound.toJson()))
-        assertThrows<IllegalArgumentException> { bound.createFolder(null, "x", "x", project = Path.of("/app").toString()) }
-        assertEquals("x", bound.createFolder(null, "x", "x", project = Path.of("/APP").toString()).projectFolder(Path.of("/APP"))?.id)
+        assertThrows<IllegalArgumentException> { bound.createFolder(null, "x", "x", dirs = listOf(Path.of("/app").toString())) }
+        assertEquals("x", bound.createFolder(null, "x", "x", dirs = listOf(Path.of("/APP").toString())).projectFolder(Path.of("/APP"))?.id)
         assertNull(bound.delete("tf").placeOf(ClaudeSession("s1", Path.of("/app"), "s1", java.time.Instant.EPOCH, emptyList(), emptyList())))
     }
 
@@ -118,14 +118,14 @@ class SessionFoldersTest {
     fun `a bound folder holds the sessions of directories under its project, the most specific binding winning`() {
         val app = Path.of("/app")
         val worktree = app.resolve(".claude/worktrees/a5bbab5e")
-        val bound = tree.createFolder(null, "app", "app", project = app.toString())
+        val bound = tree.createFolder(null, "app", "app", dirs = listOf(app.toString()))
         fun at(structure: SessionFolders, cwd: Path) = structure.placeOf(ClaudeSession("s", cwd, "s", java.time.Instant.EPOCH, emptyList(), emptyList()))
         assertEquals("app", at(bound, worktree))
         assertEquals("app", at(bound, worktree.resolve("taskbar")))
         assertNull(at(bound, Path.of("/application")))
         assertNull(at(bound, Path.of("/")))
-        assertEquals("wt", at(bound.createFolder(null, "wt", "wt", project = worktree.toString()), worktree))
-        assertEquals("wt", at(SessionFolders().createFolder(null, "wt", "wt", project = worktree.toString()).createFolder(null, "app", "app", project = app.toString()), worktree))
+        assertEquals("wt", at(bound.createFolder(null, "wt", "wt", dirs = listOf(worktree.toString())), worktree))
+        assertEquals("wt", at(SessionFolders().createFolder(null, "wt", "wt", dirs = listOf(worktree.toString())).createFolder(null, "app", "app", dirs = listOf(app.toString())), worktree))
         val outside = ClaudeSession("s", Path.of("/worktrees/a5bbab5e"), "s", java.time.Instant.EPOCH, emptyList(), emptyList(), project = app)
         assertEquals("app", bound.placeOf(outside))
     }
@@ -140,7 +140,7 @@ class SessionFoldersTest {
         val folder = """{"id":"a","name":"a","folders":[],"items":[]}"""
         listOf(
             """{"folders":[]}""",
-            """{"version":3,"folders":[]}""",
+            """{"version":4,"folders":[]}""",
             """{"version":1,"folders":[{"id":"a","name":"a","folders":[]}]}""",
             """{"version":1,"folders":[{"id":"a","name":"a","folders":[],"items":[{"type":"jira","id":"PW-1"}]}]}""",
             """{"version":1,"folders":[$folder,$folder]}""",

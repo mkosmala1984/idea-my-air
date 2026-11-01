@@ -54,8 +54,8 @@ object FolderChanges {
                 require(!folders.nameTaken(parent, name)) { "'$path' already exists" }
                 val project = change.get("project")?.let { change.string("project") }
                 require(project == null || project in projects) { "no project '$project'" }
-                require(project == null || folders.all().none { it.project == project }) { "project '$project' is bound already" }
-                folders.createFolder(parent, newId(), name, project)
+                require(project == null || folders.all().none { project in it.dirs }) { "project '$project' is bound already" }
+                folders.createFolder(parent, newId(), name, listOfNotNull(project))
             }
             "rename" -> folders.rename(folders.at(change.string("path")).id, change.string("name"))
             "move" -> {

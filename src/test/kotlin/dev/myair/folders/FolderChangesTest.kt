@@ -37,7 +37,7 @@ class FolderChangesTest {
     @Test
     fun `a created folder binds to a known project once`() {
         val result = apply("""[{"op":"create","path":"rtm/app","project":"/app"}]""")
-        assertEquals("/app", result.findByPath("rtm/app")!!.project)
+        assertEquals("/app", result.findByPath("rtm/app")!!.dirs.single())
         assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":"/nowhere"}]""") }
         assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":"/app"}]""", result) }
         assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":null}]""") }
