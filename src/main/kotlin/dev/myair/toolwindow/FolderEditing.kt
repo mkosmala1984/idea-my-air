@@ -11,6 +11,7 @@ import com.intellij.openapi.ui.InputValidatorEx
 import com.intellij.openapi.ui.Messages
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.Folder
+import dev.myair.folders.Plan
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.SessionFolders
 import dev.myair.editor.PlanStart
@@ -52,6 +53,16 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
         val name = askName("New Folder", "", parentId, null) ?: return
         update { it.createFolder(parentId, UUID.randomUUID().toString(), name) }
     }
+
+    /** A new plan folder inside the folder of the selection, or at the top level, as [newFolder] places a folder. */
+    fun newPlan() {
+        val parentId = tree.selectionPath?.let(::targetFolder)
+        val name = askName("New Plan", "", parentId, null) ?: return
+        update { it.createFolder(parentId, UUID.randomUUID().toString(), name, plan = Plan()) }
+    }
+
+    /** Outside every plan folder, since plans do not nest. */
+    fun canNewPlan() = tree.selectionPath?.let(::targetFolder)?.let { service.folders.planFolderAt(it) == null } ?: true
 
     /** Renames the selected folder, milestone or task. */
     fun rename() {

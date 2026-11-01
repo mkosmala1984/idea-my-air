@@ -162,7 +162,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         delete.registerCustomShortcutSet(CommonShortcuts.getDelete(), tree)
         fun on(test: (Any?) -> Boolean) = { foldersMode && test(editing.selected()) }
         val planActions = listOf(
-            FolderAction("Add Plan", AllIcons.Nodes.Target, on { it is Folder && it.plan == null }, { canEditFolders() && editing.canAddPlan() }, editing::addPlan),
+            FolderAction("New Plan...", AllIcons.Nodes.Target, ::foldersMode, { canEditFolders() && editing.canNewPlan() }, editing::newPlan),
+            FolderAction("Make Folder a Plan", null, on { it is Folder && editing.canAddPlan() }, ::canEditFolders, editing::addPlan),
             FolderAction("Remove Plan", null, on { it is Folder && it.plan != null }, { canEditFolders() && editing.canRemovePlan() }, editing::removePlan),
             FolderAction("Bind Directory...", null, on { it is Folder }, ::canEditFolders, editing::bindDirectory),
             FolderAction("Unbind Directory...", null, on { it is Folder && it.dirs.isNotEmpty() }, ::canEditFolders, editing::unbindDirectory),

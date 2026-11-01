@@ -22,7 +22,7 @@ A brief belongs to one session and ends with it. Work on a project spans many se
 | Thing | Tree row | Code and MCP |
 |---|---|---|
 | Directory sessions run in | unchanged (Projects mode, a bound folder's grey path) | `Path`, `ClaudeSession.project`, unchanged |
-| Folder with a plan | the folder's name, a plan icon, `done/total` on the right | `Folder.plan != null`; menu "Add Plan" |
+| Folder with a plan | the folder's name, a plan icon, `done/total` on the right | `Folder.plan != null`; menu "New Plan..." or "Make Folder a Plan" |
 | Directories of a folder | grey after the name, as today | `Folder.dirs: [String]`, replacing `project` |
 | Milestone | `M2 Import  1/3` | `Milestone`, `M<n>` |
 | Plan task | status icon, `T4 Mapowanie pól`, `next` in grey | `Task`, `T<n>` |
@@ -78,7 +78,7 @@ A session tab whose session is in a plan adds `--append-system-prompt-file <file
 ## UI
 
 - **Tree, Folders mode:** a plan folder has a plan icon and `done/total` tasks on the right. Children: its subfolders, then milestones (a ✓ when done, `done/total`), tasks (status icon, id and title, `next` in grey), the sessions of each task with today's session row, then `no task`. The urgency dot of a group counts the sessions below it, as today.
-- **Menu:** on a folder, "Add Plan" / "Bind Directory..."; on a plan folder, "Add Milestone", "Remove Plan" (only when it has no milestones); on a milestone, "Add Task", rename, mark done, delete; on a task, set status, edit next step, rename, delete. "Edit Description..." on a plan folder, milestone and task (Markdown, shown rendered in tooltips and the Plan card). "New Claude Session" on a plan row starts the session in that plan (and task). Drag and drop reorders milestones and tasks. Every change goes through `StructureStore.update` with source `ui`.
+- **Menu:** anywhere outside a plan, "New Plan..." (a new plan folder inside the selected folder, so one folder holds any number of plans); on a folder that may become a plan, "Make Folder a Plan"; on a folder, "Bind Directory..."; on a plan folder, "Add Milestone", "Remove Plan" (only when it has no milestones); on a milestone, "Add Task", rename, mark done, delete; on a task, set status, edit next step, rename, delete. "Edit Description..." on a plan folder, milestone and task (Markdown, shown rendered in tooltips and the Plan card). "New Claude Session" on a plan row starts the session in that plan (and task). Drag and drop reorders milestones and tasks. Every change goes through `StructureStore.update` with source `ui`.
 - **Session Context:** a Plan card above the brief: plan folder › milestone › task, its status and `next`, and the other sessions of the task (a click opens one through `ClaudeSessionOpener.open`).
 - A task `in_progress` with no live session is marked, since its session may have ended without updating it.
 
