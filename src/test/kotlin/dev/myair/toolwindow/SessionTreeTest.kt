@@ -29,9 +29,11 @@ class SessionTreeTest {
         .createFolder(null, "empty", "experiments")
         .assign("s1", "rtm").assign("s3", "rtm").assign("gone", "fix")
 
-    /** The tree as `item(children), item`, so a whole tree compares in one assertion. */
-    private fun shape(node: DefaultMutableTreeNode): String = node.children().toList().joinToString(", ") { child ->
-        (child as DefaultMutableTreeNode).let { "${it.userObject}" + if (it.childCount > 0) "(${shape(it)})" else "" }
+    /** The tree as `item(children), item`, so a whole tree compares in one assertion; a session's children only with [sessionChildren]. */
+    private fun shape(node: DefaultMutableTreeNode, sessionChildren: Boolean = false): String = node.children().toList().joinToString(", ") { child ->
+        (child as DefaultMutableTreeNode).let {
+            "${it.userObject}" + if (it.childCount > 0 && (sessionChildren || it.userObject !is ClaudeSession)) "(${shape(it, sessionChildren)})" else ""
+        }
     }
 
     @Test
@@ -41,15 +43,18 @@ class SessionTreeTest {
     }
 
     @Test
-    fun `a session's brief comes first among its children, goal then tasks, then its added directories and changed files`() {
+    fun `a session holds its work dir, added directories, brief, files other than outputs as groups, then its outputs`() {
         val briefed = session("s1", "/rtm", 1).copy(
-            changedFiles = listOf(Path.of("/rtm/a.kt")), addedDirs = listOf(Path.of("/plans")),
+            changedFiles = listOf(Path.of("/rtm/plan.md"), Path.of("/rtm/a.kt"), Path.of("/rtm/page.HTML"), Path.of("/rtm/b.kt")), addedDirs = listOf(Path.of("/plans")),
             brief = Brief("Migrate", listOf(BriefTask("export", TaskStatus.COMPLETED), BriefTask("map", TaskStatus.IN_PROGRESS))),
         )
         val goalless = session("s2", "/rtm", 0).copy(brief = Brief(null, listOf(BriefTask("run", TaskStatus.PENDING))))
+        val bare = session("s3", "/rtm", 0)
         assertEquals(
-            "${Path.of("/rtm")}(s1(goal s1, task s1 0, task s1 1, dir s1 ${Path.of("/plans")}, ${Path.of("/rtm/a.kt")}), s2(task s2 0))",
-            shape(projectsTree(listOf(briefed, goalless))),
+            "${Path.of("/rtm")}(" +
+                "s1(workdir s1, dir s1 ${Path.of("/plans")}, brief s1(goal s1, task s1 0, task s1 1), files s1(${Path.of("/rtm/a.kt")}, ${Path.of("/rtm/b.kt")}), ${Path.of("/rtm/plan.md")}, ${Path.of("/rtm/page.HTML")}), " +
+                "s2(workdir s2, brief s2(task s2 0)), s3(workdir s3))",
+            shape(projectsTree(listOf(briefed, goalless, bare)), sessionChildren = true),
         )
     }
 
@@ -255,7 +260,8 @@ class SessionTreeTest {
         )
         val root = projectsTree(listOf(briefed))
         val nodes = root.breadthFirstEnumeration().toList().map { it as DefaultMutableTreeNode }.drop(2)
-        assertEquals(5, nodes.size)
+        // The session, its work dir, added directory, brief group with goal and task, and files group with its file.
+        assertEquals(8, nodes.size)
         assertTrue(nodes.all { folderSummary(it) { null } == null })
         assertEquals(FolderSummary(1, null), folderSummary(find(root, "${Path.of("/rtm")}")) { null })
     }

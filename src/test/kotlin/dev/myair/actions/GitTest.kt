@@ -309,6 +309,22 @@ class GitTest {
     }
 
     @Test
+    fun `headBranch reads the branch of a checkout, a subfolder and a linked worktree, and none when detached or outside`() {
+        val repo = init("repo")
+        git(repo, "checkout", "-b", "feature/x")
+        assertEquals("feature/x", Git.headBranch(repo))
+        assertEquals("feature/x", Git.headBranch(repo.resolve("sub").createDirectories()))
+        val worktree = dir.resolve("wt")
+        git(repo, "worktree", "add", "-b", "wt-branch", worktree.toString())
+        assertEquals("wt-branch", Git.headBranch(worktree))
+        git(worktree, "checkout", "--detach")
+        assertEquals(null, Git.headBranch(worktree))
+        assertEquals(null, Git.headBranch(dir.resolve("plain").createDirectories()))
+        // A repository without commits has its branch already.
+        assertEquals("main", Git.headBranch(dir.resolve("unborn").createDirectories().also { git(it, "init", "-b", "main") }))
+    }
+
+    @Test
     fun `state outside a repository is null`() {
         assertEquals(null, Git.state(dir.resolve("plain").createDirectories()))
     }

@@ -34,6 +34,8 @@ import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.StatusText
 import com.intellij.util.ui.tree.TreeUtil
+import com.intellij.openapi.application.ApplicationManager
+import dev.myair.actions.Git
 import dev.myair.actions.NewSessionInDirAction
 import dev.myair.actions.openInIdeaAction
 import dev.myair.actions.openInTerminalAction
@@ -53,6 +55,7 @@ import java.awt.Point
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import java.awt.event.MouseEvent
+import java.nio.file.Path
 import java.time.Instant
 import javax.swing.DropMode
 import javax.swing.JComponent
@@ -77,11 +80,15 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private val states = HashMap<Boolean, TreeState>()
     /** While [render] swaps the model and applies the state, whose expansion events must not replace it. */
     private var rendering = false
+    /** The branch checked out in each project and folder directory the tree shows, read off the EDT by [readBranches]. */
+    private var branches: Map<Path, String?> = emptyMap()
+    /** The number of [readBranches] calls; only the latest read lands. */
+    private var branchReads = 0
     private val tree = DropLineTree().apply {
         isRootVisible = false
         // Double-click opens a session, so it must not also expand its changed files.
         toggleClickCount = 0
-        cellRenderer = SessionRenderer({ service.live[it.id] }, ::isSettled, ::isUnread, ::density)
+        cellRenderer = SessionRenderer({ service.live[it.id] }, ::isSettled, ::isUnread, ::density) { branches[it] }
         allowSpinner()
         dropMode = DropMode.ON_OR_INSERT
         // The room above the first row the design leaves.
@@ -349,7 +356,36 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     }
 
     /** Statuses alone only repaint, which keeps expansion and selection; anything else rebuilds the model. */
-    private fun updateTree() = if (snapshot() != shown) render() else tree.repaint()
+    private fun updateTree() = if (snapshot() != shown) render() else {
+        tree.repaint()
+        readBranches()
+    }
+
+    /**
+     * Reads the branch of every directory a project or folder row shows, off the EDT, and repaints when one changed.
+     * Runs with every refresh of the tree, so a checkout shows within the minute of [updateTree]'s timer.
+     */
+    private fun readBranches() {
+        val dirs = (tree.model.root as DefaultMutableTreeNode).depthFirstEnumeration().toList().flatMap {
+            when (val item = (it as DefaultMutableTreeNode).userObject) {
+                is Folder -> item.dirs.map(Path::of)
+                is Path -> listOf(item)
+                is WorkDirRow -> listOf(item.session.workDir)
+                is AddedDir -> listOf(item.path)
+                else -> emptyList()
+            }
+        }.toSet()
+        val read = ++branchReads
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val found = dirs.associateWith(Git::headBranch)
+            ApplicationManager.getApplication().invokeLater {
+                if (read == branchReads && found != branches) {
+                    branches = found
+                    tree.repaint()
+                }
+            }
+        }
+    }
 
     private fun snapshot() = listOf(service.loaded, foldersMode, showSettled, treeSessions(), service.pins.settled, service.folders, service.foldersError)
 
@@ -375,6 +411,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             is BriefGoal -> ClaudeSessionOpener.open(project, item.session)
             is BriefTaskRow -> ClaudeSessionOpener.open(project, item.session)
             is AddedDir -> ClaudeSessionOpener.open(project, item.session)
+            is WorkDirRow -> ClaudeSessionOpener.open(project, item.session)
             is ChangedFile -> openFile(project, item.path)
             else -> if (tree.isExpanded(path)) tree.collapsePath(path) else tree.expandPath(path)
         }
@@ -426,6 +463,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         } finally {
             rendering = false
         }
+        readBranches()
     }
 
     companion object {

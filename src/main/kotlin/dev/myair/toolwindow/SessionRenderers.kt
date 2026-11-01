@@ -105,8 +105,11 @@ class PinnedRenderer(
 
 class SessionRenderer(
     private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
-    private val density: () -> Density,
+    private val density: () -> Density, private val branchOf: (Path) -> String?,
 ) : ColoredTreeCellRenderer() {
+    /** A project or folder directory as its row shows it: the path, then the branch checked out there in brackets. */
+    private fun dirLabel(dir: Path) = "$dir" + (branchOf(dir)?.let { " ($it)" } ?: "")
+
     override fun customizeCellRenderer(
         tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean,
     ) {
@@ -127,7 +130,7 @@ class SessionRenderer(
                     append("  ${progress(it.tasks())}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
                     toolTipText = describedTooltip(emptyList(), it.description)
                 }
-                if (item.dirs.isNotEmpty()) append("  " + item.dirs.joinToString(), SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                if (item.dirs.isNotEmpty()) append("  " + item.dirs.joinToString { dirLabel(Path.of(it)) }, SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
             is MilestoneRow -> {
                 icon = d.grow(if (item.milestone.done) AllIcons.Actions.Checked else AllIcons.Nodes.Bookmark)
@@ -163,7 +166,7 @@ class SessionRenderer(
             is Path -> {
                 icon = projectIcon(item, projectName(item), d.iconSize)
                 append(projectName(item))
-                append("  $item", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                append("  ${dirLabel(item)}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
             // Among recent sessions, which mix every project, the row names the project; in a folder not bound to it the tooltip does.
             is ClaudeSession -> when (val parent = (node.parent as DefaultMutableTreeNode).userObject) {
@@ -174,9 +177,21 @@ class SessionRenderer(
                     project = item.cwd.takeIf { parent is Folder && item.cwd.toString() !in parent.dirs }, projectInRow = false, density = d,
                 )
             }
-            is BriefGoal -> {
+            is WorkDirRow -> {
+                icon = d.grow(AllIcons.Nodes.Folder)
+                append(dirLabel(item.session.workDir))
+                toolTipText = "Works in"
+            }
+            is BriefGroup -> {
                 icon = d.grow(AllIcons.Actions.IntentionBulb)
-                append(item.text)
+                append("Brief")
+                briefCount(item.session.brief)?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
+            }
+            is BriefGoal -> append(item.text)
+            is FilesGroup -> {
+                icon = d.grow(AllIcons.Nodes.Folder)
+                append("Files")
+                append("  ${item.count}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
             is BriefTaskRow -> append(item.task.line(), when (item.task.status) {
                 TaskStatus.COMPLETED -> SimpleTextAttributes.GRAYED_ATTRIBUTES
@@ -185,7 +200,8 @@ class SessionRenderer(
             })
             is AddedDir -> {
                 icon = d.grow(AllIcons.Nodes.Folder)
-                append(item.path.toString(), SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                append(dirLabel(item.path), SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                toolTipText = "Added directory"
             }
             is ChangedFile -> {
                 icon = FileTypeManager.getInstance().getFileTypeByFileName(item.path.fileName.toString()).icon?.let(d::grow)

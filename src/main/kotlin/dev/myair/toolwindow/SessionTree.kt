@@ -10,6 +10,7 @@ import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
 import java.nio.file.Path
 import java.util.UUID
+import kotlin.io.path.extension
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreePath
 
@@ -18,7 +19,22 @@ class ChangedFile(val path: Path, val cwd: Path) {
     override fun toString() = path.toString()
 }
 
-/** The goal of [session]'s brief, the first of its children; toString() is the TreeState id. */
+/** The folder [session] works in now ([ClaudeSession.workDir]), the first of its children; toString() is the TreeState id. */
+class WorkDirRow(val session: ClaudeSession) {
+    override fun toString() = "workdir ${session.id}"
+}
+
+/** A directory [session] may use besides its cwd, below its work dir. */
+class AddedDir(val session: ClaudeSession, val path: Path) {
+    override fun toString() = "dir ${session.id} $path"
+}
+
+/** The group of [session]'s brief: its goal and tasks. */
+class BriefGroup(val session: ClaudeSession) {
+    override fun toString() = "brief ${session.id}"
+}
+
+/** The goal of [session]'s brief, the first row of its [BriefGroup]. */
 class BriefGoal(val session: ClaudeSession, val text: String) {
     override fun toString() = "goal ${session.id}"
 }
@@ -28,9 +44,9 @@ class BriefTaskRow(val session: ClaudeSession, val index: Int, val task: BriefTa
     override fun toString() = "task ${session.id} $index"
 }
 
-/** A directory [session] may use besides its cwd, below its brief. */
-class AddedDir(val session: ClaudeSession, val path: Path) {
-    override fun toString() = "dir ${session.id} $path"
+/** The group of the files [session] wrote that are not outputs ([OUTPUT_EXTENSIONS]); the outputs follow it directly. */
+class FilesGroup(val session: ClaudeSession, val count: Int) {
+    override fun toString() = "files ${session.id}"
 }
 
 /** A milestone of [folder]'s plan; toString() is the TreeState id. */
@@ -108,7 +124,7 @@ data class FolderSummary(val sessions: Int, val urgent: Urgency?)
 
 /** The [FolderSummary] of a group node (folder, project, recent or unfiled sessions), counting the sessions below it as shown; null for a session and its children. */
 fun folderSummary(node: DefaultMutableTreeNode, urgency: (ClaudeSession) -> Urgency?): FolderSummary? = when (node.userObject) {
-    is ClaudeSession, is BriefGoal, is BriefTaskRow, is AddedDir, is ChangedFile -> null
+    is ClaudeSession, is WorkDirRow, is AddedDir, is BriefGroup, is BriefGoal, is BriefTaskRow, is FilesGroup, is ChangedFile -> null
     is Folder, is Path, RecentSessions, UnfiledSessions, is MilestoneRow, is PlanTaskRow, is NoTask -> {
         val sessions = groupSessions(node)
         FolderSummary(sessions.size, sessions.mapNotNull(urgency).minOrNull())
@@ -228,12 +244,21 @@ fun projectName(project: Path) = (project.fileName ?: project).toString()
 
 private fun projectNodes(sessions: List<ClaudeSession>) = sessions.groupBy { it.cwd }.map { (cwd, group) -> node(cwd, group.map(::sessionNode)) }
 
-private fun sessionNode(session: ClaudeSession) = node(
-    session,
-    listOfNotNull(session.brief?.goal?.let { node(BriefGoal(session, it)) }) +
-        session.brief?.tasks.orEmpty().mapIndexed { i, task -> node(BriefTaskRow(session, i, task)) } +
-        session.addedDirs.map { node(AddedDir(session, it)) } +
-        session.changedFiles.map { node(ChangedFile(it, session.cwd)) },
-)
+/**
+ * A session with, below it, the folder it works in, the directories added to it, its brief (goal and tasks) as a group,
+ * the files it wrote other than outputs as a group, and its outputs.
+ */
+private fun sessionNode(session: ClaudeSession): DefaultMutableTreeNode {
+    val (outputs, files) = session.changedFiles.partition { it.extension.lowercase() in OUTPUT_EXTENSIONS }
+    val brief = session.brief?.let {
+        node(BriefGroup(session), listOfNotNull(it.goal?.let { goal -> node(BriefGoal(session, goal)) }) + it.tasks.mapIndexed { i, task -> node(BriefTaskRow(session, i, task)) })
+    }
+    return node(
+        session,
+        listOf(node(WorkDirRow(session))) + session.addedDirs.map { node(AddedDir(session, it)) } + listOfNotNull(brief) +
+            listOfNotNull(files.takeIf { it.isNotEmpty() }?.let { node(FilesGroup(session, it.size), it.map { f -> node(ChangedFile(f, session.cwd)) }) }) +
+            outputs.map { node(ChangedFile(it, session.cwd)) },
+    )
+}
 
 private fun node(item: Any?, children: List<DefaultMutableTreeNode> = emptyList()) = DefaultMutableTreeNode(item).apply { children.forEach(::add) }

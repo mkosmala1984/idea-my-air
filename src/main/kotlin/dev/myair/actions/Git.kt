@@ -6,6 +6,7 @@ import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readBytes
+import kotlin.io.path.readText
 
 /** A git repository as the worktree popup needs it. */
 data class GitRepo(val mainRoot: Path, val branches: List<String>, val default: String)
@@ -92,6 +93,24 @@ object Git {
 
     /** The root of the work tree [dir] is in; null when neither [dir] nor a folder above it has a `.git`. */
     fun root(dir: Path): Path? = if (inRepo(dir)) Path.of(run(dir, "rev-parse", "--show-toplevel").trim()) else null
+
+    /**
+     * The branch checked out in the work tree [dir] lies in, read from its HEAD file without running git, so a tree
+     * refresh can ask it for every row; null outside a repository and on a detached HEAD. A linked worktree's `.git`
+     * is a file naming its git dir.
+     */
+    fun headBranch(dir: Path): String? {
+        val dotGit = generateSequence(dir.toAbsolutePath()) { it.parent }.map { it.resolve(".git") }.firstOrNull { it.exists() } ?: return null
+        val gitDir = if (dotGit.isDirectory()) dotGit else dotGit.readText().trim().let {
+            check(it.startsWith(GITDIR)) { "$dotGit does not name a git dir: $it" }
+            dotGit.parent.resolve(it.removePrefix(GITDIR))
+        }
+        val head = gitDir.resolve("HEAD").readText().trim()
+        return if (head.startsWith(BRANCH_REF)) head.removePrefix(BRANCH_REF) else null
+    }
+
+    private const val GITDIR = "gitdir: "
+    private const val BRANCH_REF = "ref: refs/heads/"
 
     /** [currentBranch] of [dir]; null when neither [dir] nor a folder above it has a `.git`. */
     fun branchOf(dir: Path): String? = if (inRepo(dir)) currentBranch(dir) else null

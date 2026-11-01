@@ -62,8 +62,8 @@ class TreeStatesTest {
         val xml = built()
         assertEquals(xml, built())
         val names = expanded(xml).flatten().toSet()
-        // The root, a folder, the recent and unfiled groups and a project; sessions without children are leaves.
-        assertEquals(setOf("", "rtm", "recent", "sessions", Path.of("/tf").toString()), names)
+        // The root, a folder, the recent and unfiled groups, a project and the sessions, which always hold their work dir.
+        assertEquals(setOf("", "rtm", "s1", "recent", "s2", "sessions", Path.of("/tf").toString()), names)
     }
 
     @Test
