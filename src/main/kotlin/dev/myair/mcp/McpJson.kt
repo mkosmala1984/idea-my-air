@@ -1,7 +1,10 @@
 package dev.myair.mcp
 
 import com.google.gson.GsonBuilder
+import dev.myair.claude.ClaudeSession
+import dev.myair.claude.LiveSession
 import dev.myair.folders.Folder
+import dev.myair.folders.progress
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.StructureHistory
 import java.time.ZoneId
@@ -27,13 +30,14 @@ fun SessionPage.toJson(structure: SessionFolders, zone: ZoneId): String = gson.t
 )
 
 /**
- * The folder tree in the user's order, each folder by path with the ids of the sessions filed directly in it and the
- * project directory it is bound to, whose sessions filed nowhere else it holds too.
+ * The folder tree in the user's order, each folder by path with the ids of the sessions filed directly in it, the
+ * directories bound to it, whose sessions filed nowhere else it holds too, and for a plan folder its tasks' progress.
  */
 fun SessionFolders.treeJson(): String {
     fun node(folder: Folder, prefix: String): Map<String, Any?> = linkedMapOf(
         "path" to prefix + folder.name,
         "dirs" to folder.dirs,
+        "plan" to folder.plan?.let { "${progress(it.tasks())} tasks done" },
         "sessions" to folder.items.map { it.id },
         "folders" to folder.folders.map { node(it, "$prefix${folder.name}/") },
     )
@@ -54,3 +58,36 @@ fun StructureHistory.toJson(): String = gson.toJson(
         entry
     },
 )
+
+/**
+ * The plan of [folder]: its path, directories, goal, and milestones with their tasks, each task with the sessions whose
+ * brief names it, newest first, and their live status (null without a process).
+ */
+fun SessionFolders.planJson(folder: Folder, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, zone: ZoneId): String {
+    val plan = checkNotNull(folder.plan) { "folder ${folder.id} has no plan" }
+    val byTask = sessions.filter { taskOf(it)?.first?.id == folder.id }.groupBy { it.brief!!.planTask!! }
+    return gson.toJson(
+        linkedMapOf(
+            "folder" to pathOf(folder.id),
+            "dirs" to folder.dirs,
+            "goal" to plan.goal,
+            "milestones" to plan.milestones.map { m ->
+                linkedMapOf(
+                    "id" to m.id, "title" to m.title, "status" to if (m.done) "done" else "open", "progress" to progress(m.tasks),
+                    "tasks" to m.tasks.map { t ->
+                        linkedMapOf(
+                            "id" to t.id, "title" to t.title, "status" to t.status.label, "next" to t.next,
+                            "sessions" to byTask[t.id].orEmpty().sortedByDescending { it.lastMessage }.map { s ->
+                                linkedMapOf(
+                                    "id" to s.id, "title" to s.title,
+                                    "lastMessage" to s.lastMessage.atZone(zone).toOffsetDateTime().toString(),
+                                    "status" to live[s.id]?.status?.name?.lowercase(),
+                                )
+                            },
+                        )
+                    },
+                )
+            },
+        ),
+    )
+}

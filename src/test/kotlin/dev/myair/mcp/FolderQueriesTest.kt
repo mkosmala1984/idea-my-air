@@ -2,6 +2,11 @@ package dev.myair.mcp
 
 import com.google.gson.JsonParser
 import dev.myair.claude.ClaudeSession
+import dev.myair.claude.Brief
+import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
+import dev.myair.folders.Plan
+import dev.myair.folders.PlanStatus
 import dev.myair.folders.SessionFolders
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -101,5 +106,23 @@ class FolderQueriesTest {
         assertEquals("rtm", rtm["path"].asString)
         assertEquals(listOf("old"), rtm.getAsJsonArray("sessions").map { it.asString })
         assertEquals("rtm/fixes", rtm.getAsJsonArray("folders")[0].asJsonObject["path"].asString)
+    }
+
+    @Test
+    fun `the plan json lists milestones and tasks, each task with the sessions naming it and their live status`() {
+        val planned = structure.createFolder(null, "p", "plan", dirs = listOf(Path.of("/plan").toString()), plan = Plan("ship"))
+            .addMilestone("p", "Export").addTask("M1", "Fields").editTask("T2") { it.copy(status = PlanStatus.IN_PROGRESS, next = "dates") }
+        fun briefed(id: String, task: String?) = session(id, id, "/elsewhere", now.minusHours(id.length.toLong())).copy(brief = Brief("g", emptyList(), task))
+        val live = mapOf("a" to LiveSession(1, "cli", SessionStatus.WORKING, null, java.time.Instant.EPOCH))
+        val json = JsonParser.parseString(planned.planJson(planned.find("p")!!, listOf(briefed("a", "T2"), briefed("bb", "T2"), briefed("c", null)), live, zone)).asJsonObject
+        assertEquals("plan", json["folder"].asString)
+        assertEquals("ship", json["goal"].asString)
+        val milestone = json.getAsJsonArray("milestones")[0].asJsonObject
+        assertEquals(listOf("M1", "open", "0/1"), listOf("id", "status", "progress").map { milestone[it].asString })
+        val task = milestone.getAsJsonArray("tasks")[0].asJsonObject
+        assertEquals(listOf("T2", "in_progress", "dates"), listOf("id", "status", "next").map { task[it].asString })
+        val sessions = task.getAsJsonArray("sessions").map { it.asJsonObject }
+        assertEquals(listOf("a" to "working", "bb" to null), sessions.map { it["id"].asString to it["status"].takeUnless { s -> s.isJsonNull }?.asString })
+        assertEquals("0/1 tasks done", JsonParser.parseString(planned.treeJson()).asJsonArray[1].asJsonObject["plan"].asString)
     }
 }

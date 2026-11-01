@@ -16,7 +16,7 @@ class FolderChangesTest {
 
     private var ids = 0
     private fun apply(changes: String, structure: SessionFolders = tree) =
-        FolderChanges.apply(structure, changes, scanned = setOf("s1", "s2"), projects = setOf("/app"), newId = { "new${++ids}" })
+        FolderChanges.apply(structure, changes, scanned = setOf("s1", "s2"), projects = setOf("/app", "/web"), newId = { "new${++ids}" })
 
     private fun SessionFolders.names(path: String? = null) = (path?.let { findByPath(it)!!.folders } ?: folders).map { it.name }
 
@@ -35,12 +35,37 @@ class FolderChangesTest {
     }
 
     @Test
-    fun `a created folder binds to a known project once`() {
-        val result = apply("""[{"op":"create","path":"rtm/app","project":"/app"}]""")
-        assertEquals("/app", result.findByPath("rtm/app")!!.dirs.single())
-        assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":"/nowhere"}]""") }
-        assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":"/app"}]""", result) }
-        assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":null}]""") }
+    fun `a created folder binds known directories, each to one folder`() {
+        val result = apply("""[{"op":"create","path":"rtm/app","dirs":["/app","/web"]}]""")
+        assertEquals(listOf("/app", "/web"), result.findByPath("rtm/app")!!.dirs)
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","dirs":["/nowhere"]}]""") }
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","dirs":["/app"]}]""", result) }
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","dirs":"/app"}]""") }
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":"/app"}]""") }
+    }
+
+    @Test
+    fun `bind and unbind move a directory between folders`() {
+        val bound = apply("""[{"op":"bind","path":"rtm","dir":"/app"},{"op":"unbind","dir":"/app"},{"op":"bind","path":"testflo","dir":"/app"}]""")
+        assertEquals(listOf("/app"), bound.findByPath("testflo")!!.dirs)
+        assertTrue(bound.findByPath("rtm")!!.dirs.isEmpty())
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"unbind","dir":"/app"}]""") }
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"bind","path":"rtm","dir":"/nowhere"}]""") }
+    }
+
+    @Test
+    fun `a plan folder is created or added, never inside another`() {
+        val planned = apply("""[{"op":"create","path":"p","plan":true},{"op":"add_plan","path":"rtm"}]""")
+        assertEquals(Plan(), planned.findByPath("p")!!.plan)
+        assertEquals(Plan(), planned.findByPath("rtm")!!.plan)
+        listOf(
+            """[{"op":"create","path":"rtm/fixes/x","plan":true}]""" to "lies in a plan folder",
+            """[{"op":"add_plan","path":"rtm/fixes"}]""" to "has a plan, lies in a plan folder or holds one",
+            """[{"op":"move","path":"p","to":"rtm"}]""" to "holds another plan folder",
+        ).forEach { (changes, message) ->
+            val error = assertThrows<IllegalArgumentException>(changes) { apply(changes, planned) }
+            assertTrue(message in error.message!!, "'$message' not in '${error.message}'")
+        }
     }
 
     @Test
