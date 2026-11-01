@@ -40,6 +40,14 @@ class PlanTest {
     }
 
     @Test
+    fun `restoring an older snapshot keeps the counter, so no id comes back`() {
+        val before = SessionFolders().createFolder(null, "rtm", "rtm")
+        val restored = structure.restore(before)
+        assertEquals(before.folders, restored.folders)
+        assertEquals("M5", restored.addPlan("rtm").addMilestone("rtm", "x").find("rtm")!!.plan!!.milestones.single().id)
+    }
+
+    @Test
     fun `tasks and milestones move to their final index, tasks across milestones of one plan`() {
         assertEquals(listOf("T3", "T2"), structure.moveTask("T2", "M1", 1).tasksOf("M1"))
         val moved = structure.moveTask("T3", "M4", 0)

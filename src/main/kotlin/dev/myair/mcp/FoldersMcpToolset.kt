@@ -147,7 +147,7 @@ class FoldersMcpToolset : McpToolset {
         } catch (e: Exception) {
             throw IllegalArgumentException("snapshot '$name' is not a valid structure: ${e.message}", e)
         }
-        service.updateFolders(ChangeSource.RESTORE) { restored }
+        service.updateFolders(ChangeSource.RESTORE) { it.restore(restored) }
         service.folders.treeJson()
     }
 

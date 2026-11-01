@@ -235,6 +235,9 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         return editPlan(folder.id) { plan -> plan.copy(milestones = plan.milestones - milestone) }
     }
 
+    /** [snapshot] in place of this structure, keeping the higher [nextId], so ids handed out since it was taken are not handed out again. */
+    fun restore(snapshot: SessionFolders) = snapshot.copy(nextId = maxOf(nextId, snapshot.nextId))
+
     fun toJson(): String = GsonBuilder().setPrettyPrinting().create().toJson(linkedMapOf("version" to VERSION, "nextId" to nextId, "folders" to folders))
 
     private fun editPlan(folderId: String, change: (Plan) -> Plan?): SessionFolders {

@@ -85,7 +85,7 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
                     update { it.deletePlanItem(item.milestone.id) }
                 }
             }
-            is PlanTaskRow -> if (confirm("Delete task ${item.task.id} \"${item.task.title}\"? Sessions naming it go to \"no task\".", "Delete Task")) update { it.deletePlanItem(item.task.id) }
+            is PlanTaskRow -> if (confirm("Delete task ${item.task.id} \"${item.task.title}\"? Sessions naming it go back to the folder they are filed in or bound to.", "Delete Task")) update { it.deletePlanItem(item.task.id) }
             else -> error("nothing to delete in $item")
         }
     }
