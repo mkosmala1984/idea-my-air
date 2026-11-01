@@ -18,6 +18,8 @@ import dev.myair.claude.TaskStatus
 import dev.myair.editor.projectIcon
 import dev.myair.editor.sessionIcon
 import dev.myair.folders.Folder
+import dev.myair.folders.PlanStatus
+import dev.myair.folders.progress
 import java.nio.file.Path
 import javax.swing.Icon
 import javax.swing.JList
@@ -34,6 +36,16 @@ private val TaskStatus.mark get() = when (this) {
 }
 
 fun BriefTask.line() = "${status.mark} $content"
+
+/** A plan task's status as its tree row and the context pane show it. */
+val PlanStatus.icon: Icon get() = when (this) {
+    PlanStatus.PENDING -> AllIcons.RunConfigurations.TestNotRan
+    PlanStatus.IN_PROGRESS -> AllIcons.Actions.Execute
+    PlanStatus.WAITING -> AllIcons.General.User
+    PlanStatus.BLOCKED -> AllIcons.Actions.Suspend
+    PlanStatus.DONE -> AllIcons.RunConfigurations.TestPassed
+    PlanStatus.CANCELED -> AllIcons.RunConfigurations.TestIgnored
+}
 
 /** What a session is doing, as its tooltip and the context pane say it; null without a process. */
 fun statusText(live: LiveSession?, unread: Boolean): String? = when (live?.status) {
@@ -104,9 +116,36 @@ class SessionRenderer(
         toolTipText = null
         when (val item = node.userObject) {
             is Folder -> {
-                icon = item.dirs.firstOrNull()?.let { projectIcon(Path.of(it), item.name, d.iconSize) } ?: d.grow(AllIcons.Nodes.Folder)
+                icon = when {
+                    item.plan != null -> d.grow(AllIcons.Nodes.Target)
+                    item.dirs.isNotEmpty() -> projectIcon(Path.of(item.dirs.first()), item.name, d.iconSize)
+                    else -> d.grow(AllIcons.Nodes.Folder)
+                }
                 append(item.name)
+                item.plan?.let { append("  ${progress(it.tasks())}", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
                 if (item.dirs.isNotEmpty()) append("  " + item.dirs.joinToString(), SimpleTextAttributes.GRAYED_ATTRIBUTES)
+            }
+            is MilestoneRow -> {
+                icon = d.grow(if (item.milestone.done) AllIcons.Actions.Checked else AllIcons.Nodes.Bookmark)
+                append("${item.milestone.id} ${item.milestone.title}", if (item.milestone.done) SimpleTextAttributes.GRAYED_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
+                append("  ${progress(item.milestone.tasks)}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+            }
+            is PlanTaskRow -> {
+                val status = item.task.status
+                icon = d.grow(status.icon)
+                append("${item.task.id} ${item.task.title}", when {
+                    status.closed -> SimpleTextAttributes.GRAYED_ATTRIBUTES
+                    status == PlanStatus.IN_PROGRESS -> SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
+                    else -> SimpleTextAttributes.REGULAR_ATTRIBUTES
+                })
+                item.task.next?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
+                // Its session may have ended without moving the task on.
+                if (status == PlanStatus.IN_PROGRESS && groupSessions(node).none { liveOf(it) != null }) append("  no live session", SimpleTextAttributes.ERROR_ATTRIBUTES)
+                toolTipText = "${status.label}${item.task.next?.let { ", next: $it" } ?: ""}"
+            }
+            is NoTask -> {
+                icon = d.grow(AllIcons.Actions.ListFiles)
+                append("no task", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
             }
             UnfiledSessions -> {
                 icon = d.grow(AllIcons.Actions.ListFiles)
@@ -123,7 +162,8 @@ class SessionRenderer(
             }
             // Among recent sessions, which mix every project, the row names the project; in a folder not bound to it the tooltip does.
             is ClaudeSession -> when (val parent = (node.parent as DefaultMutableTreeNode).userObject) {
-                RecentSessions -> appendSession(item, liveOf(item), settled(item), unread(item), project = null, projectInRow = true, d)
+                // A task's sessions may run in any of its plan's directories.
+                RecentSessions, is PlanTaskRow -> appendSession(item, liveOf(item), settled(item), unread(item), project = null, projectInRow = true, d)
                 else -> appendSession(
                     item, liveOf(item), settled(item), unread(item),
                     project = item.cwd.takeIf { parent is Folder && item.cwd.toString() !in parent.dirs }, projectInRow = false, density = d,

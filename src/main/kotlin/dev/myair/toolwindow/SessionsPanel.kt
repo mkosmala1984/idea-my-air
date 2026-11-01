@@ -157,9 +157,22 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         }
         val editing = FolderEditing(project, tree, service)
         val newFolder = FolderAction("New Folder", AllIcons.Actions.NewFolder, ::foldersMode, ::canEditFolders, editing::newFolder)
-        val rename = FolderAction("Rename Folder...", null, ::foldersMode, { canEditFolders() && editing.selectedFolder() != null }, editing::renameFolder)
-        val delete = FolderAction("Delete Folder...", AllIcons.Actions.GC, ::foldersMode, { canEditFolders() && editing.selectedFolder() != null }, editing::deleteFolder)
+        val rename = FolderAction("Rename...", null, ::foldersMode, { canEditFolders() && editing.canRename() }, editing::rename)
+        val delete = FolderAction("Delete...", AllIcons.Actions.GC, ::foldersMode, { canEditFolders() && editing.canRename() }, editing::delete)
         delete.registerCustomShortcutSet(CommonShortcuts.getDelete(), tree)
+        fun on(test: (Any?) -> Boolean) = { foldersMode && test(editing.selected()) }
+        val planActions = listOf(
+            FolderAction("Add Plan", AllIcons.Nodes.Target, on { it is Folder && it.plan == null }, { canEditFolders() && editing.canAddPlan() }, editing::addPlan),
+            FolderAction("Remove Plan", null, on { it is Folder && it.plan != null }, { canEditFolders() && editing.canRemovePlan() }, editing::removePlan),
+            FolderAction("Bind Directory...", null, on { it is Folder }, ::canEditFolders, editing::bindDirectory),
+            FolderAction("Unbind Directory...", null, on { it is Folder && it.dirs.isNotEmpty() }, ::canEditFolders, editing::unbindDirectory),
+            FolderAction("Add Milestone...", AllIcons.Nodes.Bookmark, on { (it is Folder && it.plan != null) || it is MilestoneRow }, ::canEditFolders, editing::addMilestone),
+            FolderAction("Add Task...", AllIcons.General.Add, on { it is MilestoneRow || it is PlanTaskRow }, ::canEditFolders, editing::addTask),
+            FolderAction("Mark Milestone Done", AllIcons.Actions.Checked, on { it is MilestoneRow && !it.milestone.done }, ::canEditFolders) { editing.setMilestoneDone(true) },
+            FolderAction("Reopen Milestone", null, on { it is MilestoneRow && it.milestone.done }, ::canEditFolders) { editing.setMilestoneDone(false) },
+            editing.statusGroup(on { it is PlanTaskRow }, ::canEditFolders),
+            FolderAction("Edit Next Step...", null, on { it is PlanTaskRow }, ::canEditFolders, editing::editNext),
+        )
         val inTree = { tree.selectionPaths.orEmpty().mapNotNull { (it.lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession } }
         val selectedDir = { tree.selectionPaths?.singleOrNull()?.let(::nodeDir) }
         val selectedOpenDir = { tree.selectionPaths?.singleOrNull()?.let(::openDir) }
@@ -170,7 +183,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 NewSessionInDirAction("New Claude Session in Worktree...", true, selectedDir),
                 openInIdeaAction(selectedOpenDir), openInTerminalAction(selectedOpenDir), Separator.getInstance(),
                 pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree),
-                Separator.getInstance(), newFolder, rename, delete,
+                Separator.getInstance(), newFolder, rename, delete, Separator.getInstance(), *planActions.toTypedArray(),
             ),
             "ClaudeSessionsPopup",
         )

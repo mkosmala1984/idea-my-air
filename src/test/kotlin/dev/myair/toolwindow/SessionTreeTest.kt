@@ -165,6 +165,39 @@ class SessionTreeTest {
         assertNull(dropChange(structure, listOf(Path.of("/x/rtm")), TreePath(root), 0))
     }
 
+    /** [structure] with rtm made a plan folder bound to /rtm: M4 holds T5 and T6, M7 none; s3 names T5. */
+    private val planned = structure.bind("rtm", Path.of("/rtm").toString()).addPlan("rtm")
+        .addMilestone("rtm", "Export").addTask("M1", "Fields").addTask("M1", "Checks").addMilestone("rtm", "Import")
+    private val tasked = listOf(sessions[0].copy(brief = Brief(null, emptyList(), "T2"))) + sessions.drop(1)
+
+    @Test
+    fun `a plan folder holds subfolders, milestones with their tasks and sessions, then no task with its other sessions`() {
+        assertEquals("rtm(fix, M1(T2(s3), T3), M4, no task rtm(s1)), empty, recent(s3, s2, s1), sessions(${Path.of("/tf")}(s2))", shape(foldersTree(planned, tasked, "")))
+        // A task wins over filing, and a task deleted lets the session fall back to its folder.
+        assertEquals("rtm(fix, M1(T3), M4, no task rtm(s3, s1)), empty, recent(s3, s2, s1), sessions(${Path.of("/tf")}(s2))", shape(foldersTree(planned.deletePlanItem("T2"), tasked, "")))
+        assertEquals("rtm(M1(T2(s3))), recent(s3), sessions", shape(foldersTree(planned, tasked, "s3")))
+    }
+
+    @Test
+    fun `milestones and tasks drop within their plan, sessions neither onto them nor away from their task`() {
+        val root = foldersTree(planned, tasked, "")
+        fun pathTo(vararg indices: Int) = TreePath(indices.fold(listOf(root)) { nodes, i -> nodes + nodes.last().getChildAt(i) as DefaultMutableTreeNode }.toTypedArray())
+        fun item(vararg indices: Int) = (pathTo(*indices).lastPathComponent as DefaultMutableTreeNode).userObject
+        val rtm = pathTo(0)
+        val m1 = pathTo(0, 1)
+        fun milestones(s: SessionFolders) = s.find("rtm")!!.plan!!.milestones.map { m -> m.id + m.tasks.map { it.id } }
+        assertEquals(listOf("M4[]", "M1[T2, T3]"), milestones(dropChange(planned, listOf(item(0, 1)), rtm, 4)!!.change(planned)))
+        assertEquals(listOf("M1[T3, T2]", "M4[]"), milestones(dropChange(planned, listOf(item(0, 1, 0)), m1, -1)!!.change(planned)))
+        assertEquals(listOf("M1[T3]", "M4[T2]"), milestones(dropChange(planned, listOf(item(0, 1, 0)), pathTo(0, 2), -1)!!.change(planned)))
+        assertNull(dropChange(planned, listOf(item(0, 1)), pathTo(1), -1))
+        assertNull(dropChange(planned, listOf(item(0, 1, 0)), rtm, 0))
+        assertNull(dropChange(planned, listOf(tasked[2]), m1, -1))
+        assertNull(dropChange(planned, listOf(tasked[0]), pathTo(1), -1))
+        assertEquals("rtm", dropChange(planned, listOf(tasked[1]), pathTo(0, 3), -1)!!.change(planned).folderOf("s2"))
+        val other = planned.addPlan("empty")
+        assertNull(dropChange(other, listOf(other.find("empty")!!), rtm, -1))
+    }
+
     @Test
     fun `a session of a bound project cannot be dropped back on sessions`() {
         val bound = structure.createFolder(null, "p", "tf", dirs = listOf(Path.of("/tf").toString()))

@@ -12,7 +12,7 @@ import javax.swing.JTree
 import javax.swing.TransferHandler
 import javax.swing.tree.DefaultMutableTreeNode
 
-/** Drags sessions (one or many), a single folder or a single project within the tree; nothing crosses to other components. */
+/** Drags sessions (one or many), or a single folder, project, milestone or task, within the tree; nothing crosses to other components. */
 class FolderDrop(private val tree: DropLineTree, private val service: ClaudeSessionsService, private val canEdit: () -> Boolean) : TransferHandler() {
     private var dragged = emptyList<Any>()
 
@@ -22,7 +22,7 @@ class FolderDrop(private val tree: DropLineTree, private val service: ClaudeSess
         val items = tree.selectionPaths.orEmpty().map { (it.lastPathComponent as DefaultMutableTreeNode).userObject }
         dragged = when {
             items.isNotEmpty() && items.all { it is ClaudeSession } -> items
-            items.size == 1 && (items[0] is Folder || items[0] is Path) -> items
+            items.size == 1 && (items[0] is Folder || items[0] is Path || items[0] is MilestoneRow || items[0] is PlanTaskRow) -> items
             else -> return null
         }
         return StringSelection(dragged.joinToString("\n"))
