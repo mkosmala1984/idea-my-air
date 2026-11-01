@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.DumbAwareAction
 import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.PlanStart
 import java.nio.file.Path
 import kotlin.io.path.isDirectory
 
@@ -16,12 +17,15 @@ class NewClaudeSessionAction : DumbAwareAction() {
     override fun actionPerformed(e: AnActionEvent) = ClaudeSessionOpener.startNew(e.project!!)
 }
 
-/** On a project's or folder's menu: a session in [dir], the selected node's directory, shown only where it has one. */
-class NewSessionInDirAction(text: String, inWorktree: Boolean, private val dir: () -> Path?) :
+/**
+ * On a project's or folder's menu: a session in [dir], the selected node's directory, shown only where it has one; in
+ * [plan], the selected plan row's plan and task, when there is one.
+ */
+class NewSessionInDirAction(text: String, inWorktree: Boolean, private val dir: () -> Path?, private val plan: () -> PlanStart?) :
     DumbAwareAction(text, null, if (inWorktree) AllIcons.Vcs.Branch else AllIcons.General.Add) {
     private val start: (AnActionEvent, Path) -> Unit =
-        if (inWorktree) { e, dir -> startInWorktree(e.project!!, dir, null, emptyList(), popupPoint(e)) }
-        else { e, dir -> ClaudeSessionOpener.startNew(e.project!!, dir) }
+        if (inWorktree) { e, dir -> startInWorktree(e.project!!, dir, null, emptyList(), popupPoint(e), plan()) }
+        else { e, dir -> ClaudeSessionOpener.startNew(e.project!!, dir, plan = plan()) }
 
     override fun getActionUpdateThread() = ActionUpdateThread.EDT
     override fun update(e: AnActionEvent) {

@@ -172,6 +172,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             FolderAction("Reopen Milestone", null, on { it is MilestoneRow && it.milestone.done }, ::canEditFolders) { editing.setMilestoneDone(false) },
             editing.statusGroup(on { it is PlanTaskRow }, ::canEditFolders),
             FolderAction("Edit Next Step...", null, on { it is PlanTaskRow }, ::canEditFolders, editing::editNext),
+            FolderAction("Edit Description...", AllIcons.Actions.Edit, on { (it is Folder && it.plan != null) || it is MilestoneRow || it is PlanTaskRow }, ::canEditFolders, editing::editDescription),
         )
         val inTree = { tree.selectionPaths.orEmpty().mapNotNull { (it.lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession } }
         val selectedDir = { tree.selectionPaths?.singleOrNull()?.let(::nodeDir) }
@@ -179,8 +180,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         PopupHandler.installPopupMenu(
             tree,
             DefaultActionGroup(
-                NewSessionInDirAction("New Claude Session", false, selectedDir),
-                NewSessionInDirAction("New Claude Session in Worktree...", true, selectedDir),
+                NewSessionInDirAction("New Claude Session", false, selectedDir, editing::selectedPlanStart),
+                NewSessionInDirAction("New Claude Session in Worktree...", true, selectedDir, editing::selectedPlanStart),
                 openInIdeaAction(selectedOpenDir), openInTerminalAction(selectedOpenDir), Separator.getInstance(),
                 pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree),
                 Separator.getInstance(), newFolder, rename, delete, Separator.getInstance(), *planActions.toTypedArray(),

@@ -60,7 +60,7 @@ fun StructureHistory.toJson(): String = gson.toJson(
 )
 
 /**
- * The plan of [folder]: its path, directories, goal, and milestones with their tasks, each task with the sessions whose
+ * The plan of [folder]: its path, directories, description, and milestones with their tasks, each task with the sessions whose
  * brief names it, newest first, and their live status (null without a process).
  */
 fun SessionFolders.planJson(folder: Folder, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, zone: ZoneId): String =
@@ -76,13 +76,13 @@ private fun SessionFolders.planMap(folder: Folder, sessions: List<ClaudeSession>
     return linkedMapOf(
         "folder" to pathOf(folder.id),
         "dirs" to folder.dirs,
-        "goal" to plan.goal,
+        "description" to plan.description,
         "milestones" to plan.milestones.map { m ->
             linkedMapOf(
-                "id" to m.id, "title" to m.title, "status" to if (m.done) "done" else "open", "progress" to progress(m.tasks),
+                "id" to m.id, "title" to m.title, "description" to m.description, "status" to if (m.done) "done" else "open", "progress" to progress(m.tasks),
                 "tasks" to m.tasks.map { t ->
                     linkedMapOf(
-                        "id" to t.id, "title" to t.title, "status" to t.status.label, "next" to t.next,
+                        "id" to t.id, "title" to t.title, "description" to t.description, "status" to t.status.label, "next" to t.next,
                         "sessions" to byTask[t.id].orEmpty().sortedByDescending { it.lastMessage }.map { s ->
                             linkedMapOf(
                                 "id" to s.id, "title" to s.title,

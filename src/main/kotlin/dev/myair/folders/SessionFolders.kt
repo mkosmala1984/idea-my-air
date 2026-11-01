@@ -188,20 +188,20 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         null
     }
 
-    fun setGoal(folderId: String, goal: String?) = editPlan(folderId) { it.copy(goal = goal) }
+    fun setDescription(folderId: String, description: String?) = editPlan(folderId) { it.copy(description = description) }
 
     /** Adds milestone `M<nextId>` at [index] (last for null) of the plan of [folderId]. */
-    fun addMilestone(folderId: String, title: String, index: Int? = null): SessionFolders {
+    fun addMilestone(folderId: String, title: String, index: Int? = null, description: String? = null): SessionFolders {
         if (find(folderId) == null) return this
         val id = "M$nextId"
-        return copy(nextId = nextId + 1).editPlan(folderId) { it.copy(milestones = it.milestones.inserted(Milestone(id, title), index)) }
+        return copy(nextId = nextId + 1).editPlan(folderId) { it.copy(milestones = it.milestones.inserted(Milestone(id, title, description = description), index)) }
     }
 
     /** Adds task `T<nextId>` at [index] (last for null) of [milestoneId]. */
-    fun addTask(milestoneId: String, title: String, index: Int? = null): SessionFolders {
+    fun addTask(milestoneId: String, title: String, index: Int? = null, description: String? = null): SessionFolders {
         if (findMilestone(milestoneId) == null) return this
         val id = "T$nextId"
-        return copy(nextId = nextId + 1).editMilestone(milestoneId) { it.copy(tasks = it.tasks.inserted(PlanTask(id, title), index)) }
+        return copy(nextId = nextId + 1).editMilestone(milestoneId) { it.copy(tasks = it.tasks.inserted(PlanTask(id, title, description = description), index)) }
     }
 
     fun editMilestone(id: String, change: (Milestone) -> Milestone): SessionFolders {
@@ -291,16 +291,20 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
             )
         }
 
-        private fun plan(json: JsonObject) = json.only(setOf("goal", "milestones")).let {
-            Plan(json.get("goal")?.asString, json.field("milestones").asJsonArray.map { m -> milestone(m.asJsonObject) })
+        // Descriptions, like `next`, are written only when set, so a file without any stays readable by builds before them.
+        private fun plan(json: JsonObject) = json.only(setOf("description", "milestones")).let {
+            Plan(json.get("description")?.asString, json.field("milestones").asJsonArray.map { m -> milestone(m.asJsonObject) })
         }
 
-        private fun milestone(json: JsonObject) = json.only(setOf("id", "title", "done", "tasks")).let {
-            Milestone(json.field("id").asString, json.field("title").asString, json.field("done").asBoolean, json.field("tasks").asJsonArray.map { t -> task(t.asJsonObject) })
+        private fun milestone(json: JsonObject) = json.only(setOf("id", "title", "done", "tasks", "description")).let {
+            Milestone(
+                json.field("id").asString, json.field("title").asString, json.field("done").asBoolean,
+                json.field("tasks").asJsonArray.map { t -> task(t.asJsonObject) }, json.get("description")?.asString,
+            )
         }
 
-        private fun task(json: JsonObject) = json.only(setOf("id", "title", "status", "next")).let {
-            PlanTask(json.field("id").asString, json.field("title").asString, PlanStatus.of(json.field("status").asString), json.get("next")?.asString)
+        private fun task(json: JsonObject) = json.only(setOf("id", "title", "status", "next", "description")).let {
+            PlanTask(json.field("id").asString, json.field("title").asString, PlanStatus.of(json.field("status").asString), json.get("next")?.asString, json.get("description")?.asString)
         }
 
         private fun JsonObject.field(name: String): JsonElement = checkNotNull(get(name)) { "missing '$name' in $this" }

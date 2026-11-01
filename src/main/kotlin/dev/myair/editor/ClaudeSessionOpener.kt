@@ -6,6 +6,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
+import dev.myair.folders.ChangeSource
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
 import dev.myair.tabs.HostWindow
@@ -58,15 +59,20 @@ object ClaudeSessionOpener {
         }
     }
 
-    /** Starts `claude` with [args] in [cwd], which is [sessionProject] or one of its worktrees; the tab opens in [project]. */
+    /**
+     * Starts `claude` with [args] in [cwd], which is [sessionProject] or one of its worktrees; the tab opens in [project].
+     * With [plan], the session is filed in that plan folder first, so it shows there and its tab adds the plan to its prompt.
+     */
     fun startNew(
         project: Project,
         sessionProject: Path = projectBase(project),
         cwd: Path = sessionProject,
         id: String = UUID.randomUUID().toString(),
         args: List<String> = emptyList(),
+        plan: PlanStart? = null,
     ) {
-        val file = ClaudeSessionVirtualFile(id, cwd, sessionProject, NEW_SESSION_TITLE, listOf("--session-id", id) + args)
+        plan?.let { ClaudeSessionsService.getInstance().updateFolders(ChangeSource.UI) { folders -> folders.assign(id, it.folderId) } }
+        val file = ClaudeSessionVirtualFile(id, cwd, sessionProject, NEW_SESSION_TITLE, listOf("--session-id", id) + args, planStart = plan)
         openTab(project, file)
         // The tab just opened with focus, so the current window holds it.
         val window = checkNotNull(FileEditorManagerEx.getInstanceEx(project).currentWindow) { "no editor window after opening $id" }

@@ -1,5 +1,6 @@
 package dev.myair.toolwindow
 
+import com.intellij.markdown.utils.convertMarkdownToHtml
 import dev.myair.store.Homes
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
@@ -271,6 +272,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     comment(it.task.status.label)
                 }
                 it.task.next?.let { next -> row { comment("Next: $next", MAX_LINE_LENGTH_WORD_WRAP) } }
+                it.task.description?.let { description -> row { text(convertMarkdownToHtml(description), MAX_LINE_LENGTH_WORD_WRAP) } }
                 for (other in it.others) row {
                     icon(sessionIcon(service.live[other.id]?.status, other.id in service.unread))
                     link(other.title) { ClaudeSessionOpener.open(project, other) }.shrinkable()

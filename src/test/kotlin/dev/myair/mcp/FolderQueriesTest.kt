@@ -118,7 +118,7 @@ class FolderQueriesTest {
         val json = JsonParser.parseString(planned.planJson(planned.find("p")!!, sessionList, live, zone)).asJsonObject
         assertEquals(json, JsonParser.parseString(planned.plansJson(listOf(planned.find("p")!!), sessionList, live, zone)).asJsonArray.single())
         assertEquals("plan", json["folder"].asString)
-        assertEquals("ship", json["goal"].asString)
+        assertEquals("ship", json["description"].asString)
         val milestone = json.getAsJsonArray("milestones")[0].asJsonObject
         assertEquals(listOf("M1", "open", "0/1"), listOf("id", "status", "progress").map { milestone[it].asString })
         val task = milestone.getAsJsonArray("tasks")[0].asJsonObject

@@ -31,6 +31,7 @@ import javax.swing.SwingConstants
  * `/clear` or `/resume` can change; [ClaudeSessionsService] updates them by [pid], known once the process has started.
  * [project] is the session's [dev.myair.claude.ClaudeSession.project], whose icon and colour the tab takes outside that project's window.
  * [restored]: the platform reopened the tab on startup through [ClaudeSessionFileSystem]; nobody checked it may start yet.
+ * [planStart]: a new session started from a plan's row, for [sessionPlan] before a scan has seen it; a restored tab has none.
  */
 class ClaudeSessionVirtualFile(
     var sessionId: String,
@@ -39,6 +40,7 @@ class ClaudeSessionVirtualFile(
     var title: String,
     val claudeArgs: List<String>,
     val restored: Boolean = false,
+    val planStart: PlanStart? = null,
 ) : LightVirtualFile(title, FileTypes.PLAIN_TEXT, ""), EditorHistoryManager.OptionallyIncluded {
     @Volatile
     var pid: Long? = null

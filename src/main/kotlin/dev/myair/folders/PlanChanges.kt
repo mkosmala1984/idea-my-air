@@ -12,10 +12,10 @@ import com.google.gson.JsonParser
  */
 object PlanChanges {
     private val FIELDS = mapOf(
-        "set_goal" to setOf("goal"),
-        "add_milestone" to setOf("title", "index"),
-        "add_task" to setOf("milestone", "title", "index"),
-        "update" to setOf("id", "title", "status", "next"),
+        "set_description" to setOf("description"),
+        "add_milestone" to setOf("title", "description", "index"),
+        "add_task" to setOf("milestone", "title", "description", "index"),
+        "update" to setOf("id", "title", "description", "status", "next"),
         "move" to setOf("id", "milestone", "index"),
         "delete" to setOf("id"),
     )
@@ -50,12 +50,13 @@ object PlanChanges {
             it.asInt
         }
         return when (op) {
-            "set_goal" -> folders.setGoal(folderId, change.nullableString("goal")?.also { require(it.isNotBlank()) { "blank goal" } })
-            "add_milestone" -> folders.addMilestone(folderId, change.title(), index)
-            "add_task" -> folders.addTask(milestone(change.string("milestone")).id, change.title(), index)
+            "set_description" -> folders.setDescription(folderId, change.description())
+            "add_milestone" -> folders.addMilestone(folderId, change.title(), index, change.takeIf { it.has("description") }?.description())
+            "add_task" -> folders.addTask(milestone(change.string("milestone")).id, change.title(), index, change.takeIf { it.has("description") }?.description())
             "update" -> {
                 val id = change.string("id")
                 val title = change.get("title")?.let { change.title() }
+                val description = if (change.has("description")) change.description() else null
                 if (isMilestone(id)) {
                     require(!change.has("next")) { "a milestone has no next step" }
                     val done = change.get("status")?.let {
@@ -65,11 +66,11 @@ object PlanChanges {
                             else -> throw IllegalArgumentException("unknown milestone status '$status', expected open or done")
                         }
                     }
-                    folders.editMilestone(milestone(id).id) { it.copy(title = title ?: it.title, done = done ?: it.done) }
+                    folders.editMilestone(milestone(id).id) { it.copy(title = title ?: it.title, done = done ?: it.done, description = if (change.has("description")) description else it.description) }
                 } else {
                     val status = change.get("status")?.let { PlanStatus.of(change.string("status")) }
                     val next = if (change.has("next")) change.nullableString("next")?.also { require(it.isNotBlank()) { "blank next step" } } else task(id).next
-                    folders.editTask(task(id).id) { it.copy(title = title ?: it.title, status = status ?: it.status, next = next) }
+                    folders.editTask(task(id).id) { it.copy(title = title ?: it.title, status = status ?: it.status, next = next, description = if (change.has("description")) description else it.description) }
                 }
             }
             "move" -> {
@@ -95,6 +96,9 @@ object PlanChanges {
     }
 
     private fun JsonObject.title() = string("title").also { require(it.isNotBlank()) { "blank title" } }
+
+    /** A Markdown description, or null to clear it. */
+    private fun JsonObject.description() = nullableString("description")?.also { require(it.isNotBlank()) { "blank description" } }
 
     private fun JsonObject.string(name: String): String {
         val value = get(name)

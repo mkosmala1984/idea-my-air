@@ -13,6 +13,7 @@ import dev.myair.folders.ChangeSource
 import dev.myair.folders.Folder
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.SessionFolders
+import dev.myair.editor.PlanStart
 import dev.myair.service.ClaudeSessionsService
 import java.nio.file.Path
 import java.util.UUID
@@ -41,6 +42,9 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
         is PlanTaskRow -> service.folders.findTask(item.task.id)?.let { (folder, task) -> folder.plan!!.milestones.first { task in it.tasks }.id }
         else -> null
     }
+
+    /** Where a new session started from the selection goes in a plan: a plan row's plan, and a task row's task. */
+    fun selectedPlanStart() = selectedPlanFolder()?.let { PlanStart(it.id, (selected() as? PlanTaskRow)?.task?.id) }
 
     /** Inside the folder of the selection; at the top level when nothing or something under `sessions` is selected. */
     fun newFolder() {
@@ -145,6 +149,18 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
         val row = selected() as PlanTaskRow
         val next = Messages.showInputDialog(project, "Next step (empty clears it):", "Edit Next Step", null, row.task.next.orEmpty(), null) ?: return
         update { it.editTask(row.task.id) { t -> t.copy(next = next.trim().ifEmpty { null }) } }
+    }
+
+    /** Edits the Markdown description of the selected plan folder, milestone or task; an empty one clears it. */
+    fun editDescription() {
+        val (title, current, set) = when (val item = selected()) {
+            is Folder -> Triple("Plan ${item.name}", item.plan!!.description) { d: String? -> update { it.setDescription(item.id, d) } }
+            is MilestoneRow -> Triple("Milestone ${item.milestone.id}", item.milestone.description) { d: String? -> update { it.editMilestone(item.milestone.id) { m -> m.copy(description = d) } } }
+            is PlanTaskRow -> Triple("Task ${item.task.id}", item.task.description) { d: String? -> update { it.editTask(item.task.id) { t -> t.copy(description = d) } } }
+            else -> error("no description in $item")
+        }
+        val text = Messages.showMultilineInputDialog(project, "Markdown (empty clears it):", "Description of $title", current.orEmpty(), null, null) ?: return
+        set(text.trim().ifEmpty { null })
     }
 
     /** "Set Status" with one entry per status, for a task row. */

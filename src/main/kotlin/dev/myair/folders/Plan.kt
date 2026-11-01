@@ -23,14 +23,17 @@ enum class PlanStatus {
     }
 }
 
-/** A task of a plan; its id `T<n>` is unique across `structure.json` and never reused, so a brief names it alone. */
-data class PlanTask(val id: String, val title: String, val status: PlanStatus = PlanStatus.PENDING, val next: String? = null)
+/**
+ * A task of a plan; its id `T<n>` is unique across `structure.json` and never reused, so a brief names it alone. [title] is
+ * its name; [description], like a milestone's and a plan's, is Markdown.
+ */
+data class PlanTask(val id: String, val title: String, val status: PlanStatus = PlanStatus.PENDING, val next: String? = null, val description: String? = null)
 
 /** A milestone of a plan, `M<n>` like a task's id; [done] is set by hand, not derived from its tasks. */
-data class Milestone(val id: String, val title: String, val done: Boolean = false, val tasks: List<PlanTask> = emptyList())
+data class Milestone(val id: String, val title: String, val done: Boolean = false, val tasks: List<PlanTask> = emptyList(), val description: String? = null)
 
-/** What makes a folder a plan folder: the project's goal and its milestones in order. */
-data class Plan(val goal: String? = null, val milestones: List<Milestone> = emptyList()) {
+/** What makes a folder a plan folder, the folder's name being the plan's: its description and milestones in order. */
+data class Plan(val description: String? = null, val milestones: List<Milestone> = emptyList()) {
     fun tasks() = milestones.flatMap { it.tasks }
 }
 

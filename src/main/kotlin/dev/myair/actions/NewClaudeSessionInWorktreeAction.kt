@@ -16,6 +16,7 @@ import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import com.intellij.ui.awt.RelativePoint
 import dev.myair.MyAirSettings
 import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.PlanStart
 import dev.myair.editor.projectBase
 import java.awt.Point
 import java.nio.file.Path
@@ -42,9 +43,9 @@ fun popupPoint(e: AnActionEvent): RelativePoint {
 /**
  * Starts `claude` with [args] in a new worktree of the repository of [dir]: a branch `worktree-<base>-<date>-<id4>` off [base], or off
  * a base picked from a popup at [where] when [base] is null, checked out in the worktrees directory of [MyAirSettings],
- * with the `.worktreeinclude` files of the main checkout copied in. The session belongs to [dir].
+ * with the `.worktreeinclude` files of the main checkout copied in. The session belongs to [dir], and to [plan] if given.
  */
-fun startInWorktree(project: Project, dir: Path, base: String?, args: List<String>, where: RelativePoint) =
+fun startInWorktree(project: Project, dir: Path, base: String?, args: List<String>, where: RelativePoint, plan: PlanStart? = null) =
     background(project, "Reading branches", { Git.repo(dir) }) { repo ->
         val recent = recentBases(repo.mainRoot)
         fun create(base: String) {
@@ -56,7 +57,7 @@ fun startInWorktree(project: Project, dir: Path, base: String?, args: List<Strin
                 copyIncluded(repo.mainRoot, path, Git.includedFiles(repo.mainRoot))
             }) {
                 PropertiesComponent.getInstance().setList(recentKey(repo.mainRoot), pushRecent(recent, base, repo.branches))
-                ClaudeSessionOpener.startNew(project, dir, path, id, args)
+                ClaudeSessionOpener.startNew(project, dir, path, id, args, plan)
             }
         }
         if (base != null) {

@@ -6,6 +6,7 @@ import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
+import com.intellij.markdown.utils.convertMarkdownToHtml
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.util.IconUtil
 import com.intellij.util.ui.JBUI
@@ -122,13 +123,17 @@ class SessionRenderer(
                     else -> d.grow(AllIcons.Nodes.Folder)
                 }
                 append(item.name)
-                item.plan?.let { append("  ${progress(it.tasks())}", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
+                item.plan?.let {
+                    append("  ${progress(it.tasks())}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                    toolTipText = describedTooltip(emptyList(), it.description)
+                }
                 if (item.dirs.isNotEmpty()) append("  " + item.dirs.joinToString(), SimpleTextAttributes.GRAYED_ATTRIBUTES)
             }
             is MilestoneRow -> {
                 icon = d.grow(if (item.milestone.done) AllIcons.Actions.Checked else AllIcons.Nodes.Bookmark)
                 append("${item.milestone.id} ${item.milestone.title}", if (item.milestone.done) SimpleTextAttributes.GRAYED_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
                 append("  ${progress(item.milestone.tasks)}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                toolTipText = describedTooltip(emptyList(), item.milestone.description)
             }
             is PlanTaskRow -> {
                 val status = item.task.status
@@ -141,7 +146,7 @@ class SessionRenderer(
                 item.task.next?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
                 // Its session may have ended without moving the task on.
                 if (status == PlanStatus.IN_PROGRESS && groupSessions(node).none { liveOf(it) != null }) append("  no live session", SimpleTextAttributes.ERROR_ATTRIBUTES)
-                toolTipText = "${status.label}${item.task.next?.let { ", next: $it" } ?: ""}"
+                toolTipText = describedTooltip(listOfNotNull(status.label, item.task.next?.let { "Next: $it" }), item.task.description)
             }
             is NoTask -> {
                 icon = d.grow(AllIcons.Actions.ListFiles)
@@ -188,4 +193,13 @@ class SessionRenderer(
             }
         }
     }
+}
+
+/** Markdown descriptions as HTML; one renderer paints every row on every repaint, so each text is converted once. */
+private val descriptionHtml = HashMap<String, String>()
+
+/** A plan row's tooltip: [lines] as text, then its [description] rendered; null when there is neither. */
+private fun describedTooltip(lines: List<String>, description: String?): String? {
+    val html = lines.map(StringUtil::escapeXmlEntities) + listOfNotNull(description?.let { descriptionHtml.getOrPut(it) { convertMarkdownToHtml(it) } })
+    return html.takeIf { it.isNotEmpty() }?.joinToString("<br>", "<html>", "</html>")
 }

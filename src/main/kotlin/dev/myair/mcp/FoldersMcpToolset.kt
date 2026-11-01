@@ -95,8 +95,8 @@ class FoldersMcpToolset : McpToolset {
     @McpDescription(
         "The plans of the project a directory belongs to, as a JSON array: the plan folder that the folder bound to the " +
             "directory (or to one above it) is or lies in, else every plan folder below that bound folder. Each plan has folder " +
-            "(its path, which my_air_plan_apply takes), its directories, the goal, and milestones (status open or done) " +
-            "with their tasks (id, title, status: pending, in_progress, waiting for the user, blocked by someone else, done or " +
+            "(its path, the plan's name, which my_air_plan_apply takes), its directories, description (Markdown, as for " +
+            "milestones and tasks), and milestones (id, title, description, status open or done) with their tasks (id, title, description, status: pending, in_progress, waiting for the user, blocked by someone else, done or " +
             "canceled; next: the next step), each task with the sessions whose brief names it. Fails when the directory has no plan.",
     )
     suspend fun my_air_plan_get(@McpDescription("A directory of the project, normally the session's working directory.") dir: String): String =
@@ -107,11 +107,12 @@ class FoldersMcpToolset : McpToolset {
         "Changes one plan my_air_plan_get returned, all or none, in one write that leaves a snapshot for undo. " +
             "Add tasks and keep their status and next step current freely; delete or move milestones and tasks only after the " +
             "user agreed. changes is a JSON array applied in order: " +
-            "{\"op\":\"set_goal\",\"goal\":\"...\"} (null clears it), " +
-            "{\"op\":\"add_milestone\",\"title\":\"...\",\"index\":0} (index optional, default last), " +
-            "{\"op\":\"add_task\",\"milestone\":\"M1\",\"title\":\"...\",\"index\":0}, " +
-            "{\"op\":\"update\",\"id\":\"T4\",\"title\":\"...\",\"status\":\"waiting\",\"next\":\"...\"} (fields optional; next null clears " +
-            "it; a milestone takes title and status open or done), " +
+            "{\"op\":\"set_description\",\"description\":\"...\"} (the plan's; null clears it), " +
+            "{\"op\":\"add_milestone\",\"title\":\"...\",\"description\":\"...\",\"index\":0} (description and index optional, index default last), " +
+            "{\"op\":\"add_task\",\"milestone\":\"M1\",\"title\":\"...\",\"description\":\"...\",\"index\":0}, " +
+            "{\"op\":\"update\",\"id\":\"T4\",\"title\":\"...\",\"description\":\"...\",\"status\":\"waiting\",\"next\":\"...\"} (fields " +
+            "optional; description or next null clears it; a milestone takes title, description and status open or done). " +
+            "Descriptions are Markdown: what the plan, milestone or task is about and how it is to be done, not its progress. " +
             "{\"op\":\"move\",\"id\":\"T4\",\"milestone\":\"M2\",\"index\":0} (index after the move; milestone optional for a task, its own " +
             "by default, and not given for a milestone), " +
             "{\"op\":\"delete\",\"id\":\"T4\"} (a milestone only when all its tasks are done or canceled). " +

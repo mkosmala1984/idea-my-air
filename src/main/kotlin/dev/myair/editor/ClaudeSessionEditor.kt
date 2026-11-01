@@ -27,6 +27,10 @@ import java.awt.BorderLayout
 import java.awt.GridBagLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
+import dev.myair.service.ClaudeSessionsService
+import dev.myair.store.PromptFiles
+import java.nio.file.Path
+import kotlin.io.path.deleteIfExists
 import kotlin.io.path.isDirectory
 
 class ClaudeSessionEditorProvider : FileEditorProvider, DumbAware {
@@ -43,6 +47,8 @@ class ClaudeSessionEditorProvider : FileEditorProvider, DumbAware {
 class ClaudeSessionEditor(private val project: Project, private val file: ClaudeSessionVirtualFile) : UserDataHolderBase(), FileEditor {
     private val content = JPanel(BorderLayout())
     private var widget: TerminalWidget? = null
+    /** The plan part of the system prompt, while `claude` may read it again. */
+    private var promptFile: Path? = null
 
     init {
         content.add((if (file.restored) restoreBlocker() else null) ?: start())
@@ -51,9 +57,17 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
     /** Starts `claude` and returns the component showing it. */
     private fun start(): JComponent {
         val claude = checkNotNull(PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS("claude")) { "claude executable not found on PATH" }
+        val briefs = MyAirSettings.getInstance().briefs
+        val service = ClaudeSessionsService.getInstance()
+        val folders = service.folders
+        promptFile = sessionPlan(folders, file.sessionId, service.sessions.firstOrNull { it.id == file.sessionId }, file.planStart)
+            ?.let { (folder, task) -> PromptFiles.write(Homes.myAir.resolve("prompts"), planPrompt(folders, folder, task, briefs)) }
         val options = ShellStartupOptions.Builder()
             .workingDirectory(file.cwd.toString())
-            .shellCommand(listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(MyAirSettings.getInstance().briefs)) + file.claudeArgs)
+            .shellCommand(
+                listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(briefs)) +
+                    promptFile.let { if (it == null) emptyList() else listOf("--append-system-prompt-file", it.toString()) } + file.claudeArgs,
+            )
             // Fullscreen renderer: no flicker, mouse support; otherwise claude asks on every start whether to try it.
             // Skip auto-install of claude's own JetBrains plugin into this IDE, as Air does.
             .envVariables(mapOf("CLAUDE_CODE_NO_FLICKER" to "1", "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL" to "true"))
@@ -107,5 +121,7 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
     override fun isValid() = true
     override fun addPropertyChangeListener(listener: PropertyChangeListener) {}
     override fun removePropertyChangeListener(listener: PropertyChangeListener) {}
-    override fun dispose() {}
+    override fun dispose() {
+        promptFile?.deleteIfExists()
+    }
 }

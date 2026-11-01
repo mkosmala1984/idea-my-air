@@ -19,28 +19,35 @@ class PlanChangesTest {
     @Test
     fun `changes apply in order, later ones using ids earlier ones allocated`() {
         val result = apply(
-            """[{"op":"set_goal","goal":"migrate"},
+            """[{"op":"set_description","description":"# Migrate\n\n- data"},
                 {"op":"add_milestone","title":"Import","index":0},
-                {"op":"add_task","milestone":"M5","title":"Map"},
+                {"op":"add_task","milestone":"M5","title":"Map","description":"Map **fields**"},
                 {"op":"update","id":"T6","status":"in_progress","next":"ask about dates"},
                 {"op":"move","id":"T2","milestone":"M5","index":0},
                 {"op":"update","id":"M1","status":"done","title":"Export done"}]""",
         )
         val plan = result.plan()
-        assertEquals("migrate", plan.goal)
+        assertEquals("# Migrate\n\n- data", plan.description)
         assertEquals(listOf("M5" to listOf("T2", "T6"), "M1" to emptyList()), plan.milestones.map { m -> m.id to m.tasks.map { it.id } })
-        assertEquals(PlanTask("T6", "Map", PlanStatus.IN_PROGRESS, "ask about dates"), plan.tasks()[1])
+        assertEquals(PlanTask("T6", "Map", PlanStatus.IN_PROGRESS, "ask about dates", "Map **fields**"), plan.tasks()[1])
         assertTrue(plan.milestones[1].done)
         assertEquals("Export done", plan.milestones[1].title)
     }
 
     @Test
-    fun `next is kept unless given, null clearing it, and a goal clears with null`() {
-        val set = apply("""[{"op":"update","id":"T2","next":"x"},{"op":"set_goal","goal":"g"}]""")
-        assertEquals("x", PlanChanges.apply(set, "p", """[{"op":"update","id":"T2","status":"done"}]""").plan().tasks().single().next)
-        val cleared = PlanChanges.apply(set, "p", """[{"op":"update","id":"T2","next":null},{"op":"set_goal","goal":null}]""")
-        assertNull(cleared.plan().tasks().single().next)
-        assertNull(cleared.plan().goal)
+    fun `next and descriptions are kept unless given, null clearing them`() {
+        val set = apply(
+            """[{"op":"update","id":"T2","next":"x","description":"t"},{"op":"update","id":"M1","description":"m"},
+                {"op":"set_description","description":"p"}]""",
+        )
+        val kept = PlanChanges.apply(set, "p", """[{"op":"update","id":"T2","status":"done"},{"op":"update","id":"M1","title":"E"}]""").plan()
+        assertEquals(listOf("x", "t", "m"), listOf(kept.tasks().single().next, kept.tasks().single().description, kept.milestones.single().description))
+        val cleared = PlanChanges.apply(
+            set, "p",
+            """[{"op":"update","id":"T2","next":null,"description":null},{"op":"update","id":"M1","description":null},{"op":"set_description","description":null}]""",
+        ).plan()
+        assertEquals(listOf(null, null, null, null), listOf(cleared.tasks().single().next, cleared.tasks().single().description, cleared.milestones.single().description, cleared.description))
+        assertEquals("d", apply("""[{"op":"add_milestone","title":"x","description":"d"}]""").plan().milestones.last().description)
     }
 
     @Test
@@ -64,7 +71,9 @@ class PlanChangesTest {
             """[{"op":"move","id":"T2"}]""" to "'index' is missing",
             """[{"op":"move","id":"T2","index":1}]""" to "index 1 outside 0..0",
             """[{"op":"move","id":"M1","index":1}]""" to "outside the milestones",
-            """[{"op":"set_goal"}]""" to "'goal' is missing",
+            """[{"op":"set_description"}]""" to "'description' is missing",
+            """[{"op":"update","id":"T2","description":" "}]""" to "blank description",
+            """[{"op":"set_goal","goal":"g"}]""" to "unknown op",
             """[{"op":"add_milestone","title":"ok"},{"op":"delete","id":"T9"}]""" to "change 2",
         ).forEach { (changes, message) ->
             val error = assertThrows<IllegalArgumentException>(changes) { apply(changes) }

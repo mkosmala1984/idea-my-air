@@ -122,7 +122,9 @@ class PlanTest {
 
     @Test
     fun `json round-trips plans, and a version 2 file reads its project as one directory`() {
-        val edited = structure.editTask("T2") { it.copy(status = PlanStatus.IN_PROGRESS, next = "map the rest") }.setGoal("rtm", "migrate")
+        assertFalse("description" in structure.toJson(), "a file without descriptions stays readable by builds before them")
+        val edited = structure.editTask("T2") { it.copy(status = PlanStatus.IN_PROGRESS, next = "map the rest", description = "# Map\n\n\"all\" <fields>") }
+            .editMilestone("M1") { it.copy(description = "m") }.setDescription("rtm", "migrate")
         assertEquals(edited, SessionFolders.parse(edited.toJson()))
         assertTrue("\"in_progress\"" in edited.toJson())
         assertEquals(
