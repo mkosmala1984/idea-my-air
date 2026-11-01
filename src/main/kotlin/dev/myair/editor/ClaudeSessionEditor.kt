@@ -53,7 +53,7 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
         val claude = checkNotNull(PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS("claude")) { "claude executable not found on PATH" }
         val options = ShellStartupOptions.Builder()
             .workingDirectory(file.cwd.toString())
-            .shellCommand(listOf(claude.path) + file.claudeArgs)
+            .shellCommand(listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(MyAirSettings.getInstance().briefs)) + file.claudeArgs)
             // Fullscreen renderer: no flicker, mouse support; otherwise claude asks on every start whether to try it.
             // Skip auto-install of claude's own JetBrains plugin into this IDE, as Air does.
             .envVariables(mapOf("CLAUDE_CODE_NO_FLICKER" to "1", "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL" to "true"))
