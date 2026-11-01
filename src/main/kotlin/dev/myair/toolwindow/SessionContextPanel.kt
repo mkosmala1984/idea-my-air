@@ -6,6 +6,8 @@ import com.intellij.ide.BrowserUtil
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.ui.InplaceButton
 import dev.myair.editor.ClaudeSessionEditor
+import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.sessionIcon
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -158,13 +160,14 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val id = shownId
         val session = service.sessions.firstOrNull { it.id == id }
         val context = session?.let { contextOf(it, it.workDir.exists(), it.id in service.live, git) }
-        val shown = listOf(id, context, context?.let { shortAge(it.lastMessage, Instant.now()) }, fullLists.toSet(), skills.toMap(), pinnedSkills())
+        val plan = session?.let { planContextOf(it, service.folders, service.sessions) }
+        val shown = listOf(id, context, plan, context?.let { shortAge(it.lastMessage, Instant.now()) }, fullLists.toSet(), skills.toMap(), pinnedSkills())
         if (!force && shown == rendered) return
         rendered = shown
         val content = when {
             id == null -> panel { row { comment("No session tab selected") } }
             context == null -> panel { row { comment("Starting...") } }
-            else -> content(context)
+            else -> content(context, plan)
         }
         PaneFont.growAll(content)
         removeAll()
@@ -174,7 +177,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     }
 
     /** One card per section, the session itself first, as artboard I of the panel's design lays them out. */
-    private fun content(context: SessionContext) = JPanel(VerticalLayout(JBUI.scale(CARD_GAP))).apply {
+    private fun content(context: SessionContext, plan: PlanContext?) = JPanel(VerticalLayout(JBUI.scale(CARD_GAP))).apply {
         isOpaque = false
         add(ContextCard(header(context)))
         card("Environment") {
@@ -257,6 +260,21 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             for (artifact in context.artifacts) row {
                 icon(AllIcons.General.Web)
                 link(artifact.title) { BrowserUtil.browse(artifact.url) }.applyToComponent { toolTipText = artifact.url }.shrinkable()
+            }
+        }
+        plan?.let {
+            card("Plan") {
+                row { comment("${it.path} › ${it.milestone.id} ${it.milestone.title}").shrinkable() }
+                row {
+                    icon(it.task.status.icon)
+                    label("${it.task.id} ${it.task.title}").bold().shrinkable()
+                    comment(it.task.status.label)
+                }
+                it.task.next?.let { next -> row { comment("Next: $next", MAX_LINE_LENGTH_WORD_WRAP) } }
+                for (other in it.others) row {
+                    icon(sessionIcon(service.live[other.id]?.status, other.id in service.unread))
+                    link(other.title) { ClaudeSessionOpener.open(project, other) }.shrinkable()
+                }
             }
         }
         context.brief?.let { brief ->

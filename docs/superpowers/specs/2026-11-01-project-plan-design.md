@@ -37,7 +37,7 @@ A brief belongs to one session and ends with it. Work on a project spans many se
 ```
 Folder(id, name, folders, items, dirs: [String], plan: Plan?)   // dirs replaces project; plan: a plan folder
 Plan(goal: String?, milestones: [Milestone])
-Milestone(id: "M<n>", title, status: open|done, tasks: [Task])
+Milestone(id: "M<n>", title, done: Boolean, tasks: [Task])   // MCP spells done as status open|done
 Task(id: "T<n>", title, status, next: String?)
 status: pending | in_progress | waiting | blocked | done | canceled
 SessionFolders(folders, nextId: Int)                            // allocates M/T ids, never reused
@@ -57,7 +57,7 @@ In order: under the task its latest brief names in `plan_task`, when that task e
 - `my_air_plan_get(dir)`: `dir` is any directory (the agent passes its cwd); the plan folder is the one `projectFolder(dir)` finds, or the plan folder above it. Returns the folder's path, its directories, goal, milestones and tasks, and for each task the sessions whose brief names it (id, title, last message, live status). No plan folder: says so and names the op that adds one.
 - `my_air_plan_apply(dir, changes)`: a JSON array applied in order, all or none, returning the plan: `set_goal`, `add_milestone {title, index?}`, `add_task {milestone, title, index?}`, `update {id, title?, status?, next?}`, `move {id, milestone?, index}`, `delete {id}` (a milestone only when its tasks are all done or canceled). One snapshot per call, source `mcp`.
 - `my_air_folders_apply`: `create` takes `dirs` (a list) and `plan: true`; new ops `add_plan {path}`, `bind {path, dir}` and `unbind {dir}`. Its rule (only what the user approved) stays.
-- `my_air_set_brief(goal, tasks, plan_task?)`: `plan_task` must exist in the structure; otherwise the call fails with the open tasks of the plan found from the IDE's project.
+- `my_air_set_brief(goal, tasks, plan_task?)`: `plan_task` must exist in the structure; otherwise the call fails listing the open tasks of every plan.
 - `my_air_history_*` covers plans with no change, since they are in `structure.json`.
 
 ## Agent's rules

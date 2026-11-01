@@ -7,6 +7,9 @@ import dev.myair.claude.BackgroundTask
 import dev.myair.claude.Brief
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.SkillOrigin
+import dev.myair.folders.Milestone
+import dev.myair.folders.PlanTask
+import dev.myair.folders.SessionFolders
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -159,3 +162,15 @@ fun durationText(duration: Duration): String {
 
 /** Files inside the session's folder read relative to it; anything else keeps its full path. */
 fun fileLabel(path: Path, cwd: Path) = if (path.startsWith(cwd)) cwd.relativize(path).toString() else path.toString()
+
+/** The plan task a session's brief names: the plan folder's [path], its [milestone], the [task], and the [others] naming it, newest first. */
+data class PlanContext(val path: String, val milestone: Milestone, val task: PlanTask, val others: List<ClaudeSession>)
+
+/** [session]'s [PlanContext], or null when its brief names no task that exists; [sessions] arrive newest first. */
+fun planContextOf(session: ClaudeSession, structure: SessionFolders, sessions: List<ClaudeSession>): PlanContext? {
+    val (folder, task) = structure.taskOf(session) ?: return null
+    return PlanContext(
+        structure.pathOf(folder.id), folder.plan!!.milestones.first { task in it.tasks }, task,
+        sessions.filter { it.id != session.id && it.brief?.planTask == task.id },
+    )
+}

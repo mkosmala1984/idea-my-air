@@ -5,7 +5,7 @@
 | 1 | done | `0e661b8` |
 | 2 | done | `ae34cd8` |
 | 3 | done | `c0cad6e` |
-| 4 | | |
+| 4 | done | `631af7b` |
 | 5 | | |
 
 ## TL;DR
@@ -18,32 +18,32 @@
 
 ## Task 1: model version 3
 
-- [ ] `folders/Plan.kt`: `Plan(goal, milestones)`, `Milestone(id, title, done, tasks)`, `PlanTask(id, title, status, next)`, `PlanStatus` (JSON names lowercase).
-- [ ] `Folder.dirs` replaces `project`, `Folder.plan`; `SessionFolders.nextId`; invariants: a directory binds once, no plan folder inside another, M/T ids unique, well-formed and below `nextId`.
-- [ ] Plan operations on `SessionFolders` (`addPlan`, `removePlan`, `bind`, `unbind`, `addMilestone`, `addTask`, `editMilestone`, `editTask`, `moveMilestone`, `moveTask`, `deleteItem`), each a no-op on an id another IDE removed.
-- [ ] `taskOf(session)`, `planFolderOf(dir)`, `placeOf` counting the task's plan folder.
-- [ ] Parse versions 1-3 strictly; write version 3. Tests in `SessionFoldersTest` and `PlanTest`.
+- [x] `folders/Plan.kt`: `Plan(goal, milestones)`, `Milestone(id, title, done, tasks)`, `PlanTask(id, title, status, next)`, `PlanStatus` (JSON names lowercase).
+- [x] `Folder.dirs` replaces `project`, `Folder.plan`; `SessionFolders.nextId`; invariants: a directory binds once, no plan folder inside another, M/T ids unique, well-formed and below `nextId`.
+- [x] Plan operations on `SessionFolders` (`addPlan`, `removePlan`, `bind`, `unbind`, `addMilestone`, `addTask`, `editMilestone`, `editTask`, `moveMilestone`, `moveTask`, `deleteItem`), each a no-op on an id another IDE removed.
+- [x] `taskOf(session)`, `planFolderOf(dir)`, `placeOf` counting the task's plan folder.
+- [x] Parse versions 1-3 strictly; write version 3. Tests in `SessionFoldersTest` and `PlanTest`.
 
 ## Task 2: MCP
 
-- [ ] `PlanChanges.apply(structure, folderId, changes)`: `set_goal`, `add_milestone`, `add_task`, `update`, `move`, `delete`, all or none.
-- [ ] `FolderChanges`: `create` with `dirs` and `plan`, `add_plan`, `bind`, `unbind`.
-- [ ] `my_air_plan_get`, `my_air_plan_apply` in `FoldersMcpToolset`; `planJson`; `treeJson` with `dirs` and `plan`.
-- [ ] Tests: `PlanChangesTest`, `FolderChangesTest`, `FolderQueriesTest`.
+- [x] `PlanChanges.apply(structure, folderId, changes)`: `set_goal`, `add_milestone`, `add_task`, `update`, `move`, `delete`, all or none.
+- [x] `FolderChanges`: `create` with `dirs` and `plan`, `add_plan`, `bind`, `unbind`.
+- [x] `my_air_plan_get`, `my_air_plan_apply` in `FoldersMcpToolset`; `planJson`; `treeJson` with `dirs` and `plan`.
+- [x] Tests: `PlanChangesTest`, `FolderChangesTest`, `FolderQueriesTest`.
 
 ## Task 3: brief's plan task
 
-- [ ] `Brief.planTask`, read by `Brief.next` from `plan_task`; `my_air_set_brief(goal, tasks, plan_task?)` checks the task exists.
-- [ ] Tests: `BriefTest` / scanner.
+- [x] `Brief.planTask`, read by `Brief.next` from `plan_task`; `my_air_set_brief(goal, tasks, plan_task?)` checks the task exists.
+- [x] Tests: `BriefTest` / scanner.
 
 ## Task 4: tree
 
-- [ ] `MilestoneRow`, `PlanTaskRow`, `NoTask` nodes; `foldersTree` places sessions by task; renderer; summaries; drops (reorder milestones and tasks, no session onto a task).
-- [ ] Menu: Add Plan, Remove Plan, Bind Directory..., Unbind Directory..., Add Milestone, Add Task, Rename..., Delete..., Mark Done / Reopen, Set Status, Edit Next Step...
-- [ ] Tests in `SessionTreeTest`.
+- [x] `MilestoneRow`, `PlanTaskRow`, `NoTask` nodes; `foldersTree` places sessions by task; renderer; summaries; drops (reorder milestones and tasks, no session onto a task).
+- [x] Menu: Add Plan, Remove Plan, Bind Directory..., Unbind Directory..., Add Milestone, Add Task, Rename..., Delete..., Mark Done / Reopen, Set Status, Edit Next Step...
+- [x] Tests in `SessionTreeTest`.
 
 ## Task 5: prompt and Session Context
 
-- [ ] Plan rules in `appendedSystemPrompt`; `SessionSystemPromptTest` names the plan tools.
-- [ ] Plan card in Session Context.
-- [ ] CLAUDE.md.
+- [x] Plan rules in `appendedSystemPrompt`; `SessionSystemPromptTest` names the plan tools.
+- [x] Plan card in Session Context.
+- [x] CLAUDE.md.

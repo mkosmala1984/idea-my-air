@@ -13,7 +13,7 @@ A small take on [JetBrains Air](https://www.jetbrains.com/air/), built for every
 **Claude Sessions tool window.** The session list, with a pinned list above it, a search field (Ctrl+F), and two tree modes:
 
 - **Projects** — sessions grouped by project, newest project first.
-- **Folders** — your own folders, with drag and drop, nested subfolders, plus a `recent` list (the 10 newest sessions) and `sessions` (everything not filed, by project). A folder can be bound to a project directory and then holds that project's sessions — worktrees included — without any filing. The structure lives in `~/.my-air/structure.json` and is shared by every IDE and by agents; every change leaves a snapshot that can be undone.
+- **Folders** — your own folders, with drag and drop, nested subfolders, plus a `recent` list (the 10 newest sessions) and `sessions` (everything not filed, by project). A folder can be bound to one or more project directories and then holds their sessions — worktrees included — without any filing. A folder can also carry a plan (a plan folder): milestones and tasks with a status and a next step, each task holding the sessions whose brief names it, the rest under `no task`. The structure lives in `~/.my-air/structure.json` and is shared by every IDE and by agents; every change leaves a snapshot that can be undone.
 
 A group row shows how many sessions it holds and the most urgent status inside it. **View Options** sets density (Compact or Loose), font size, and hides sessions older than 3, 7, 14 or 30 days. Settled sessions stay out of the way until **Show All Sessions** is on.
 
@@ -39,10 +39,12 @@ A group row shows how many sessions it holds and the most urgent status inside i
 | --- | --- |
 | `my_air_sessions_find` | Find sessions by date, folder, filed/unfiled state and words in the title or project path |
 | `my_air_folders_get` | Read the folder structure |
-| `my_air_folders_apply` | Create, rename, move and delete folders, bind one to a project, file sessions — one all-or-nothing write |
+| `my_air_folders_apply` | Create, rename, move and delete folders, bind and unbind directories, make a folder a plan folder, file sessions — one all-or-nothing write |
+| `my_air_plan_get` | Read the plan of the project a directory belongs to, with the sessions of each task |
+| `my_air_plan_apply` | Add, update, move and delete milestones and tasks of that plan — one all-or-nothing write |
 | `my_air_history_list` | List snapshots of earlier structure changes |
 | `my_air_history_restore` | Undo one of them by name |
-| `my_air_set_brief` | Let a session describe its goal and tasks, shown in the tree and the context pane |
+| `my_air_set_brief` | Let a session describe its goal and tasks, and name the plan task it works on, shown in the tree and the context pane |
 
 ## Requirements
 

@@ -203,4 +203,15 @@ class SessionContextTest {
         assertEquals(Path.of("src/A.kt").toString(), fileLabel(main.resolve("src/A.kt"), main))
         assertEquals(Path.of("C:/tmp/x.md").toString(), fileLabel(Path.of("C:/tmp/x.md"), main))
     }
+
+    @Test
+    fun `the plan context names the task's folder and milestone and the other sessions on it`() {
+        val structure = dev.myair.folders.SessionFolders().createFolder(null, "p", "rtm").createFolder("p", "q", "plan", plan = dev.myair.folders.Plan())
+            .addMilestone("q", "Export").addTask("M1", "Fields")
+        fun on(id: String, task: String?) = ClaudeSession(id, Path.of("/x"), id, Instant.EPOCH, emptyList(), emptyList(), Brief(null, emptyList(), task))
+        val me = on("me", "T2")
+        val plan = planContextOf(me, structure, listOf(on("a", "T2"), me, on("b", null)))!!
+        assertEquals(listOf("rtm/plan", "M1", "T2", "a"), listOf(plan.path, plan.milestone.id, plan.task.id) + plan.others.map { it.id })
+        assertEquals(null, planContextOf(on("x", "T9"), structure, emptyList()))
+    }
 }
