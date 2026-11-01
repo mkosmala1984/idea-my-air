@@ -19,8 +19,8 @@ class PromptFilesTest {
         val gone = PromptFiles.write(dir, "old", pid = dead)
         val mine = PromptFiles.write(dir, "# Plan\n\n\"x\" <y>")
         assertFalse(gone.exists())
-        assertTrue(mine.exists())
         assertEquals("# Plan\n\n\"x\" <y>", mine.readText())
-        assertEquals(mine, PromptFiles.write(dir, "next").let { mine.takeIf { it.exists() } })
+        PromptFiles.write(dir, "next")
+        assertTrue(mine.exists())
     }
 }
