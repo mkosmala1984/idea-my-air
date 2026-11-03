@@ -60,6 +60,10 @@
       <add-to-group group-id="ToolsMenu" anchor="last"/>
       <keyboard-shortcut keymap="$default" first-keystroke="alt shift K"/>
     </action>
+    <action id="dev.myair.InstallMyAirBuild" class="dev.myair.actions.InstallMyAirBuildAction" text="Install My Air Build and Restart"
+            description="Install build/distributions/my-air-*.zip of this project over the running My Air and restart the IDE">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
     <action id="dev.myair.CloseAndSettle" class="dev.myair.editor.CloseAndSettleAction" text="Close and Settle"
             description="Close the session tab, ending its claude, and mark the session settled" icon="AllIcons.Actions.Checked">
       <add-to-group group-id="CloseEditorsGroup" anchor="after" relative-to-action="CloseContent"/>

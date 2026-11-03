@@ -20,6 +20,8 @@ env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daemon run
 
 Sandbox log: `.intellijPlatform/sandbox/my-air/IU-2026.2.4/log_runIde/idea.log` (appended across runs). Restart the sandbox after `buildPlugin`; it does not pick up a new build by itself.
 
+Tools › Install My Air Build and Restart (`InstallMyAirBuildAction`, shown only in a project with `build/distributions/my-air-*.zip`) installs that zip over the running My Air (`PluginInstaller.installAfterRestart`: the platform's startup script swaps the folder) and restarts the IDE without asking; it ends every `claude` running in its tabs.
+
 ## Build setup
 
 - Compiles against the locally installed IDE (`local("E:/dev/apps/jetbrains/IntelliJ IDEA Ultimate")`, IU-262.10968.63), not a downloaded one. Its classes are Java 25 (class version 69), hence `jvmToolchain(25)` with the IDE's own JBR registered in `gradle.properties`.
