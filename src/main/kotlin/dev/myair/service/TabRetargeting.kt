@@ -3,8 +3,13 @@ package dev.myair.service
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.project.ProjectManager
 import dev.myair.claude.LiveSession
+import dev.myair.actions.Git
 import dev.myair.editor.ClaudeSessionVirtualFile
+import dev.myair.editor.TabMark
+import dev.myair.editor.projectBase
+import dev.myair.editor.tabMark
 import dev.myair.tabs.TabsSync
+import java.nio.file.Path
 
 const val NEW_SESSION_TITLE = "New session"
 
@@ -18,20 +23,25 @@ fun retarget(sessionId: String, title: String, pid: Long?, live: Map<String, Liv
 }
 
 /**
- * Points every open session tab at the session its process shows now, with that session's title, status and [unread]
- * mark, and publishes the tabs to the other IDEs when a session or title changed. Returns the session switches, from to to.
+ * Points every open session tab at the session its process shows now, with that session's title, status, [unread] and
+ * [TabMark] (from where it works, [workDirs], else where the tab started, and the work trees [heads] holds), and publishes
+ * the tabs to the other IDEs when a session or title changed. Returns the session switches, from to to.
  */
-fun retargetOpenTabs(live: Map<String, LiveSession>, titles: Map<String, String>, unread: Set<String>): List<Pair<String, String>> {
+fun retargetOpenTabs(
+    live: Map<String, LiveSession>, titles: Map<String, String>, unread: Set<String>, workDirs: Map<String, Path>, heads: Map<Path, Git.Head?>,
+): List<Pair<String, String>> {
     var changed = false
     val switched = ArrayList<Pair<String, String>>()
     for (project in ProjectManager.getInstance().openProjects) {
         val editors = FileEditorManagerEx.getInstanceEx(project)
+        val base = projectBase(project)
         for (file in editors.openFiles.filterIsInstance<ClaudeSessionVirtualFile>()) {
             val (sessionId, title) = retarget(file.sessionId, file.title, file.pid, live, titles)
             // By pid rather than session id: another process may run the same session ("Open Anyway").
             val status = live.values.firstOrNull { it.pid == file.pid }?.status
             val isUnread = sessionId in unread
-            if (sessionId == file.sessionId && title == file.title && status == file.status && isUnread == file.unread) continue
+            val mark = tabMark(file.project, heads[workDirs[sessionId] ?: file.cwd], heads[file.project], base, heads[base])
+            if (sessionId == file.sessionId && title == file.title && status == file.status && isUnread == file.unread && mark == file.mark) continue
             if (sessionId != file.sessionId) switched += file.sessionId to sessionId
             // Other IDEs list tabs by session and title only, so a status change alone is not published.
             if (sessionId != file.sessionId || title != file.title) changed = true
@@ -39,6 +49,7 @@ fun retargetOpenTabs(live: Map<String, LiveSession>, titles: Map<String, String>
             file.title = title
             file.status = status
             file.unread = isUnread
+            file.mark = mark
             editors.updateFilePresentation(file)
         }
     }

@@ -8,6 +8,11 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.util.Disposer
 import dev.myair.MyAirSettings
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.ProjectManager
+import dev.myair.actions.Git
+import dev.myair.editor.ClaudeSessionVirtualFile
+import dev.myair.editor.projectBase
 import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.claude.ClaudeHomeWatcher
 import dev.myair.claude.ClaudeSession
@@ -48,6 +53,7 @@ class ClaudeSessionsService : Disposable {
     private data class State(
         val sessions: List<ClaudeSession> = emptyList(), val live: Map<String, LiveSession> = emptyMap(), val pins: Pins = Pins(),
         val folders: SessionFolders = SessionFolders(), val foldersError: String? = null,
+        val heads: Map<Path, Git.Head?> = emptyMap(),
     )
 
     private var state = State()
@@ -95,10 +101,11 @@ class ClaudeSessionsService : Disposable {
     fun refresh() {
         // Nobody reads the Future, so an exception would vanish with it and freeze the list; log it as an IDE error instead.
         refresher.execute {
-            val (scanned, current) = try {
+            val (scanned, current, heads) = try {
                 // With briefs turned off nothing downstream sees them: rows, tree, tooltips and the board.
                 val briefs = MyAirSettings.getInstance().briefs
-                inProjects(scanner.scan(desktop.read()).map { if (briefs) it else it.copy(brief = null) }) to registry.read()
+                val scanned = inProjects(scanner.scan(desktop.read()).map { if (briefs) it else it.copy(brief = null) })
+                Triple(scanned, registry.read(), tabHeads(scanned))
             } catch (e: Throwable) {
                 thisLogger().error("Claude session refresh failed", e)
                 return@execute
@@ -117,7 +124,7 @@ class ClaudeSessionsService : Disposable {
                 val pinned = pinStore.update { it.prune(scanned, current) }
                 // Before the check below: a session the user looked at changes the board and nothing else.
                 val unreadChanged = updateBoard(scanned, current, pinned.settled)
-                val next = State(scanned, current, pinned, read, error)
+                val next = State(scanned, current, pinned, read, error, heads)
                 if (loaded && !unreadChanged && next == state) return@invokeLater
                 if (failure != null && error != foldersError) thisLogger().error("Cannot read ${structure.file}", failure)
                 loaded = true
@@ -161,7 +168,7 @@ class ClaudeSessionsService : Disposable {
 
     private fun retargetTabs() {
         val titles = sessions.associate { it.id to it.title }
-        val switched = retargetOpenTabs(live, titles, unread)
+        val switched = retargetOpenTabs(live, titles, unread, sessions.associate { it.id to it.workDir }, state.heads)
         if (switched.isNotEmpty() && foldersError == null) {
             updateFolders(ChangeSource.AUTO) { switched.fold(it) { folders, (from, to) -> folders.carryOver(from, to, titles.keys) } }
         }
@@ -176,6 +183,17 @@ class ClaudeSessionsService : Disposable {
     companion object {
         fun getInstance(): ClaudeSessionsService = ApplicationManager.getApplication().getService(ClaudeSessionsService::class.java)
     }
+}
+
+/**
+ * The work trees the tabs' marks ([dev.myair.editor.tabMark]) compare, read from HEAD files: where every session works
+ * and its project lies, where every open tab started, and every open project's base.
+ */
+private fun tabHeads(sessions: List<ClaudeSession>): Map<Path, Git.Head?> {
+    val projects = ProjectManager.getInstance().openProjects.toList()
+    val tabs = projects.flatMap { FileEditorManager.getInstance(it).openFiles.filterIsInstance<ClaudeSessionVirtualFile>() }
+    val dirs = sessions.flatMap { listOf(it.workDir, it.project) } + tabs.flatMap { listOf(it.cwd, it.project) } + projects.map(::projectBase)
+    return dirs.distinct().associateWith(Git::head)
 }
 
 /** The jar the plugin's classes come from. */

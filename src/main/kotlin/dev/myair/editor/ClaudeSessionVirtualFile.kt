@@ -53,6 +53,10 @@ class ClaudeSessionVirtualFile(
     @Volatile
     var unread = false
 
+    /** How the tab stands out in its window ([tabMark]); null until the service has read the work trees. */
+    @Volatile
+    var mark: TabMark? = null
+
     init {
         isWritable = false
     }
@@ -66,32 +70,28 @@ class ClaudeSessionVirtualFile(
     override fun isIncludedInEditorHistory(project: Project) = false
 }
 
-/** The tab's title is the session's; its tooltip names the session's project and, for a worktree, where it runs ([tabTooltip]). */
+/** The tab's title is the session's; its tooltip names the session's project and, for a worktree, where it lies ([tabTooltip]). */
 class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {
     override fun getEditorTabTitle(project: Project, file: VirtualFile) = (file as? ClaudeSessionVirtualFile)?.title
 
     override fun getEditorTabTooltipHtml(project: Project, file: VirtualFile): HtmlChunk? = (file as? ClaudeSessionVirtualFile)?.let {
-        HtmlBuilder().appendWithSeparators(HtmlChunk.br(), tabTooltip(it.title, it.cwd, it.project).map(HtmlChunk::text)).toFragment()
+        HtmlBuilder().appendWithSeparators(HtmlChunk.br(), tabTooltip(it.title, it.project, it.mark?.worktree).map(HtmlChunk::text)).toFragment()
     }
 }
-
-/** The tooltip's lines: [title], the project, and the worktree when the session runs outside the project directory. */
-fun tabTooltip(title: String, cwd: Path, sessionProject: Path) =
-    listOfNotNull(title, "Project: $sessionProject", "Worktree: $cwd".takeIf { cwd != sessionProject })
 
 /** [sessionProject] is another project than the IDE's at [ideBase]: neither it nor a folder below it. */
 fun isOtherProject(sessionProject: Path, ideBase: Path) = !sessionProject.isAtOrUnder(ideBase.toString())
 
 /**
  * The tab icon shows the session's status as its rows in the Claude Sessions tool window do ([sessionIcon]), a branch badge in
- * its corner when the session runs in a worktree, that is outside its project directory (as `presetOf` tells), and after it the
- * project's own icon when that is another project than the window's.
+ * its corner when the session works in another work tree ([TabMark.worktree]), and after it the project's own icon when that
+ * is another project than the window's.
  */
 class ClaudeSessionFileIconProvider : FileIconProvider, DumbAware {
     override fun getIcon(file: VirtualFile, flags: Int, project: Project?): Icon? =
         (file as? ClaudeSessionVirtualFile)?.let {
             val status = sessionIcon(it.status, it.unread)
-            val badged = if (it.cwd == it.project) status else LayeredIcon(2).apply {
+            val badged = if (it.mark?.worktree == null) status else LayeredIcon(2).apply {
                 setIcon(status, 0)
                 setIcon(WORKTREE_BADGE, 1, SwingConstants.SOUTH_EAST)
             }
@@ -103,12 +103,12 @@ class ClaudeSessionFileIconProvider : FileIconProvider, DumbAware {
 private val WORKTREE_BADGE: Icon = IconUtil.scale(AllIcons.Vcs.Branch, null, 0.625f)
 
 /**
- * A tab of another project's session takes that project's colour ([projectColor]), mixed into the tab background so the
- * title stays readable; tabs of the window's own project keep the default.
+ * A tab of another project's session takes that project's colour ([projectColor]), one of the window's project working in
+ * another work tree that tree's, mixed into the tab background so the title stays readable; other tabs keep the default.
  */
 class ClaudeSessionTabColorProvider : EditorTabColorProvider, DumbAware {
     override fun getEditorTabColor(project: Project, file: VirtualFile): Color? =
-        (file as? ClaudeSessionVirtualFile)?.project?.takeIf { isOtherProject(it, projectBase(project)) }
+        (file as? ClaudeSessionVirtualFile)?.let { tab -> tab.mark?.let { if (it.otherProject) tab.project else it.worktree?.root } }
             ?.let { dir -> projectColor(dir) { if (!project.isDisposed) FileEditorManagerEx.getInstanceEx(project).updateFilePresentation(file) } }
             ?.let { JBColor(ColorUtil.mix(Color.WHITE, it, 0.3), ColorUtil.mix(Color(0x2B2D30), it, 0.35)) }
 }
