@@ -366,17 +366,17 @@ class GitTest {
     }
 
     @Test
-    fun `headBranch reads the branch of a checkout, a subfolder and a linked worktree, and none when detached or outside`() {
+    fun `head reads the work tree and branch of a checkout, a subfolder and a linked worktree, and no branch when detached`() {
         val repo = init("repo")
         git(repo, "checkout", "-b", "feature/x")
-        assertEquals("feature/x", Git.headBranch(repo))
-        assertEquals("feature/x", Git.headBranch(repo.resolve("sub").createDirectories()))
+        assertEquals(Git.Head(repo, "feature/x"), Git.head(repo))
+        assertEquals(Git.Head(repo, "feature/x"), Git.head(repo.resolve("sub").createDirectories()))
         val worktree = dir.resolve("wt")
         git(repo, "worktree", "add", "-b", "wt-branch", worktree.toString())
-        assertEquals("wt-branch", Git.headBranch(worktree))
+        assertEquals(Git.Head(worktree, "wt-branch"), Git.head(worktree.resolve("sub").createDirectories()))
         git(worktree, "checkout", "--detach")
-        assertEquals(null, Git.headBranch(worktree))
-        assertEquals(null, Git.headBranch(dir.resolve("plain").createDirectories()))
+        assertEquals(Git.Head(worktree, null), Git.head(worktree))
+        assertEquals(null, Git.head(dir.resolve("plain").createDirectories()))
         // A repository without commits has its branch already.
         assertEquals("main", Git.headBranch(dir.resolve("unborn").createDirectories().also { git(it, "init", "-b", "main") }))
     }

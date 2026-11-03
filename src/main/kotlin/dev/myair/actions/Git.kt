@@ -94,20 +94,25 @@ object Git {
     /** The root of the work tree [dir] is in; null when neither [dir] nor a folder above it has a `.git`. */
     fun root(dir: Path): Path? = if (inRepo(dir)) Path.of(run(dir, "rev-parse", "--show-toplevel").trim()) else null
 
+    /** The [root] of a work tree and the [branch] checked out there, null on a detached HEAD. */
+    data class Head(val root: Path, val branch: String?)
+
     /**
-     * The branch checked out in the work tree [dir] lies in, read from its HEAD file without running git, so a tree
-     * refresh can ask it for every row; null outside a repository and on a detached HEAD. A linked worktree's `.git`
-     * is a file naming its git dir.
+     * The work tree [dir] lies in and its branch, read from its HEAD file without running git, so a refresh can ask it
+     * for every session and row; null outside a repository. A linked worktree's `.git` is a file naming its git dir.
      */
-    fun headBranch(dir: Path): String? {
+    fun head(dir: Path): Head? {
         val dotGit = generateSequence(dir.toAbsolutePath()) { it.parent }.map { it.resolve(".git") }.firstOrNull { it.exists() } ?: return null
         val gitDir = if (dotGit.isDirectory()) dotGit else dotGit.readText().trim().let {
             check(it.startsWith(GITDIR)) { "$dotGit does not name a git dir: $it" }
             dotGit.parent.resolve(it.removePrefix(GITDIR))
         }
         val head = gitDir.resolve("HEAD").readText().trim()
-        return if (head.startsWith(BRANCH_REF)) head.removePrefix(BRANCH_REF) else null
+        return Head(dotGit.parent, if (head.startsWith(BRANCH_REF)) head.removePrefix(BRANCH_REF) else null)
     }
+
+    /** The branch [head] reads; null outside a repository and on a detached HEAD. */
+    fun headBranch(dir: Path): String? = head(dir)?.branch
 
     private const val GITDIR = "gitdir: "
     private const val BRANCH_REF = "ref: refs/heads/"
