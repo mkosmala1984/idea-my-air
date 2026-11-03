@@ -57,6 +57,20 @@ fun containedBases(refs: String, branch: String): List<String> = parseBranches(
         .joinToString("\n"),
 ).take(MAX_CONTAINED_BASES)
 
+/** An entry of `git worktree list --porcelain`; [branch] is null on a detached HEAD. */
+data class Worktree(val path: Path, val branch: String?, val locked: Boolean)
+
+/** `git worktree list --porcelain` output: blocks separated by an empty line, each opening with `worktree <path>`; the main checkout first. */
+fun parseWorktrees(porcelain: String): List<Worktree> = porcelain.trim().split(Regex("\n\n+")).filter { it.isNotEmpty() }.map { block ->
+    val lines = block.lines()
+    check(lines.first().startsWith("worktree ")) { "unexpected git worktree list entry: $block" }
+    Worktree(
+        Path.of(lines.first().removePrefix("worktree ")),
+        lines.firstOrNull { it.startsWith("branch refs/heads/") }?.removePrefix("branch refs/heads/"),
+        lines.any { it == "locked" || it.startsWith("locked ") },
+    )
+}
+
 /** Copies [files], relative to [mainRoot], to the same relative paths in [worktree]. */
 fun copyIncluded(mainRoot: Path, worktree: Path, files: List<String>) {
     for (file in files) {

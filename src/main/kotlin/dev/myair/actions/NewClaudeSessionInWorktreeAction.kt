@@ -18,6 +18,7 @@ import dev.myair.MyAirSettings
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.PlanStart
 import dev.myair.editor.projectBase
+import dev.myair.service.ClaudeSessionsService
 import java.awt.Point
 import java.nio.file.Path
 import java.time.LocalDate
@@ -41,8 +42,9 @@ fun popupPoint(e: AnActionEvent): RelativePoint {
 }
 
 /**
- * Starts `claude` with [args] in a new worktree of the repository of [dir]: a branch `worktree-<base>-<date>-<id4>` off [base], or off
- * a base picked from a popup at [where] when [base] is null, checked out in the worktrees directory of [MyAirSettings],
+ * Starts `claude` with [args] in a new worktree of the repository of [dir] on the local branch of [base], or of a base
+ * picked from a popup at [where] when [base] is null ([Git.addWorktree]; a branch it cannot free from another worktree
+ * gives a new branch `worktree-<base>-<date>-<id4>` off it), in the worktrees directory of [MyAirSettings],
  * with the `.worktreeinclude` files of the main checkout copied in. The session belongs to [dir], and to [plan] if given.
  */
 fun startInWorktree(project: Project, dir: Path, base: String?, args: List<String>, where: RelativePoint, plan: PlanStart? = null) =
@@ -52,8 +54,10 @@ fun startInWorktree(project: Project, dir: Path, base: String?, args: List<Strin
             val id = UUID.randomUUID().toString()
             val name = worktreeName(base, LocalDate.now(), id)
             val path = worktreePath(repo.mainRoot, MyAirSettings.getInstance().worktreesDir, name)
+            val sessions = ClaudeSessionsService.getInstance()
+            val running = sessions.sessions.filter { it.id in sessions.live }.flatMap { listOf(it.cwd, it.workDir) }
             background(project, "Creating worktree", {
-                Git.addWorktree(repo.mainRoot, path, "worktree-$name", base)
+                Git.addWorktree(repo.mainRoot, path, base, "worktree-$name") { tree -> running.any { it.startsWith(tree) } }
                 copyIncluded(repo.mainRoot, path, Git.includedFiles(repo.mainRoot))
             }) {
                 PropertiesComponent.getInstance().setList(recentKey(repo.mainRoot), pushRecent(recent, base, repo.branches))

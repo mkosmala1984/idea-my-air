@@ -52,7 +52,7 @@ class GitTest {
     fun `a worktree off a remote base gets a new branch at the base without upstream, and finds the main checkout`() {
         val repo = clone()
         val path = worktreePath(repo, ".claude/worktrees", "ab12cd34")
-        Git.addWorktree(repo, path, "worktree-ab12cd34", "origin/feature")
+        Git.addBranchWorktree(repo, path, "worktree-ab12cd34", "origin/feature")
         assertEquals(git(repo, "rev-parse", "origin/feature"), git(path, "rev-parse", "HEAD"))
         assertEquals("worktree-ab12cd34", git(path, "branch", "--show-current"))
         assertEquals("", Git.run(repo, "config", "branch.worktree-ab12cd34.remote", ok = setOf(0, 1)))
@@ -64,7 +64,7 @@ class GitTest {
         val repo = init("plain")
         val path = repo.resolve("taken").createDirectories()
         path.resolve("file").writeText("x")
-        val error = assertThrows<IllegalStateException> { Git.addWorktree(repo, path, "worktree-x", "main") }
+        val error = assertThrows<IllegalStateException> { Git.addBranchWorktree(repo, path, "worktree-x", "main") }
         assertContains(error.message!!, "already exists")
     }
 
@@ -84,7 +84,7 @@ class GitTest {
         assertEquals(listOf(".env", "cache/keep.json"), files.sorted())
 
         val worktree = dir.resolve("wt")
-        Git.addWorktree(repo, worktree, "worktree-wt", "main")
+        Git.addBranchWorktree(repo, worktree, "worktree-wt", "main")
         copyIncluded(repo, worktree, files)
         assertEquals("KEY=1", worktree.resolve(".env").readText())
         assertEquals("{}", worktree.resolve("cache/keep.json").readText())
@@ -111,8 +111,65 @@ class GitTest {
     @Test
     fun `a new worktree branch stores its base`() {
         val repo = clone()
-        Git.addWorktree(repo, worktreePath(repo, ".claude/worktrees", "ab12cd34"), "worktree-ab12cd34", "origin/feature")
+        Git.addBranchWorktree(repo, worktreePath(repo, ".claude/worktrees", "ab12cd34"), "worktree-ab12cd34", "origin/feature")
         assertEquals("origin/feature", Git.storedBase(repo, "worktree-ab12cd34"))
+    }
+
+    private val idle: (Path) -> Boolean = { false }
+
+    private fun branches(repo: Path) = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads").lines()
+
+    @Test
+    fun `a free local branch is checked out in the new worktree without a new branch`() {
+        val repo = init("plain")
+        git(repo, "branch", "topic")
+        val path = dir.resolve("wt")
+        Git.addWorktree(repo, path, "topic", "worktree-x", idle)
+        assertEquals("topic", git(path, "branch", "--show-current"))
+        assertEquals(listOf("main", "topic"), branches(repo))
+    }
+
+    @Test
+    fun `a remote branch is checked out as its local namesake, created to track it when missing`() {
+        val repo = clone()
+        val path = dir.resolve("wt")
+        Git.addWorktree(repo, path, "origin/feature", "worktree-x", idle)
+        assertEquals("feature", git(path, "branch", "--show-current"))
+        assertEquals("origin/feature", git(path, "rev-parse", "--abbrev-ref", "feature@{upstream}"))
+        assertEquals(listOf("feature", "main"), branches(repo))
+    }
+
+    @Test
+    fun `a clean idle worktree holding the branch is removed and the branch checked out anew`() {
+        val repo = init("plain")
+        git(repo, "branch", "topic")
+        val old = dir.resolve("old")
+        git(repo, "worktree", "add", old.toString(), "topic")
+        val path = dir.resolve("wt")
+        Git.addWorktree(repo, path, "topic", "worktree-x", idle)
+        assertEquals("topic", git(path, "branch", "--show-current"))
+        assertEquals(false, old.toFile().exists())
+        assertEquals(listOf("main", "topic"), branches(repo))
+    }
+
+    @Test
+    fun `a worktree that cannot be removed keeps the branch, and a new branch off it is made`() {
+        val repo = init("plain")
+        git(repo, "branch", "dirty")
+        git(repo, "branch", "busy")
+        git(repo, "branch", "locked")
+        val dirty = dir.resolve("dirty").also { git(repo, "worktree", "add", it.toString(), "dirty") }
+        dirty.resolve("new.txt").writeText("x")
+        val busy = dir.resolve("busy").also { git(repo, "worktree", "add", it.toString(), "busy") }
+        git(repo, "worktree", "add", "--lock", dir.resolve("locked").toString(), "locked")
+        val inBusy: (Path) -> Boolean = { it == busy }
+        for ((branch, held) in listOf("dirty" to dirty, "busy" to busy, "locked" to dir.resolve("locked"), "main" to repo)) {
+            val path = dir.resolve("wt-$branch")
+            Git.addWorktree(repo, path, branch, "worktree-$branch", inBusy)
+            assertEquals("worktree-$branch", git(path, "branch", "--show-current"))
+            assertEquals(branch, Git.storedBase(repo, "worktree-$branch"))
+            assertEquals(branch, git(held, "branch", "--show-current"))
+        }
     }
 
     @Test
@@ -138,7 +195,7 @@ class GitTest {
     fun `a worktree diffs against the merge base with its stored base, untracked files included`() {
         val repo = clone()
         val path = worktreePath(repo, ".claude/worktrees", "ab12cd34")
-        Git.addWorktree(repo, path, "worktree-ab12cd34", "origin/feature")
+        Git.addBranchWorktree(repo, path, "worktree-ab12cd34", "origin/feature")
         commit(path, "a.txt", "1\n2\n")
         path.resolve("a.txt").writeText("1\n2\n3\n")
         path.resolve("new.txt").writeText("x\ny\n")

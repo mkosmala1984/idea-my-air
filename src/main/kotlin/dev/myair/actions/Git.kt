@@ -168,10 +168,38 @@ object Git {
     private fun lines(count: String) = if (count == "-") 0 else count.toInt()
 
     /**
+     * A worktree at [path] on the local branch of [pick]: [pick] itself, or for a remote branch its local namesake, made
+     * to track it when there is none. A linked worktree holding that branch is removed first when it is clean, unlocked
+     * and not [inUse]; when it cannot be, or the main checkout holds the branch, a new branch [fallback] off [pick] is
+     * checked out instead ([addBranchWorktree]).
+     */
+    fun addWorktree(mainRoot: Path, path: Path, pick: String, fallback: String, inUse: (Path) -> Boolean) {
+        val isLocal = isBranch(mainRoot, pick)
+        val local = if (isLocal) pick else pick.removePrefix(run(mainRoot, "remote").lines().filter { it.isNotEmpty() }.single { pick.startsWith("$it/") } + "/")
+        // A worktree whose directory is gone still holds its branch until pruned.
+        run(mainRoot, "worktree", "prune")
+        val worktrees = parseWorktrees(run(mainRoot, "worktree", "list", "--porcelain"))
+        val holder = worktrees.indexOfFirst { it.branch == local }
+        if (holder != -1) {
+            val tree = worktrees[holder]
+            // The first entry is the main checkout, which cannot be removed.
+            if (holder == 0 || tree.locked || inUse(tree.path) || !isClean(tree.path)) return addBranchWorktree(mainRoot, path, fallback, pick)
+            run(mainRoot, "worktree", "remove", tree.path.toString())
+        }
+        if (isBranch(mainRoot, local)) run(mainRoot, "worktree", "add", path.toString(), local)
+        else run(mainRoot, "worktree", "add", "--track", "-b", local, path.toString(), pick)
+    }
+
+    private fun isBranch(dir: Path, name: String) = run(dir, "rev-parse", "--verify", "-q", "refs/heads/$name", ok = setOf(0, 1)).isNotBlank()
+
+    /** No modified, staged or untracked file; `git worktree remove` refuses any other tree. */
+    private fun isClean(dir: Path) = run(dir, "status", "--porcelain", "--untracked-files=all").isBlank()
+
+    /**
      * A new [branch] off [base] checked out at [path], with [base] stored as its base; `--no-track` keeps a remote base
      * from becoming its upstream.
      */
-    fun addWorktree(mainRoot: Path, path: Path, branch: String, base: String) {
+    fun addBranchWorktree(mainRoot: Path, path: Path, branch: String, base: String) {
         run(mainRoot, "worktree", "add", "--no-track", "-b", branch, path.toString(), base)
         setBase(mainRoot, branch, base)
     }
