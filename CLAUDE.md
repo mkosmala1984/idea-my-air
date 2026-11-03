@@ -18,7 +18,7 @@ Run the sandbox IDE without the `CLAUDE*` variables of the Claude Code session t
 env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daemon runIde
 ```
 
-Sandbox log: `.intellijPlatform/sandbox/my-air/IU-2026.2.3/log_runIde/idea.log` (appended across runs). Restart the sandbox after `buildPlugin`; it does not pick up a new build by itself.
+Sandbox log: `.intellijPlatform/sandbox/my-air/IU-2026.2.4/log_runIde/idea.log` (appended across runs). Restart the sandbox after `buildPlugin`; it does not pick up a new build by itself.
 
 ## Build setup
 

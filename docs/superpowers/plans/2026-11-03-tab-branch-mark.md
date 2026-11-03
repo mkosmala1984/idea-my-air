@@ -6,7 +6,7 @@
 | 2 | done | `a458567` |
 | 3 | done | `a458567` |
 | 4 | done | `a458567` |
-| 5 | in progress | |
+| 5 | waiting: visual check in the sandbox by the user | |
 
 **As built (differs from the tasks below):** no `TabPlace`; `TabMark(otherProject: Boolean, worktree: Git.Head?)`, computed by `tabMark(sessionProject, sessionHead, projectHead, ideBase, ideHead)` and stored on the tab as `ClaudeSessionVirtualFile.mark` by `retargetOpenTabs` (which takes the sessions' `workDirs` and the `heads`), so the providers read one field. The project's own head is compared for another project's session, so a session started in a subfolder of its repository is not taken for a worktree. Tasks 2–4 landed in one commit, since the old `tabTooltip` had no caller left without Task 3.
 
