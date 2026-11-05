@@ -2,7 +2,7 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
+| 1 | done | `a66d3bc` (idea-branch-diff, branch `follow-session`) |
 | 2 | | |
 | 3 | | |
 | 4 | | |
@@ -16,7 +16,7 @@
 - **Goal:** the Branch Diff tool window (plugin `idea-branch-diff`, `E:\dev\projects\idea-branch-diff`) shows the diff of the work tree of the active Claude session (the selected session tab, kept while another file is selected and the tab stays open, as in Session Context) against that session's base, and switches when another session tab is selected. With no session tab it shows the project repository against its own chosen base, as today.
 - **Approach:** Branch Diff gains a `DiffTarget(root, base, label)` and an extension point `diffTargetProvider`; it knows nothing of My Air. My Air implements the extension point in an optional `config-file`, handing over the session's `workDir` root and the base it already resolves (`branch.<b>.myAirBase`, else the default branch). The dependency goes this way because My Air is built on Java 25 / IU-262 (class version 69, checked), Branch Diff on Java 21 / 2026.1: Branch Diff could not compile against My Air.
 - **The core change in Branch Diff:** it reads only `repositories.firstOrNull()` and `ChangeListManager`. A session worktree is not a VCS root (checked: `get_repositories` on my-air lists only the main checkout, not `.claude/worktrees/orchestrator-spec`), so uncommitted and untracked files have to come from git in the target root: `GitChangeUtils.getDiffWithWorkingDir(project, root, "HEAD", null, false)` and `git ls-files --others --exclude-standard -z`. This replaces `ChangeListManager` in project mode too: one code path.
-- **Decisions for you (recommendation first):**
+- **Decided (2026-11-05): the recommendations below.** Were (recommendation first):
   1. "the last branch" = the session's **base**: `myAirBase` stored for its branch, else the default branch (the same one Session Context shows). Alternative: `startBranch`, the branch the session started on.
   2. The base picker while following a session **writes `myAirBase`** (`Git.setBase`), so Branch Diff and Session Context agree. Alternative: picker disabled in that mode.
   3. A "Follow Claude Session" toolbar toggle, **on by default**, shown only when a provider is installed.
@@ -66,11 +66,11 @@ interface DiffTargetProvider {
 
 **Files:** `service/DiffTarget.kt` (new), `service/BranchDiffSettings.kt`, `META-INF/plugin.xml`, test `service/DiffTargetTest.kt`
 
-- [ ] Test the pure resolver `resolveTarget(follow: Boolean, providers: List<DiffTargetProvider>, provided: () -> DiffTarget?, projectRoot: Path, settingsBase: String): DiffTarget`: follow off → `DiffTarget(projectRoot, settingsBase, null)`; no provider → same; provider returns null → same; provider returns a target → that target; two providers → throws.
-- [ ] `plugin.xml`: `<extensionPoints><extensionPoint name="diffTargetProvider" interface="dev.kosmala.branchdifftree.service.DiffTargetProvider" dynamic="true"/></extensionPoints>`.
-- [ ] `BranchDiffSettings.followSession: Boolean = true`.
-- [ ] `BranchDiffTargets` (project service): `current(): DiffTarget` (off the EDT) through `resolveTarget`, the project root being `repositories.single().root` (the only place left that asks `GitRepositoryManager`; zero or several roots throws, as the panel's "No Git repository" message shows today); `TARGET_CHANGED` project topic fired from every provider's `subscribe` and from the follow toggle.
-- [ ] `./gradlew test --tests dev.kosmala.branchdifftree.service.DiffTargetTest`; commit.
+- [x] Test the pure parts: `singleProvider(providers)` (none → null, one → it, two → throws) and `resolveTarget(follow, provider, provide, projectTarget)`: follow off → project target without asking the provider; no provider → same; provider returns null → same; provider returns a target → that target.
+- [x] `plugin.xml`: `<extensionPoints><extensionPoint name="diffTargetProvider" interface="dev.kosmala.branchdifftree.service.DiffTargetProvider"/></extensionPoints>` (not dynamic: installing My Air restarts the IDE anyway).
+- [x] `BranchDiffSettings.followSession: Boolean = true`.
+- [x] `BranchDiffTargets` (project service): `current(): DiffTarget` (off the EDT) through `resolveTarget`, the project root being `repositories.single().root` (the only place left that asks `GitRepositoryManager`; zero roots throws "No Git repository in project", the message the panel already maps, several throw); `TARGET_CHANGED` project topic fired by `changed()`, which the provider's `subscribe` calls (the follow toggle will too, Task 5).
+- [x] `./gradlew test buildPlugin`: 8 test classes, 0 failures, `DiffTargetTest` 5/5; commit.
 
 ## Task 2: `computeDiff(target)` from git, not `ChangeListManager` (idea-branch-diff)
 
