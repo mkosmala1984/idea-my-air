@@ -8,8 +8,8 @@
 | 4 | done (manual check moved to Task 8) | `3cffa93` (idea-branch-diff) |
 | 5 | done (visual check in Task 8) | `c7c1bb0` (idea-branch-diff) |
 | 6 | done | `fd0710a` |
-| 7 | | |
-| 8 | | |
+| 7 | done | `ae4f513`, idea-branch-diff `41d00b2` |
+| 8 | waiting: visual check in the sandbox by the user | |
 
 ## TL;DR
 
@@ -119,11 +119,13 @@ interface DiffTargetProvider {
 
 **Files:** `branchdiff/SessionDiffTargetProvider.kt` (new), `actions/Git.kt`, `META-INF/plugin.xml`, `META-INF/my-air-branch-diff.xml` (new), `build.gradle.kts`, `GitTest.kt`
 
-- [ ] `Git.baseOf(root): String?` extracted from `state()` (stored base, else `repo(root).default`; `state()` calls it). `GitTest`: stored base wins; without one, the default branch.
-- [ ] `build.gradle.kts`: `localPlugin("E:/dev/projects/idea-branch-diff/build/distributions/branch-diff-tree-0.1.0.zip")` in `intellijPlatform { }`.
-- [ ] `plugin.xml`: `<depends optional="true" config-file="my-air-branch-diff.xml">dev.kosmala.branch-diff-tree</depends>`; the config file registers `<extensions defaultExtensionNs="dev.kosmala.branch-diff-tree"><diffTargetProvider implementation="dev.myair.branchdiff.SessionDiffTargetProvider"/></extensions>`.
-- [ ] `target`: the active session's `workDir`, `root = Git.root(workDir)` (null: not in a repository → null target), `base = Git.baseOf(root)` (null → throws with "no base"), `label = session.title`. `subscribe` → `ActiveSession.subscribe`. `setBase` → `Git.setBase(root, Git.branchOf(root)!!, base)` (detached throws), then notify.
-- [ ] `./gradlew test buildPlugin`; commit; CLAUDE.md: a paragraph on the Branch Diff provider.
+- [x] `Git.baseOf(root): String` (stored base, else `repo(root).default`, which throws when the repository names none); `state()` shares the rule through `baseFrom(root, stored)`. `GitTest`: a worktree's stored base wins; a branch without one gets the default branch (33 tests in `GitTest` pass).
+- [x] `build.gradle.kts`: `localPlugin(".../branch-diff-tree-0.1.0.zip")`; the My Air zip does not bundle it.
+- [x] `plugin.xml`: optional `<depends config-file="my-air-branch-diff.xml">dev.kosmala.branch-diff-tree</depends>`; the config file registers `SessionDiffTargetProvider`.
+- [x] `target`: null without an active tab; the session's `workDir` (a tab no scan has seen: its `cwd`); a folder gone or outside a repository throws (the panel shows why) rather than silently showing the project; `DiffTarget(Git.root(workDir), Git.baseOf(root), title)`. `subscribe` → `ActiveSession.subscribe`. `setBase` → `Git.setBase(root, Git.headBranch(root), base)` (detached throws), then `ActiveSession.baseChanged()` on the EDT.
+- [x] Base sync both ways: `ActiveSession.baseGeneration`, bumped by `baseChanged`, is part of what it notifies about and of Session Context's git-read key; Session Context's base popup calls `baseChanged` instead of re-reading by itself.
+- [x] Found while wiring: `BranchDiffTargets` was first created by the panel's refresh off the EDT, so its provider would subscribe to EDT state from a pooled thread; the panel now creates it in `init` and it asserts the EDT (idea-branch-diff `41d00b2`). `ActiveSession` asserts the EDT too.
+- [x] `./gradlew test buildPlugin` in both repositories (my-air 42 classes, idea-branch-diff 11, 0 failures); commit; CLAUDE.md paragraph on the Branch Diff provider.
 
 ## Task 8: check in the sandbox (my-air)
 
