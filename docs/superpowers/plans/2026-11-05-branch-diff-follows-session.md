@@ -4,7 +4,7 @@
 |---|---|---|
 | 1 | done | `a66d3bc` (idea-branch-diff, branch `follow-session`) |
 | 2 | done | `7142e35` (idea-branch-diff) |
-| 3 | | |
+| 3 | done | `1a973c1` (idea-branch-diff) |
 | 4 | | |
 | 5 | | |
 | 6 | | |
@@ -85,9 +85,9 @@ interface DiffTargetProvider {
 
 **Files:** `toolwindow/BranchDiffPanel.kt` (lines ~117–130, 174, 207), `gutter/BranchDiffGutterController.kt` (~112), `service/BaseContentProvider.kt` (~40), `action/PlannotatorReviewAction.kt` (~28)
 
-- [ ] `DiffSnapshot` carries its `target`; the panel, gutter and base provider read `snapshot.target.root` instead of `repositories.firstOrNull()`. `BaseContentProvider` cache key gains the root. Plannotator runs in `target.root` with `target.base`.
-- [ ] `grep -rn "repositories.firstOrNull" src/main` returns nothing; the only `GitRepositoryManager` use left is in `BranchDiffTargets`.
-- [ ] Tests pass; commit.
+- [x] `DiffSnapshot` carries `target` and `root` (the target's `VirtualFile`, found when the diff was computed) in place of `baseBranch`; the panel (editor selection, opening a file, empty-tree messages), the gutter and `BaseContentProvider.getBaseContent(root, path, hash)` read them instead of `repositories.firstOrNull()`. The cache key stays `(path, hash)`: a commit's content is the same in every work tree. Plannotator gets the panel's snapshot (`PlannotatorReviewAction(project) { lastSnapshot }`), runs in `target.root` with `target.base` and is enabled only with a snapshot. The "no common history" text moved into `computeDiff`'s failure, since the base is the target's, not the setting's.
+- [x] `repositories.firstOrNull` is gone from `src/main`; the only `GitRepositoryManager` use left is in `BranchDiffTargets`.
+- [x] `GitDiffServiceWorktreeTest` also checks `snapshot.root` is the worktree and `getBaseContent(root, "a.txt", mergeBase)` reads `a` there; all 9 test classes pass, `buildPlugin` OK; commit. The base picker (`showBranchPopup`, `updateBranchButtonText`) still reads `settings.baseBranch`: Task 5.
 
 ## Task 4: refresh on the target (idea-branch-diff)
 
