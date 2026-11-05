@@ -6,7 +6,7 @@
 | 2 | done | `7142e35` (idea-branch-diff) |
 | 3 | done | `1a973c1` (idea-branch-diff) |
 | 4 | done (manual check moved to Task 8) | `3cffa93` (idea-branch-diff) |
-| 5 | | |
+| 5 | done (visual check in Task 8) | `c7c1bb0` (idea-branch-diff) |
 | 6 | | |
 | 7 | | |
 | 8 | | |
@@ -102,9 +102,9 @@ interface DiffTargetProvider {
 
 **Files:** `action/FollowSessionAction.kt` (new), `toolwindow/BranchDiffPanel.kt`, `plugin.xml`
 
-- [ ] `FollowSessionAction` (toggle, `followSession`), visible only when `DiffTargetProvider.EP` has an extension.
-- [ ] The branch button shows `label · branch → base` when `target.label != null`, else `base ▾` as now. Choosing a base: project mode writes `settings.baseBranch`; follow mode calls `provider.setBase(project, target, base)` (decision 2).
-- [ ] `buildPlugin`; commit; update idea-branch-diff `CLAUDE.md` (target, extension point, no `ChangeListManager`).
+- [x] `FollowSessionAction` (toggle, `followSession`, publishes `TARGET_CHANGED`), visible only when a provider is installed.
+- [x] The branch button: `branchButtonText(target, branch, settingsBase)` (`BranchButtonTextTest`, 3 tests): `label · branch → base` for a provided target, `label → base` when its diff failed, `base` for the project's own, the setting before any target. The panel keeps `shownTarget` also when the diff fails, so the base of a session with no common history can still be changed. Choosing a base on a provided target calls `provider.setBase` on a pooled thread (decision 2); otherwise it writes `settings.baseBranch` and refreshes. `BranchDiffTargets.current()` asserts that a provided target has a `label`, which is what tells the two apart.
+- [x] `test buildPlugin` (11 test classes, 0 failures); commit; idea-branch-diff `CLAUDE.md` describes targets, the extension point, the refresh triggers and the VFS limit.
 
 ## Task 6: `ActiveSession` (my-air)
 
