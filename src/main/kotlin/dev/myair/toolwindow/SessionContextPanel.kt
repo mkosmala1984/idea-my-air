@@ -12,8 +12,6 @@ import dev.myair.editor.sessionIcon
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.FileEditorManagerEvent
-import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
@@ -65,7 +63,7 @@ import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 import javax.swing.tree.TreePath
 import kotlin.io.path.name
-import dev.myair.editor.ClaudeSessionVirtualFile
+import dev.myair.service.ActiveSession
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.LatestRead
 import com.intellij.ui.dsl.gridLayout.UnscaledGaps
@@ -85,14 +83,14 @@ import javax.swing.SwingConstants
 import kotlin.io.path.exists
 
 /**
- * The environment, brief, files, outputs, artifacts, background tasks, MCP servers, skills and git changes of the session in the selected
- * session tab of [project]'s window. Follows tab selection and every service change, which also carries a tab's switch
- * to another session (`/clear`); a selected file that is no session tab keeps the session shown while its tab stays
- * open, so an output opened from here does not empty the pane.
+ * The environment, brief, files, outputs, artifacts, background tasks, MCP servers, skills and git changes of the session in
+ * [ActiveSession]'s tab, as Branch Diff shows it; a selected file that is no session tab keeps the session shown while
+ * its tab stays open, so an output opened from here does not empty the pane. Follows that tab and every service change.
  */
 class SessionContextPanel(private val project: Project, parent: Disposable) : JPanel(BorderLayout()), Scrollable {
     private val service = ClaudeSessionsService.getInstance()
-    private var shownTab: ClaudeSessionVirtualFile? = null
+    // Before the panel subscribes to the service, so the active tab is current when the panel's own listener runs.
+    private val active = ActiveSession.getInstance(project)
     /** The session the pane shows and what git last said of it. */
     private var shownId: String? = null
     private var git: GitRead? = null
@@ -117,9 +115,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     init {
         border = JBUI.Borders.empty(CARD_GAP)
-        project.messageBus.connect(parent).subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
-            override fun selectionChanged(event: FileEditorManagerEvent) = update()
-        })
+        active.subscribe(parent, ::update)
         service.subscribe(parent, ::update)
         PaneFont.subscribe(parent) { render(force = true) }
         // A hidden pane reads nothing; it catches up when shown.
@@ -137,15 +133,12 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     /** Renders at once with what is known, then again when `git` has read the session's folder. */
     private fun update() {
-        val editors = FileEditorManager.getInstance(project)
-        val tab = editors.selectedFiles.firstOrNull() as? ClaudeSessionVirtualFile ?: shownTab?.takeIf { editors.isFileOpen(it) }
-        val id = tab?.sessionId
+        val id = active.tab?.sessionId
         if (id != shownId) {
             git = null
             gitReads.forget()
             fullLists.clear()
         }
-        shownTab = tab
         shownId = id
         render()
         val session = service.sessions.firstOrNull { it.id == id } ?: return
@@ -397,7 +390,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
 
     /** Selects the shown session's tab and types [command] into its prompt, to be completed and sent by hand. */
     private fun pasteCommand(command: String) {
-        val tab = checkNotNull(shownTab) { "skills shown without a session tab" }
+        val tab = checkNotNull(active.tab) { "skills shown without a session tab" }
         val editor = FileEditorManager.getInstance(project).openFile(tab, true).filterIsInstance<ClaudeSessionEditor>().single()
         if (!editor.type(command)) Messages.showInfoMessage(project, "The session's tab does not run claude.", "Paste Skill Command")
     }
@@ -464,7 +457,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 // The tab is read at the click: the pane is not rebuilt when only the tab showing the session changes.
                 addMouseListener(object : MouseAdapter() {
                     override fun mouseClicked(event: MouseEvent) {
-                        FileEditorManager.getInstance(project).openFile(checkNotNull(shownTab), true)
+                        FileEditorManager.getInstance(project).openFile(checkNotNull(active.tab), true)
                     }
                 })
             }.customize(UnscaledGaps(bottom = 6)) // The text cell's default gaps without the top one, flush with the card's top.
