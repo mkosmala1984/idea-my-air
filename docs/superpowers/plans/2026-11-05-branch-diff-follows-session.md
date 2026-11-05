@@ -7,7 +7,7 @@
 | 3 | done | `1a973c1` (idea-branch-diff) |
 | 4 | done (manual check moved to Task 8) | `3cffa93` (idea-branch-diff) |
 | 5 | done (visual check in Task 8) | `c7c1bb0` (idea-branch-diff) |
-| 6 | | |
+| 6 | done | `fd0710a` |
 | 7 | | |
 | 8 | | |
 
@@ -110,10 +110,10 @@ interface DiffTargetProvider {
 
 **Files:** `service/ActiveSession.kt` (new), `toolwindow/SessionContextPanel.kt`, `plugin.xml`, test `service/ActiveSessionTest.kt`
 
-- [ ] Test the pure rule `activeTab(selected: VirtualFile?, last: ClaudeSessionVirtualFile?, isOpen: (VirtualFile) -> Boolean)`: a selected session tab wins; another file selected keeps `last` while open; `last` closed → null.
-- [ ] Project service `ActiveSession`: `tab`, updated on `selectionChanged` (the rule above), `subscribe(parent, listener)` fired when the tab or the shown `ClaudeSession` (its transcript, so every edit and commit `claude` makes), its head (`service.heads`) or its live entry changes; Branch Diff debounces, so firing on each transcript change is cheap.
-- [ ] `SessionContextPanel.update()` reads `ActiveSession.tab` instead of its own `shownTab`, so both panes pick the same session.
-- [ ] `./gradlew test`; commit.
+- [x] Test the pure rule `activeTab<T>(selected: T?, last: T?, isOpen)` (`ActiveSessionTest`, 3 tests; generic, since a `LightVirtualFile` needs the platform): a selected session tab wins; another file selected keeps `last` while open; `last` closed → null.
+- [x] Project service `ActiveSession`: `tab`, updated on `selectionChanged` and `fileClosed` (closing the remembered tab while a plain file is selected changes no selection) and on service changes; `subscribe(parent, listener)`, deduplicated on (tab, its session id, the `ClaudeSession`, its head, its live entry), `subscribe(parent, listener)` fired when the tab or the shown `ClaudeSession` (its transcript, so every edit and commit `claude` makes), its head (`service.heads`) or its live entry changes; Branch Diff debounces, so firing on each transcript change is cheap.
+- [x] `SessionContextPanel` reads `ActiveSession.tab` instead of its own `shownTab` and subscribes to it in place of `FILE_EDITOR_MANAGER`; it takes the service before subscribing to `ClaudeSessionsService`, so `ActiveSession`'s listener runs first. `CLAUDE.md` names `ActiveSession`.
+- [x] `./gradlew test` (42 test classes, 0 failures); commit. Session Context's behaviour in the IDE is checked in Task 8.
 
 ## Task 7: `SessionDiffTargetProvider` (my-air)
 
