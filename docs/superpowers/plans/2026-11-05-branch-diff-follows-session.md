@@ -119,7 +119,7 @@ interface DiffTargetProvider {
 
 **Files:** `branchdiff/SessionDiffTargetProvider.kt` (new), `actions/Git.kt`, `META-INF/plugin.xml`, `META-INF/my-air-branch-diff.xml` (new), `build.gradle.kts`, `GitTest.kt`
 
-- [x] `Git.baseOf(root): String` (stored base, else `repo(root).default`, which throws when the repository names none); `state()` shares the rule through `baseFrom(root, stored)`. `GitTest`: a worktree's stored base wins; a branch without one gets the default branch (33 tests in `GitTest` pass).
+- [x] `Git.baseOf(root): String` (stored base, else `repo(root).default`, which throws when the repository names none); `state()` shares the rule through `baseFrom(root, stored)`. `GitTest`: a worktree's stored base wins; a branch without one gets the default branch (all 32 tests in `GitTest` pass).
 - [x] `build.gradle.kts`: `localPlugin(".../branch-diff-tree-0.1.0.zip")`; the My Air zip does not bundle it.
 - [x] `plugin.xml`: optional `<depends config-file="my-air-branch-diff.xml">dev.kosmala.branch-diff-tree</depends>`; the config file registers `SessionDiffTargetProvider`.
 - [x] `target`: null without an active tab; the session's `workDir` (a tab no scan has seen: its `cwd`); a folder gone or outside a repository throws (the panel shows why) rather than silently showing the project; `DiffTarget(Git.root(workDir), Git.baseOf(root), title)`. `subscribe` → `ActiveSession.subscribe`. `setBase` → `Git.setBase(root, Git.headBranch(root), base)` (detached throws), then `ActiveSession.baseChanged()` on the EDT.
