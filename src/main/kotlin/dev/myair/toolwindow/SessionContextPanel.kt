@@ -95,10 +95,10 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     private var shownId: String? = null
     private var git: GitRead? = null
     /**
-     * Keyed by the session and its live entry, so notifications about other sessions read nothing again; on one thread,
-     * so reads never pile up.
+     * Keyed by the session, its live entry and [ActiveSession.baseGeneration] (a base set here or in Branch Diff), so
+     * notifications about other sessions read nothing again; on one thread, so reads never pile up.
      */
-    private val gitReads = LatestRead.onPool<Pair<ClaudeSession, LiveSession?>, GitRead>(
+    private val gitReads = LatestRead.onPool<Triple<ClaudeSession, LiveSession?, Int>, GitRead>(
         AppExecutorUtil.createBoundedApplicationPoolExecutor("Session context git", 1), { ModalityState.any() }, { gitRead(it.first) },
     ) { _, read ->
         git = read.getOrThrow()
@@ -142,7 +142,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         shownId = id
         render()
         val session = service.sessions.firstOrNull { it.id == id } ?: return
-        val key = session to service.live[session.id]
+        val key = Triple(session, service.live[session.id], active.baseGeneration)
         if (isShowing && key != gitReads.asked && session.workDir.exists()) gitReads.request(key)
     }
 
@@ -489,10 +489,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             // No separators: getSeparatorAbove never meets an index past the last item.
             val choices = BaseChoices(bases, bases.size, bases.size, bases.indexOf(git.base).coerceAtLeast(0))
             basePopup("Base Branch of ${git.branch}", choices) { base ->
-                background(project, "Setting base branch", { Git.setBase(git.root, git.branch, base) }) {
-                    gitReads.forget()
-                    update()
-                }
+                background(project, "Setting base branch", { Git.setBase(git.root, git.branch, base) }) { active.baseChanged() }
             }.show(under)
         }
     }

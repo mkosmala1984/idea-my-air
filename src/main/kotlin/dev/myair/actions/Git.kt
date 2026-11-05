@@ -82,12 +82,21 @@ object Git {
         val stored = current?.let { storedBase(root, it) }
         fun problem(base: String?, problem: String) = GitState(branch, current == null, root, base, stored != null, null, null, problem)
         // defaultBranch throws when the repository names no default; the branch row stays, the reason goes to Changes.
-        val base = stored ?: runCatching { repo(root).default }.getOrElse { return problem(null, it.message.orEmpty()) }
+        val base = runCatching { baseFrom(root, stored) }.getOrElse { return problem(null, it.message.orEmpty()) }
         if (!isCommit(root, base)) return problem(base, "Base $base no longer exists")
         // merge-base exits 1, saying nothing, when the two share no commit.
         val mergeBase = run(root, "merge-base", base, "HEAD", ok = setOf(0, 1)).trim().ifEmpty { return problem(base, "Base $base shares no history with $branch") }
         return GitState(branch, current == null, root, base, stored != null, mergeBase, tracked(root, mergeBase) + untracked(root), null)
     }
+
+    /**
+     * The base of the branch checked out in the work tree [root], as [state] counts changes against it: the one stored
+     * for the branch, else the default branch, which throws when the repository names none.
+     */
+    fun baseOf(root: Path): String =
+        baseFrom(root, run(root, "branch", "--show-current").trim().ifEmpty { null }?.let { storedBase(root, it) })
+
+    private fun baseFrom(root: Path, stored: String?) = stored ?: repo(root).default
 
     private fun inRepo(dir: Path) = generateSequence(dir.toAbsolutePath()) { it.parent }.any { it.resolve(".git").exists() }
 

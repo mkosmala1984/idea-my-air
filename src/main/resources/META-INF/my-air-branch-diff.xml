@@ -1,0 +1,5 @@
+<idea-plugin>
+  <extensions defaultExtensionNs="dev.kosmala.branch-diff-tree">
+    <diffTargetProvider implementation="dev.myair.branchdiff.SessionDiffTargetProvider"/>
+  </extensions>
+</idea-plugin>

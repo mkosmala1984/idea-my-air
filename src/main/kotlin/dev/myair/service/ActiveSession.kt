@@ -9,6 +9,7 @@ import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.util.concurrency.ThreadingAssertions
 import dev.myair.editor.ClaudeSessionVirtualFile
 
 /** [selected] when it is a session tab, else [last] while [isOpen]: a file opened beside a session keeps it active. */
@@ -21,7 +22,13 @@ internal fun <T> activeTab(selected: T?, last: T?, isOpen: (T) -> Boolean): T? =
  */
 @Service(Service.Level.PROJECT)
 class ActiveSession(private val project: Project) : Disposable {
+    /** Written on the EDT, read also by the Branch Diff provider off it. */
+    @Volatile
     var tab: ClaudeSessionVirtualFile? = null
+        private set
+
+    /** Counts [baseChanged] calls: a stored base is in no file the service reads, so its change is announced by hand. */
+    var baseGeneration = 0
         private set
 
     private val service = ClaudeSessionsService.getInstance()
@@ -45,11 +52,19 @@ class ActiveSession(private val project: Project) : Disposable {
         Disposer.register(parent) { listeners -= listener }
     }
 
+    /** Tells listeners that the base stored for a branch changed (`Git.setBase`), so they read it again. */
+    fun baseChanged() {
+        ThreadingAssertions.assertEventDispatchThread()
+        baseGeneration++
+        update()
+    }
+
     private fun update() {
+        ThreadingAssertions.assertEventDispatchThread()
         val editors = FileEditorManager.getInstance(project)
         tab = activeTab(editors.selectedFiles.firstOrNull() as? ClaudeSessionVirtualFile, tab) { editors.isFileOpen(it) }
         val session = service.sessions.firstOrNull { it.id == tab?.sessionId }
-        val shown = listOf(tab, tab?.sessionId, session, session?.let { service.heads[it.workDir] }, session?.let { service.live[it.id] })
+        val shown = listOf(tab, tab?.sessionId, session, session?.let { service.heads[it.workDir] }, session?.let { service.live[it.id] }, baseGeneration)
         if (shown == notified) return
         notified = shown
         listeners.toList().forEach { it() }

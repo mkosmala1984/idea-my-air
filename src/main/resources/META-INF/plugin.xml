@@ -12,6 +12,8 @@
   </dependencies>
   <!-- The folder tools need the IDE's MCP server; without it the rest of the plugin works as before. -->
   <depends optional="true" config-file="my-air-mcp.xml">com.intellij.mcpServer</depends>
+  <!-- Branch Diff (idea-branch-diff) follows the active session through its diffTargetProvider extension point. -->
+  <depends optional="true" config-file="my-air-branch-diff.xml">dev.kosmala.branch-diff-tree</depends>
 
   <extensions defaultExtensionNs="com.intellij">
     <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"

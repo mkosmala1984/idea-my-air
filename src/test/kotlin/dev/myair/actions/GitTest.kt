@@ -182,6 +182,16 @@ class GitTest {
         assertEquals("main", Git.storedBase(repo, "renamed"))
     }
 
+    @Test
+    fun `the base of a work tree is the stored one, else the default branch`() {
+        val repo = clone()
+        val path = worktreePath(repo, ".claude/worktrees", "ab12cd34")
+        Git.addBranchWorktree(repo, path, "worktree-ab12cd34", "origin/feature")
+        assertEquals("origin/feature", Git.baseOf(path))
+        git(repo, "checkout", "-b", "topic")
+        assertEquals("origin/main", Git.baseOf(repo))
+    }
+
     /** Writes [text] to [name] in [repo] and commits it. */
     private fun commit(repo: Path, name: String, text: String) {
         repo.resolve(name).writeText(text)
