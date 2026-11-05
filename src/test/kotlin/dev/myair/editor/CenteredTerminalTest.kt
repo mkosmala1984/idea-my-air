@@ -1,19 +1,30 @@
 package dev.myair.editor
 
-import com.jediterm.terminal.ui.JediTermWidget
-import com.jediterm.terminal.ui.settings.DefaultSettingsProvider
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import java.awt.BorderLayout
+import java.awt.Color
 import javax.swing.JFrame
+import javax.swing.JPanel
+import javax.swing.JScrollPane
+import javax.swing.ScrollPaneConstants
 import javax.swing.border.EmptyBorder
 
 class CenteredTerminalTest {
-    private val settings = DefaultSettingsProvider()
-    // The border stands for what the IDE's terminal adds around the text, which the layout has to measure.
-    private val terminal = JediTermWidget(settings).apply { border = EmptyBorder(0, 7, 0, 13) }
+    // A scroll pane with a scroll bar inside a border stands for the terminal's editor and what the IDE puts around its text.
+    private val text = JScrollPane(JPanel(), ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER)
+    private val terminal = JPanel(BorderLayout()).apply {
+        border = EmptyBorder(0, 7, 0, 13)
+        add(text)
+    }
+    private val grid = object : TextGrid {
+        override val visibleWidth get() = text.viewport.width
+        override val charWidth = 7.7f
+        override val background: Color = Color.BLACK
+    }
     private var columns = 100
-    private val centered = CenteredTerminal(terminal, terminal.terminalPanel, settings) { columns }
+    private val centered = CenteredTerminal(terminal, { grid }) { columns }
 
     // Swing validates only components with peers; addNotify makes them without showing the frame.
     private val frame = JFrame().apply {
@@ -31,7 +42,8 @@ class CenteredTerminalTest {
         centered.validate()
     }
 
-    private fun shownColumns() = terminal.terminalPanel.terminalSizeFromComponent!!.columns
+    /** What the reworked terminal's editor counts (`CharacterGridImpl.getColumns`). */
+    private fun shownColumns() = (grid.visibleWidth / grid.charWidth).toInt()
 
     @Test
     fun `the terminal gets the set number of columns in the middle of a wider tab`() {

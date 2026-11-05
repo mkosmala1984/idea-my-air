@@ -9,19 +9,24 @@ import com.intellij.openapi.fileEditor.FileEditorProvider
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
+import com.intellij.openapi.editor.impl.EditorComponentImpl
+import com.intellij.terminal.frontend.toolwindow.TerminalToolWindowTab
+import com.intellij.terminal.frontend.view.TerminalView
+import com.intellij.util.ui.UIUtil
+import java.awt.Color
+import com.intellij.terminal.frontend.toolwindow.TerminalToolWindowTabsManager
+import kotlinx.coroutines.launch
+import org.jetbrains.plugins.terminal.TerminalEmulatorType
+import org.jetbrains.plugins.terminal.startup.TerminalProcessType
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.wm.IdeFocusManager
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.terminal.JBTerminalWidget
-import com.intellij.terminal.ui.TerminalWidget
 import com.intellij.ui.dsl.builder.panel
 import dev.myair.MyAirSettings
 import dev.myair.claude.LiveSessionRegistry
 import dev.myair.tabs.SessionHosts
-import org.jetbrains.plugins.terminal.LocalTerminalDirectRunner
-import org.jetbrains.plugins.terminal.ShellStartupOptions
-import org.jetbrains.plugins.terminal.ShellTerminalWidget
 import java.beans.PropertyChangeListener
 import java.awt.BorderLayout
 import java.awt.GridBagLayout
@@ -44,9 +49,18 @@ class ClaudeSessionEditorProvider : FileEditorProvider, DumbAware {
  * Runs `claude` in the session's cwd; closing the tab disposes the widget and ends the process. A tab restored on startup
  * starts only when its directory exists and its session runs nowhere else, or when the user chooses Open Anyway.
  */
+/** The grid of the editor a reworked terminal shows now: its output, or the alternate buffer of a fullscreen program like `claude`. */
+private class EditorGrid(view: TerminalView) : TextGrid {
+    private val editor = UIUtil.findComponentsOfType(view.component, EditorComponentImpl::class.java).map { it.editor }
+        .single { it.component.isVisible }
+    override val visibleWidth get() = editor.scrollingModel.visibleArea.width
+    override val charWidth get() = checkNotNull(editor.characterGrid) { "terminal editor without a character grid" }.charWidth
+    override val background: Color get() = editor.backgroundColor
+}
+
 class ClaudeSessionEditor(private val project: Project, private val file: ClaudeSessionVirtualFile) : UserDataHolderBase(), FileEditor {
     private val content = JPanel(BorderLayout())
-    private var widget: TerminalWidget? = null
+    private var tab: TerminalToolWindowTab? = null
     /** The plan part of the system prompt, while `claude` may read it again. */
     private var promptFile: Path? = null
 
@@ -62,7 +76,7 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
         val folders = service.folders
         promptFile = sessionPlan(folders, file.sessionId, service.sessions.firstOrNull { it.id == file.sessionId }, file.planStart)
             ?.let { (folder, task) -> PromptFiles.write(Homes.myAir.resolve("prompts"), planPrompt(folders, folder, task, briefs)) }
-        val options = ShellStartupOptions.Builder()
+        val tab = TerminalToolWindowTabsManager.getInstance(project).createTabBuilder()
             .workingDirectory(file.cwd.toString())
             .shellCommand(
                 listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(briefs)) +
@@ -71,21 +85,27 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
             // Fullscreen renderer: no flicker, mouse support; otherwise claude asks on every start whether to try it.
             // Skip auto-install of claude's own JetBrains plugin into this IDE, as Air does.
             .envVariables(mapOf("CLAUDE_CODE_NO_FLICKER" to "1", "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL" to "true"))
-            .build()
-        val widget = LocalTerminalDirectRunner.createTerminalRunner(project).startShellTerminalWidget(this, options, true)
-        widget.ttyConnectorAccessor.executeWithTtyConnector { tty ->
-            file.pid = checkNotNull(ShellTerminalWidget.getProcessTtyConnector(tty)) { "claude tab without a process: $tty" }.process.pid()
-            thisLogger().info("claude for session ${file.sessionId} runs as pid ${file.pid}")
+            .processType(TerminalProcessType.NON_SHELL)
+            .emulatorType(TerminalEmulatorType.Ghostty)
+            .shouldAddToToolWindow(false)
+            .closeOnProcessTermination(false)
+            .restoreOnProjectReopen(false)
+            .requestFocus(false)
+            .deferSessionStartUntilUiShown(true)
+            .createTab()
+        this.tab = tab
+        tab.view.coroutineScope.launch {
+            val session = tab.view.sessionDeferred.await()
+            file.pid = session.processId
+            thisLogger().info("claude for session ${file.sessionId} runs as pid ${file.pid} in ${session.javaClass.name}")
         }
-        this.widget = widget
-        val jediTerm = checkNotNull(JBTerminalWidget.asJediTermWidget(widget)) { "not a JediTerm terminal: $widget" }
-        return CenteredTerminal(widget.component, jediTerm.terminalPanel, jediTerm.settingsProvider) { MyAirSettings.getInstance().terminalColumns }
+        return CenteredTerminal(tab.content.component, { EditorGrid(tab.view) }) { MyAirSettings.getInstance().terminalColumns }
     }
 
     /** Types [text] into `claude`'s prompt; false while the tab shows a notice instead of `claude`. */
     fun type(text: String): Boolean {
-        val widget = widget ?: return false
-        widget.ttyConnectorAccessor.executeWithTtyConnector { it.write(text) }
+        val tab = tab ?: return false
+        tab.view.sendText(text)
         return true
     }
 
@@ -113,7 +133,7 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
     }
 
     override fun getComponent(): JComponent = content
-    override fun getPreferredFocusedComponent(): JComponent = widget?.preferredFocusableComponent ?: content
+    override fun getPreferredFocusedComponent(): JComponent = tab?.view?.preferredFocusableComponent ?: content
     override fun getName() = "Claude"
     override fun getFile(): VirtualFile = file
     override fun setState(state: FileEditorState) {}
@@ -122,6 +142,7 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
     override fun addPropertyChangeListener(listener: PropertyChangeListener) {}
     override fun removePropertyChangeListener(listener: PropertyChangeListener) {}
     override fun dispose() {
+        tab?.let { Disposer.dispose(it.content) }
         promptFile?.deleteIfExists()
     }
 }

@@ -21,6 +21,7 @@ dependencies {
     intellijPlatform {
         local("E:/dev/apps/jetbrains/IntelliJ IDEA Ultimate")
         bundledPlugin("org.jetbrains.plugins.terminal")
+        bundledModule("intellij.terminal.frontend")
         bundledPlugin("com.intellij.mcpServer")
         bundledModule("intellij.platform.vcs.impl")
         bundledModule("intellij.platform.vcs.core")
@@ -37,7 +38,7 @@ intellijPlatform {
     buildSearchableOptions = false
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "262"
+            sinceBuild = "263"
             untilBuild = provider { null }
         }
     }
