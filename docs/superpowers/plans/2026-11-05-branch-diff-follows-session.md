@@ -3,7 +3,7 @@
 | Task | Status | Commit |
 |---|---|---|
 | 1 | done | `a66d3bc` (idea-branch-diff, branch `follow-session`) |
-| 2 | | |
+| 2 | done | `7142e35` (idea-branch-diff) |
 | 3 | | |
 | 4 | | |
 | 5 | | |
@@ -76,10 +76,10 @@ interface DiffTargetProvider {
 
 **Files:** `service/GitDiffService.kt`, `service/DiffMerger.kt` (signature only if needed), test `service/GitDiffServiceWorktreeTest.kt`
 
-- [ ] Test (`BasePlatformTestCase` or `HeavyPlatformTestCase`, real `git` in a temp dir, since `GitLineHandler` needs a project): a repository on `main` with `a.txt`; a linked worktree `git worktree add ../wt -b feat main`, not registered as a VCS root; in it commit a change to `a.txt`, edit `b.txt` (committed on `main`) without committing, create untracked `c.txt`, add an ignored `d.log` with `.gitignore` `*.log`. `computeDiff(DiffTarget(wt, "main", "s"))` returns exactly `a.txt` MODIFIED committed, `b.txt` MODIFIED uncommitted, `c.txt` ADDED uncommitted; `currentBranch` `feat`. The same against the main checkout gives the project-mode result.
-- [ ] `computeDiff(target: DiffTarget, includeLineStats)`: `root = LocalFileSystem.refreshAndFindFileByNioFile(target.root)` (null throws); merge-base and committed diff as now with `root`; `uncommitted = GitChangeUtils.getDiffWithWorkingDir(project, root, "HEAD", null, false)`; untracked from `git ls-files --others --exclude-standard -z` as `FilePath`s; `fetchCommitDates`, `fetchLineStats`, `untrackedLineStats` take `root`. `currentBranch` from `git branch --show-current` (empty: `(detached HEAD)`), since no `GitRepository` exists for a worktree.
-- [ ] `listRecentBranches(root, maxAgeDays)`.
-- [ ] Existing tests pass (`DiffMergerTest` unchanged: merge rules stay); commit.
+- [x] Test `GitDiffServiceWorktreeTest` (`BasePlatformTestCase`, real `git` in a temp dir, service calls on a pooled thread since it asserts off-EDT, `VfsRootAccess.allowRootAccess` for the temp dir): a repository on `main`; a linked worktree `wt` on `feat`, not a VCS root of the light project; in it a committed change to `a.txt`, an uncommitted edit of `b.txt`, untracked `c.txt`, ignored `d.log`. `computeDiff(DiffTarget(wt, "main", "session"))` returns exactly `a.txt` MODIFIED committed, `b.txt` MODIFIED uncommitted, `c.txt` ADDED uncommitted; `currentBranch` `feat`; the main checkout has no change, branch `main`. Second test: `listRecentBranches(root)` lists `main` and `other`. Mutation check: with `getDiffWithWorkingDir` replaced by an empty list the first test fails, missing `b.txt`.
+- [x] `computeDiff(target: DiffTarget, includeLineStats)`: `root = LocalFileSystem.refreshAndFindFileByNioFile(target.root)` (null throws); merge-base and committed diff as before with `root`; `uncommitted = GitChangeUtils.getDiffWithWorkingDir(project, root, "HEAD", null, false)`; untracked from `git ls-files --others --exclude-standard -z` as `FilePath`s; `fetchCommitDates`, `fetchLineStats`, `untrackedLineStats` take `root`. `currentBranch` from `git branch --show-current` (empty: `(detached HEAD)`). New private `git(root, command, params)` throws on failure (`getOutputOrThrow`).
+- [x] `listRecentBranches(root, maxAgeDays)`; a failing `for-each-ref` throws instead of returning no branches. The panel's `refresh` resolves `BranchDiffTargets.current()` on the pooled thread and passes it to both (the rest of Task 3 is still open).
+- [x] All 9 test classes pass (`DiffMergerTest` unchanged); `buildPlugin` OK; commit.
 
 ## Task 3: every caller takes the target's root (idea-branch-diff)
 
