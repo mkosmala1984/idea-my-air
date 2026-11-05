@@ -65,6 +65,12 @@ class ClaudeSessionsService : Disposable {
 
     val folders get() = state.folders
 
+    /** The work tree of every session's cwd, work dir and project, of every open tab's and of every open project's base. */
+    val heads get() = state.heads
+
+    /** The branch checked out where [session] works now; null outside a repository and on a detached HEAD. */
+    fun branchOf(session: ClaudeSession): String? = heads.getValue(session.workDir)?.branch
+
     /** Why `structure.json` could not be read; Folders mode shows it instead of the tree and allows no changes meanwhile. */
     val foldersError get() = state.foldersError
 
@@ -186,13 +192,14 @@ class ClaudeSessionsService : Disposable {
 }
 
 /**
- * The work trees the tabs' marks ([dev.myair.editor.tabMark]) compare, read from HEAD files: where every session works
- * and its project lies, where every open tab started, and every open project's base.
+ * The work trees the tabs' marks ([dev.myair.editor.tabMark]), the tree's work tree filter and its search by branch
+ * compare, read from HEAD files: where every session started and works and its project lies, where every open tab
+ * started, and every open project's base.
  */
 private fun tabHeads(sessions: List<ClaudeSession>): Map<Path, Git.Head?> {
     val projects = ProjectManager.getInstance().openProjects.toList()
     val tabs = projects.flatMap { FileEditorManager.getInstance(it).openFiles.filterIsInstance<ClaudeSessionVirtualFile>() }
-    val dirs = sessions.flatMap { listOf(it.workDir, it.project) } + tabs.flatMap { listOf(it.cwd, it.project) } + projects.map(::projectBase)
+    val dirs = sessions.flatMap { listOf(it.cwd, it.workDir, it.project) } + tabs.flatMap { listOf(it.cwd, it.project) } + projects.map(::projectBase)
     return dirs.distinct().associateWith(Git::head)
 }
 

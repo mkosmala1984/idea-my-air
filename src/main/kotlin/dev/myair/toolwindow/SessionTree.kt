@@ -1,5 +1,6 @@
 package dev.myair.toolwindow
 
+import dev.myair.actions.Git
 import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
@@ -83,15 +84,15 @@ fun projectsTree(sessions: List<ClaudeSession>) = node(null, projectNodes(sessio
  * Folders mode: the user's folders in their order, each with its subfolders and then its sessions newest first (see
  * [SessionFolders.placeOf]), then [RecentSessions] and [UnfiledSessions] last. A plan folder holds, after its subfolders,
  * its milestones with their tasks, each task the sessions whose brief names it, then [NoTask] with its other sessions
- * when there are any. Sessions filed but absent from [sessions] are not shown. A non-empty [query] keeps the matching
- * sessions, the folders, milestones and tasks on their path, [RecentSessions] and [UnfiledSessions]; [sessions] arrive newest first.
+ * when there are any. Sessions filed but absent from [sessions] are not shown. A [filter] keeps the sessions it accepts,
+ * the folders, milestones and tasks on their path, [RecentSessions] and [UnfiledSessions]; [sessions] arrive newest first.
  */
-fun foldersTree(structure: SessionFolders, sessions: List<ClaudeSession>, query: String): DefaultMutableTreeNode {
-    val shown = sessions.filter { it.matches(query) }
+fun foldersTree(structure: SessionFolders, sessions: List<ClaudeSession>, filter: ((ClaudeSession) -> Boolean)?): DefaultMutableTreeNode {
+    val shown = filter?.let(sessions::filter) ?: sessions
     val (tasked, untasked) = shown.partition { structure.taskOf(it) != null }
     val byTask = tasked.groupBy { it.brief!!.planTask!! }
     val places = untasked.groupBy { structure.placeOf(it) }
-    fun keep(item: Any, children: List<DefaultMutableTreeNode>) = if (query.isNotEmpty() && children.isEmpty()) null else node(item, children)
+    fun keep(item: Any, children: List<DefaultMutableTreeNode>) = if (filter != null && children.isEmpty()) null else node(item, children)
     fun planNodes(folder: Folder) = folder.plan!!.milestones.mapNotNull { m ->
         keep(MilestoneRow(folder, m), m.tasks.mapNotNull { t -> keep(PlanTaskRow(folder, t), byTask[t.id].orEmpty().map(::sessionNode)) })
     }
@@ -107,6 +108,13 @@ fun foldersTree(structure: SessionFolders, sessions: List<ClaudeSession>, query:
             node(UnfiledSessions, projectNodes(places[null].orEmpty())),
     )
 }
+
+/**
+ * Whether [session] works or started in the work tree at [root], by the work trees [heads] reads for its work dir and
+ * cwd; a session whose directory [heads] lacks is a bug and throws.
+ */
+fun inWorkTree(session: ClaudeSession, root: Path, heads: Map<Path, Git.Head?>) =
+    listOf(session.workDir, session.cwd).any { heads.getValue(it)?.root == root }
 
 /** What makes a session call for attention, most urgent first. */
 enum class Urgency { NEEDS_INPUT, UNREAD, WORKING }

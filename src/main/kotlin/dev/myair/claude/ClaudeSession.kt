@@ -27,9 +27,14 @@ data class ClaudeSession(
     val background: List<BackgroundTask> = emptyList(), val skills: List<String> = emptyList(), val mcpServers: List<String> = emptyList(),
     val workDir: Path = cwd, val startBranch: String? = null,
 ) {
-    /** Case-insensitive substring match on the title or the project path; every word of [query] must match. */
-    fun matches(query: String): Boolean =
-        query.split(' ').filter { it.isNotEmpty() }.all { title.contains(it, true) || cwd.toString().contains(it, true) }
+    /**
+     * Case-insensitive substring match on the title, the cwd, [startBranch] or [branch], the branch checked out where it
+     * works now; every word of [query] must match one of them.
+     */
+    fun matches(query: String, branch: String?): Boolean {
+        val fields = listOfNotNull(title, cwd.toString(), startBranch, branch)
+        return query.split(' ').filter { it.isNotEmpty() }.all { word -> fields.any { it.contains(word, true) } }
+    }
 
     /** Whether the last message came less than [days] days before [now]. */
     fun isWithin(days: Int, now: Instant): Boolean = lastMessage > now.minus(Duration.ofDays(days.toLong()))

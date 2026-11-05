@@ -398,14 +398,18 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
-    fun `filter matches every word against title or project path, ignoring case`() {
-        val s = ClaudeSession("s1", Path.of("E:\\dev\\projects\\rtm-cloud"), "Rebase na branch release", Instant.EPOCH, emptyList(), emptyList())
-        assertTrue(s.matches(""))
-        assertTrue(s.matches("REBASE"))
-        assertTrue(s.matches("rtm-cloud"))
-        assertTrue(s.matches("rebase  rtm"))
-        assertFalse(s.matches("rebase testflo"))
-        assertFalse(s.matches("merge"))
+    fun `filter matches every word against title, project path, start branch or current branch, ignoring case`() {
+        val s = ClaudeSession("s1", Path.of("E:\\dev\\projects\\rtm-cloud"), "Rebase na branch release", Instant.EPOCH, emptyList(), emptyList(), startBranch = "feature/TR-12-export")
+        assertTrue(s.matches("", null))
+        assertTrue(s.matches("REBASE", null))
+        assertTrue(s.matches("rtm-cloud", null))
+        assertTrue(s.matches("rebase  rtm", null))
+        assertFalse(s.matches("rebase testflo", null))
+        assertFalse(s.matches("merge", null))
+        assertTrue(s.matches("tr-12", null))
+        assertFalse(s.matches("hotfix", null))
+        assertTrue(s.matches("HOTFIX", "worktree-hotfix-2026"))
+        assertTrue(s.matches("export hotfix", "worktree-hotfix-2026"))
     }
 
     @Test

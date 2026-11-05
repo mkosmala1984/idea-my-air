@@ -36,7 +36,7 @@ class FolderQueriesTest {
     private fun ids(
         since: String? = null, until: String? = null, query: String? = null, folder: String? = null, unfiled: Boolean? = null,
         offset: Int? = null, limit: Int? = null,
-    ) = findSessions(sessions, structure, now, since, until, query, folder, unfiled, offset, limit).sessions.map { it.id }
+    ) = findSessions(sessions, structure, now, since, until, query, folder, unfiled, offset, limit) { null }.sessions.map { it.id }
 
     @Test
     fun `time bounds accept relative, date and date-time forms, inclusive, a bare until covering its day`() {
@@ -63,11 +63,11 @@ class FolderQueriesTest {
     fun `a session in its bound project's folder counts as filed there`() {
         val bound = structure.createFolder("rtm", "tf", "testflo", dirs = listOf(Path.of("/testflo").toString()))
         fun ids(folder: String? = null, unfiled: Boolean? = null) =
-            findSessions(sessions, bound, now, null, null, null, folder, unfiled, null, null).sessions.map { it.id }
+            findSessions(sessions, bound, now, null, null, null, folder, unfiled, null, null) { null }.sessions.map { it.id }
         assertEquals(listOf("tf"), ids(folder = "rtm/testflo"))
         assertEquals(listOf("tf", "fix", "old"), ids(folder = "rtm"))
         assertEquals(listOf("new"), ids(unfiled = true))
-        val page = findSessions(sessions, bound, now, null, null, "testflo", null, null, null, null)
+        val page = findSessions(sessions, bound, now, null, null, "testflo", null, null, null, null) { null }
         assertEquals("rtm/testflo", JsonParser.parseString(page.toJson(bound, zone)).asJsonObject.getAsJsonArray("sessions")[0].asJsonObject["folder"].asString)
         val folder = JsonParser.parseString(bound.treeJson()).asJsonArray[0].asJsonObject.getAsJsonArray("folders")[1].asJsonObject
         assertEquals(Path.of("/testflo").toString(), folder["dirs"].asJsonArray.single().asString)
@@ -75,12 +75,12 @@ class FolderQueriesTest {
 
     @Test
     fun `pages count every match, default to 50 and refuse more than 100`() {
-        val page = findSessions(sessions, structure, now, null, null, null, null, null, 1, 2)
+        val page = findSessions(sessions, structure, now, null, null, null, null, null, 1, 2) { null }
         assertEquals(4, page.total)
         assertEquals(listOf("tf", "fix"), page.sessions.map { it.id })
         assertEquals(emptyList(), ids(offset = 10))
         val many = (1..120).map { session("s$it", "t", "/p", now.minusMinutes(it.toLong())) }
-        assertEquals(DEFAULT_LIMIT, findSessions(many, SessionFolders(), now, null, null, null, null, null, null, null).sessions.size)
+        assertEquals(DEFAULT_LIMIT, findSessions(many, SessionFolders(), now, null, null, null, null, null, null, null) { null }.sessions.size)
         assertThrows<IllegalArgumentException> { ids(limit = 101) }
         assertThrows<IllegalArgumentException> { ids(limit = 0) }
         assertThrows<IllegalArgumentException> { ids(offset = -1) }

@@ -19,13 +19,15 @@ const val PROMPT_CHARS = 300
 
 /**
  * The sessions matching every filter given, newest first, one page at a time. [since] and [until] bound the last
- * message inclusively (see [timeBound]); [query] is the tree's filter; [folder] keeps sessions filed in that folder
+ * message inclusively (see [timeBound]); [query] is the tree's filter, [branchOf] giving the branch checked out where a
+ * session works now ([ClaudeSession.matches]); [folder] keeps sessions filed in that folder
  * or below it; [unfiled] true keeps the ones under `sessions`, false the filed ones. Bad input throws
  * [IllegalArgumentException] naming it.
  */
 fun findSessions(
     sessions: List<ClaudeSession>, structure: SessionFolders, now: ZonedDateTime,
     since: String?, until: String?, query: String?, folder: String?, unfiled: Boolean?, offset: Int?, limit: Int?,
+    branchOf: (ClaudeSession) -> String?,
 ): SessionPage {
     val from = since?.let { timeBound(it, now, end = false) }
     val to = until?.let { timeBound(it, now, end = true) }
@@ -38,7 +40,7 @@ fun findSessions(
     val matches = sessions.sortedByDescending { it.lastMessage }.filter { session ->
         val at = session.lastMessage
         val place = structure.placeOf(session)
-        (from == null || at >= from) && (to == null || at <= to) && (query == null || session.matches(query)) &&
+        (from == null || at >= from) && (to == null || at <= to) && (query == null || session.matches(query, branchOf(session))) &&
             (inFolder == null || place in inFolder) && (unfiled == null || unfiled == (place == null))
     }
     return SessionPage(matches.size, skip, matches.drop(skip).take(size))

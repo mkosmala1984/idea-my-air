@@ -39,7 +39,7 @@ class FoldersMcpToolset : McpToolset {
         since: String? = null,
         @McpDescription("Latest last message, inclusive, in the same forms; a date covers the whole day.")
         until: String? = null,
-        @McpDescription("Words that must all occur, ignoring case, in the title or the project path.")
+        @McpDescription("Words that must each occur, ignoring case, in the title, the project path, the branch the session started on or the branch checked out where it works now.")
         query: String? = null,
         @McpDescription("Folder path such as rtm/fixes: sessions filed in it or any folder below it.")
         folder: String? = null,
@@ -51,7 +51,7 @@ class FoldersMcpToolset : McpToolset {
         limit: Int? = null,
     ): String = withFolders { service, folders ->
         val now = ZonedDateTime.now()
-        findSessions(service.sessions, folders, now, since, until, query, folder, unfiled, offset, limit).toJson(folders, now.zone)
+        findSessions(service.sessions, folders, now, since, until, query, folder, unfiled, offset, limit, service::branchOf).toJson(folders, now.zone)
     }
 
     @McpTool

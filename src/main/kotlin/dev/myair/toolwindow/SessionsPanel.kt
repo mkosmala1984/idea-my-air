@@ -45,6 +45,7 @@ import dev.myair.actions.SaveAsPresetAction
 import dev.myair.actions.ShowChangesVsBaseAction
 import dev.myair.claude.ClaudeSession
 import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.projectBase
 import dev.myair.folders.Folder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.pinnedSessions
@@ -75,9 +76,15 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     /** The tree hides sessions whose last message is this many days old or older; 0 hides none. */
     private var maxAgeDays = PropertiesComponent.getInstance().getInt(MAX_AGE_DAYS, 0)
     private var density = PropertiesComponent.getInstance().getValue(DENSITY)?.let(Density::valueOf) ?: Density.COMPACT
+    /** The tree shows only the sessions of [windowRoot] ([inWorkTree]); kept per project, so each window has its own. */
+    private var workTreeOnly = PropertiesComponent.getInstance(project).getBoolean(WORK_TREE_ONLY)
+    /** The work tree this window's project lies in, read off the EDT once; null until read and outside a repository. */
+    private var windowRoot: Path? = null
+    /** Whether [windowRoot] has been read. */
+    private var rootRead = false
     private var shown: List<Any?> = emptyList()
-    /** The nodes the tree shows expanded outside a search, by [foldersMode]; kept in application properties. */
-    private val states = HashMap<Boolean, TreeState>()
+    /** The nodes the tree shows expanded outside a search, by [stateKey]; kept in application properties. */
+    private val states = HashMap<String, TreeState>()
     /** While [render] swaps the model and applies the state, whose expansion events must not replace it. */
     private var rendering = false
     /** The branch checked out in each project and folder directory the tree shows, read off the EDT by [readBranches]. */
@@ -162,6 +169,24 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 render()
             }
         }
+        val workTree = object : ToggleAction("This Work Tree", null, AllIcons.Vcs.Branch), DumbAware {
+            override fun getActionUpdateThread() = ActionUpdateThread.EDT
+            override fun update(e: AnActionEvent) {
+                super.update(e)
+                e.presentation.isEnabled = windowRoot != null
+                e.presentation.description = when {
+                    !rootRead -> "Reading the work tree of this project..."
+                    windowRoot == null -> "Not in a Git work tree"
+                    else -> "Show only sessions that work or started in $windowRoot"
+                }
+            }
+            override fun isSelected(e: AnActionEvent) = workTreeOnly
+            override fun setSelected(e: AnActionEvent, state: Boolean) {
+                workTreeOnly = state
+                PropertiesComponent.getInstance(project).setValue(WORK_TREE_ONLY, state)
+                render()
+            }
+        }
         val editing = FolderEditing(project, tree, service)
         val newFolder = FolderAction("New Folder", AllIcons.Actions.NewFolder, ::foldersMode, ::canEditFolders, editing::newFolder)
         val rename = FolderAction("Rename...", null, ::foldersMode, { canEditFolders() && editing.canRename() }, editing::rename)
@@ -232,7 +257,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 Separator.getInstance(), refresh,
             )
         }
-        val search = object : DumbAwareAction("Search", "Filter sessions by title or project path", AllIcons.Actions.Search) {
+        val search = object : DumbAwareAction("Search", "Filter sessions by title, project path or branch", AllIcons.Actions.Search) {
             override fun actionPerformed(e: AnActionEvent) = showSearch(true)
         }
         search.registerCustomShortcutSet(CommonShortcuts.getFind(), this)
@@ -240,7 +265,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             ActionManager.getInstance().createActionToolbar(place, DefaultActionGroup(*actions), true).apply { targetComponent = tree }.component
         val actions = JPanel(BorderLayout()).apply {
             add(bar("ClaudeSessions", withPrompt, newSession, newSessionInWorktree, PresetsGroup(), newFolder), BorderLayout.CENTER)
-            add(bar("ClaudeSessionsView", options, search), BorderLayout.EAST)
+            add(bar("ClaudeSessionsView", workTree, options, search), BorderLayout.EAST)
         }
         val close = InplaceButton(IconButton("Close Search", AllIcons.Actions.Close, AllIcons.Actions.CloseHovered)) { showSearch(false) }
         filter.textEditor.addKeyListener(object : KeyAdapter() {
@@ -271,6 +296,15 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         }
         renderPinned()
         render()
+        val base = projectBase(project)
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val root = Git.head(base)?.root
+            ApplicationManager.getApplication().invokeLater({
+                windowRoot = root
+                rootRead = true
+                render()
+            }, project.disposed)
+        }
     }
 
     /** The search field takes the toolbar's place; closing it clears the filter. */
@@ -387,7 +421,21 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         }
     }
 
-    private fun snapshot() = listOf(service.loaded, foldersMode, showSettled, treeSessions(), service.pins.settled, service.folders, service.foldersError)
+    // The heads, since a checkout changes what the work tree filter and a search by branch keep.
+    private fun snapshot() = listOf(
+        service.loaded, foldersMode, showSettled, treeSessions(), service.pins.settled, service.folders, service.foldersError, service.heads,
+    )
+
+    /** The work tree the tree is narrowed to: [windowRoot] while [workTreeOnly] is on, else null. */
+    private fun workTreeRoot() = windowRoot.takeIf { workTreeOnly }
+
+    /** What the tree keeps of [treeSessions]: those of [workTreeRoot] matching [query]; null keeps all. */
+    private fun treeFilter(query: String): ((ClaudeSession) -> Boolean)? {
+        val root = workTreeRoot()
+        if (root == null && query.isEmpty()) return null
+        val heads = service.heads
+        return { (root == null || inWorkTree(it, root, heads)) && it.matches(query, service.branchOf(it)) }
+    }
 
     private fun shownSessions() = service.pins.shown(service.sessions, showSettled)
 
@@ -418,9 +466,10 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         return true
     }
 
-    private fun stateKey() = "$TREE_STATE." + if (foldersMode) "folders" else "projects"
+    /** The narrowed tree keeps its own state, so turning the filter off brings back the tree as it was. */
+    private fun stateKey() = "$TREE_STATE." + (if (foldersMode) "folders" else "projects") + if (workTreeRoot() != null) ".workTree" else ""
 
-    private fun state() = states.getOrPut(foldersMode) { treeStateOf(PropertiesComponent.getInstance().getValue(stateKey())) }
+    private fun state() = stateKey().let { key -> states.getOrPut(key) { treeStateOf(PropertiesComponent.getInstance().getValue(key)) } }
 
     /**
      * Takes what the user expanded or collapsed as the tree's state; not during a search, which expands everything, so
@@ -429,7 +478,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private fun rememberState() {
         if (rendering || filter.text.isNotBlank()) return
         val state = TreeState.createOn(tree)
-        states[foldersMode] = state
+        states[stateKey()] = state
         PropertiesComponent.getInstance().setValue(stateKey(), treeStateXml(state))
     }
 
@@ -445,8 +494,10 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         tree.emptyText.text = when {
             !service.loaded -> LOADING
             error != null -> "Cannot read ${service.structureFile}: $error"
+            workTreeRoot() != null -> "No sessions in this work tree"
             else -> StatusText.getDefaultEmptyText()
         }
+        val filter = treeFilter(query)
         tree.dragEnabled = foldersMode
         // The drop shown refers to nodes of the old model; the next pointer move computes it on the new one.
         tree.drop = null
@@ -455,8 +506,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             tree.model = DefaultTreeModel(
                 when {
                     error != null -> DefaultMutableTreeNode()
-                    foldersMode -> foldersTree(service.folders, treeSessions(), query)
-                    else -> projectsTree(treeSessions().filter { it.matches(query) })
+                    foldersMode -> foldersTree(service.folders, treeSessions(), filter)
+                    else -> projectsTree(filter?.let(treeSessions()::filter) ?: treeSessions())
                 },
             )
             if (query.isNotEmpty()) TreeUtil.expandAll(tree) else state().applyTo(tree)
@@ -471,6 +522,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         private const val SHOW_SETTLED = "dev.myair.showSettled"
         private const val MAX_AGE_DAYS = "dev.myair.maxAgeDays"
         private const val TREE_STATE = "dev.myair.treeState"
+        private const val WORK_TREE_ONLY = "dev.myair.thisWorkTree"
         private const val DENSITY = "dev.myair.density"
         private const val TOOLBAR_CARD = "toolbar"
         private const val SEARCH_CARD = "search"
