@@ -85,6 +85,7 @@ private fun SimpleColoredComponent.appendSession(
     iconTextGap = JBUI.scale(density.iconTextGap)
     append(item.title, when {
         settled -> SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES
+        live == null -> SimpleTextAttributes.GRAYED_ATTRIBUTES
         unread -> SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
         else -> SimpleTextAttributes.REGULAR_ATTRIBUTES
     })

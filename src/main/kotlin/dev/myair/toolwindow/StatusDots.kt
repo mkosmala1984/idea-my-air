@@ -1,10 +1,11 @@
 package dev.myair.toolwindow
 
-import com.intellij.ui.JBColor
 import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.ui.GraphicsUtil
+import dev.myair.editor.NEEDS_INPUT_AMBER
 import dev.myair.editor.UNREAD_BLUE
 import java.awt.BasicStroke
+import java.awt.Color
 import java.awt.Component
 import java.awt.Graphics
 import java.awt.Graphics2D
@@ -13,7 +14,7 @@ import java.awt.geom.Ellipse2D
 import javax.swing.Icon
 
 /** A tree row's status: an 8 px filled circle, or with [ring] a 10 px circle with a quarter left open. */
-class StatusDot(private val color: JBColor, private val ring: Boolean = false) : Icon {
+class StatusDot(private val color: Color, private val ring: Boolean = false) : Icon {
     override fun getIconWidth() = JBUIScale.scale(16)
 
     override fun getIconHeight() = JBUIScale.scale(16)
@@ -39,9 +40,10 @@ class StatusDot(private val color: JBColor, private val ring: Boolean = false) :
     }
 }
 
-val NEEDS_INPUT_DOT = StatusDot(JBColor(0xE56D17, 0xF0883E))
+/** The colours of the session icons ([dev.myair.editor.sessionIcon]), so a group's dot names the status its rows show. */
+val NEEDS_INPUT_DOT = StatusDot(NEEDS_INPUT_AMBER)
 val UNREAD_DOT = StatusDot(UNREAD_BLUE)
-val WORKING_DOT = StatusDot(UNREAD_BLUE, ring = true)
+val WORKING_DOT = StatusDot(Color(0xD97757), ring = true)
 
 val Urgency.dot: Icon get() = when (this) {
     Urgency.NEEDS_INPUT -> NEEDS_INPUT_DOT
