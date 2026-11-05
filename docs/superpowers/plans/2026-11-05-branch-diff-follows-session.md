@@ -5,7 +5,7 @@
 | 1 | done | `a66d3bc` (idea-branch-diff, branch `follow-session`) |
 | 2 | done | `7142e35` (idea-branch-diff) |
 | 3 | done | `1a973c1` (idea-branch-diff) |
-| 4 | | |
+| 4 | done (manual check moved to Task 8) | `3cffa93` (idea-branch-diff) |
 | 5 | | |
 | 6 | | |
 | 7 | | |
@@ -93,10 +93,10 @@ interface DiffTargetProvider {
 
 **Files:** `listener/BranchDiffRepositoryListener.kt`
 
-- [ ] Subscribe to `TARGET_CHANGED` → refresh through the existing 300 ms `SingleAlarm`.
-- [ ] Replace `changeListUpdateDone` and `VcsManagedFilesHolder` (they come from `ChangeListManager`, no longer read) with a `BulkFileListener` on `VFS_CHANGES` filtered to paths under the current target root (excluding `.git/` except `HEAD`, `index`, `refs/`); keep `GIT_REPO_CHANGE`. When the target root is outside the project's content roots, `LocalFileSystem.addRootToWatch(root, true)`, removed when the target changes.
-- [ ] Manual: edit a file in a worktree outside the IDE; the tree updates within a second.
-- [ ] Commit.
+- [x] Subscribe to `TARGET_CHANGED` → refresh through the existing 300 ms `SingleAlarm`.
+- [x] Replace `changeListUpdateDone` and `VcsManagedFilesHolder` with a `BulkFileListener` on `VFS_CHANGES` filtered by the pure `isRelevant(path, root, gitDirs)` (`TargetEventsTest`, 3 tests): under the root, except inside a git dir, where only `HEAD`, `index`, `packed-refs` and `refs/` of the deepest matching git dir count. `DiffSnapshot.gitDirs` (`git rev-parse --path-format=absolute --git-dir --git-common-dir`, distinct; `GitDiffServiceWorktreeTest` checks both shapes) gives a worktree's `.git/worktrees/<name>` and the common `.git`. `GIT_REPO_CHANGE` kept. The panel hands each shown snapshot to the listener (`BranchDiffPanel(project, onSnapshot)`), which watches its root and git dirs with `replaceWatchedRoots` (always, not only outside content roots: a duplicate request costs nothing) and removes them on dispose.
+- [ ] Manual (in Task 8): edit a file in a worktree outside the IDE; the tree updates within a second. Known limit: the VFS reports changes only for files it has loaded, so an external change in a folder of the worktree never opened in the IDE goes unseen; in follow mode My Air's notifications cover it (Task 6 fires on every change of the session's transcript, which records each edit `claude` makes).
+- [x] Commit.
 
 ## Task 5: follow toggle and header (idea-branch-diff)
 
@@ -111,7 +111,7 @@ interface DiffTargetProvider {
 **Files:** `service/ActiveSession.kt` (new), `toolwindow/SessionContextPanel.kt`, `plugin.xml`, test `service/ActiveSessionTest.kt`
 
 - [ ] Test the pure rule `activeTab(selected: VirtualFile?, last: ClaudeSessionVirtualFile?, isOpen: (VirtualFile) -> Boolean)`: a selected session tab wins; another file selected keeps `last` while open; `last` closed → null.
-- [ ] Project service `ActiveSession`: `tab`, updated on `selectionChanged` (the rule above), `subscribe(parent, listener)` fired when the tab or that session's `workDir`, its head (`service.heads`) or its live entry changes.
+- [ ] Project service `ActiveSession`: `tab`, updated on `selectionChanged` (the rule above), `subscribe(parent, listener)` fired when the tab or the shown `ClaudeSession` (its transcript, so every edit and commit `claude` makes), its head (`service.heads`) or its live entry changes; Branch Diff debounces, so firing on each transcript change is cheap.
 - [ ] `SessionContextPanel.update()` reads `ActiveSession.tab` instead of its own `shownTab`, so both panes pick the same session.
 - [ ] `./gradlew test`; commit.
 
