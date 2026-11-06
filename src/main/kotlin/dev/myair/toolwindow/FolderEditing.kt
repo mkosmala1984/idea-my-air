@@ -88,8 +88,8 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
                 val dirs = item.subtree().flatMap { it.dirs }.toList()
                 val plans = item.subtree().mapNotNull { it.plan }.toList()
                 val message = "Delete \"${item.name}\" and its subfolders?" +
-                    (if (count > 0) "\n$count session(s) filed there go back to \"sessions\"." else "") +
-                    (if (dirs.isNotEmpty()) "\nThe other sessions of ${dirs.joinToString()} go back to \"sessions\"." else "") +
+                    (if (count > 0) "\n$count session(s) filed there go back to their project's folder or \"sessions\"." else "") +
+                    (if (dirs.isNotEmpty()) "\nThe other sessions of ${dirs.joinToString()}, and those whose brief names a folder deleted, go back to \"sessions\"." else "") +
                     (if (plans.isNotEmpty()) "\nIts plan with ${plans.sumOf { it.tasks().size }} task(s) is deleted too." else "")
                 if (confirm(message, "Delete Folder")) update { it.delete(item.id) }
             }

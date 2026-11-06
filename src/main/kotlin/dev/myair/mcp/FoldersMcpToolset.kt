@@ -43,7 +43,7 @@ class FoldersMcpToolset : McpToolset {
     @McpDescription(
         "Finds Claude Code sessions of the user, newest first, one page at a time. All filters are optional and combine. " +
         "Each session has id, title, project (the directory claude ran in), lastMessage (when its latest message was written), folder (its path in the user's " +
-        "folders, from filing, from its project being bound to a folder or from its brief naming a plan task; null when unfiled), its first human prompts (cut short) and the number of files it changed. The result " +
+        "folders: the plan folder of the task its brief names, else where the user filed it, else null when the user kept it in sessions, else the folder its brief names, else the folder its project is bound to; null when unfiled), its first human prompts (cut short) and the number of files it changed. The result " +
         "has total, the number of all matches: fetch the next page with offset until it is covered.",
     )
     suspend fun my_air_sessions_find(
@@ -118,8 +118,8 @@ class FoldersMcpToolset : McpToolset {
     @McpTool
     @McpDescription(
         "The user's folder tree in their order:each folder's path, the directories bound to it (empty for most), plan (for a " +
-            "plan folder how many of its tasks are done, else null; read it with my_air_plan_get), the ids of sessions filed " +
-            "directly in it, and its subfolders. A bound folder also holds every session run in a bound directory or a directory " +
+            "plan folder how many of its tasks are done, else null; read it with my_air_plan_get), the ids of sessions the user filed " +
+            "directly in it (sessions whose brief names it show there too but are not listed), and its subfolders. A bound folder also holds every session run in a bound directory or a directory " +
             "below it (worktrees included) not filed in another folder; the most specific binding wins.",
     )
     suspend fun my_air_folders_get(): String = withFolders { _, folders -> folders.treeJson() }
@@ -129,7 +129,7 @@ class FoldersMcpToolset : McpToolset {
         "Applies changes to the user's folders, all or none, in one write that leaves a snapshot for undo. " +
         "Only apply what the user approved: first show them a table (session title | project | current folder | " +
         "proposed folder, new folders marked) and wait for their ok. Ask about every delete separately, saying how many " +
-        "sessions return to the unfiled list. Folders are addressed by path, names joined by /, matched ignoring case. " +
+        "sessions filed there go to their brief's folder, their project's folder or the unfiled list. Folders are addressed by path, names joined by /, matched ignoring case. " +
         "changes is a JSON array applied in order, each change seeing the result of the previous ones: " +
         "{\"op\":\"create\",\"path\":\"rtm/fixes\"} (the parent must exist), " +
         "{\"op\":\"create\",\"path\":\"rtm/my-air\",\"dirs\":[\"E:\\\\dev\\\\my-air\"],\"plan\":true} (dirs optional: directories as " +
@@ -141,7 +141,7 @@ class FoldersMcpToolset : McpToolset {
         "{\"op\":\"bind\",\"path\":\"rtm/my-air\",\"dir\":\"E:\\\\dev\\\\my-air-web\"}, {\"op\":\"unbind\",\"dir\":\"E:\\\\dev\\\\my-air-web\"}, " +
         "{\"op\":\"rename\",\"path\":\"rtm/fixes\",\"name\":\"bugs\"}, " +
         "{\"op\":\"move\",\"path\":\"rtm/fixes\",\"to\":\"testflo\",\"index\":0} (to null is the top level; index optional, default last), " +
-        "{\"op\":\"delete\",\"path\":\"rtm/fixes\"} (its sessions become unfiled; a plan in it is deleted too), " +
+        "{\"op\":\"delete\",\"path\":\"rtm/fixes\"} (its sessions go to their brief's or project's folder, else become unfiled; a plan in it is deleted too), " +
         "{\"op\":\"assign\",\"session\":\"<id>\",\"path\":\"rtm/fixes\"} (path null takes it out of its folder; a session of a bound project then shows in that project's folder). " +
         "Returns the folder tree after the change.",
     )

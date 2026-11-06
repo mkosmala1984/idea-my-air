@@ -25,7 +25,7 @@ class BriefTest {
     fun `a plan task is an id such as T12, read from the call's input when given and not null`() {
         assertEquals(Brief("Goal", emptyList(), "T12"), Brief.input("Goal", "[]", "T12"))
         listOf("12", "t12", "T0", "M3").forEach { assertFailsWith<IllegalArgumentException>(it) { Brief.input("Goal", "[]", it) } }
-        fun call(input: String) = Brief.next(null, "mcp__idea__my_air_set_brief", json(input), Brief.OK)
+        fun call(input: String) = Brief.next(null, "mcp__idea__my_air_set_brief", json(input)) { Brief.OK }
         assertEquals("T3", call("""{"goal":"g","tasks":"[]","plan_task":"T3"}""").planTask)
         assertEquals(null, call("""{"goal":"g","tasks":"[]","plan_task":null}""").planTask)
         assertEquals(null, call("""{"goal":"g","tasks":"[]"}""").planTask)
@@ -67,18 +67,17 @@ class BriefTest {
     fun `the folder comes from the result, and fields left out keep their previous value`() {
         val first = Brief.next(
             null, "mcp__idea__my_air_set_brief", json("""{"goal":"g","tasks":"[]","plan_task":"T3","title":"A","folder":"rtm/fixes"}"""),
-            Brief.folderResult("f1", "rtm/fixes", created = true),
-        )
+        ) { Brief.folderResult("f1", "rtm/fixes", created = true) }
         assertEquals(Brief("g", emptyList(), "T3", "A", "f1"), first)
-        val second = Brief.next(first, "mcp__idea__my_air_set_brief", json("""{"goal":"h","tasks":"[]","plan_task":null}"""), Brief.OK)
+        val second = Brief.next(first, "mcp__idea__my_air_set_brief", json("""{"goal":"h","tasks":"[]","plan_task":null}""")) { Brief.OK }
         assertEquals(Brief("h", emptyList(), "T3", "A", "f1"), second)
-        val third = Brief.next(second, "mcp__idea__my_air_set_brief", json("""{"goal":"h","tasks":"[]","plan_task":"T4","title":"B"}"""), Brief.folderResult("f2", "rtm/x", created = false))
+        val third = Brief.next(second, "mcp__idea__my_air_set_brief", json("""{"goal":"h","tasks":"[]","plan_task":"T4","title":"B"}""")) { Brief.folderResult("f2", "rtm/x", created = false) }
         assertEquals(Brief("h", emptyList(), "T4", "B", "f2"), third)
     }
 
     @Test
     fun `an accepted call with an unknown result throws`() {
-        assertFailsWith<IllegalStateException> { Brief.next(null, "mcp__idea__my_air_set_brief", json("""{"goal":"g","tasks":"[]"}"""), "done") }
+        assertFailsWith<IllegalStateException> { Brief.next(null, "mcp__idea__my_air_set_brief", json("""{"goal":"g","tasks":"[]"}""")) { "done" } }
     }
 
     @Test
@@ -86,7 +85,7 @@ class BriefTest {
         val brief = Brief("g", emptyList(), "T3", "A", "f1")
         assertEquals(
             Brief(null, listOf(BriefTask("x", TaskStatus.PENDING)), "T3", "A", "f1"),
-            Brief.next(brief, Brief.UPDATE_PLAN, json("""{"items":[{"content":"x","status":"pending"}]}"""), "Plan shown (1 steps)."),
+            Brief.next(brief, Brief.UPDATE_PLAN, json("""{"items":[{"content":"x","status":"pending"}]}""")) { error("a plan's result is not read") },
         )
     }
 }

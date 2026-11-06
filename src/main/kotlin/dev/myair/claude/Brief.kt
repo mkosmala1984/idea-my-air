@@ -21,16 +21,16 @@ data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: St
     companion object {
         /**
          * The brief after an accepted call of [tool] with [input], the call's `input` object, and [result], the text of its
-         * result, made while [previous] was current. A brief call's folder is the id its result names, so a renamed or
+         * result, read only for a brief call, made while [previous] was current. A brief call's folder is the id its result names, so a renamed or
          * moved folder keeps the session. A plan is either replaced (`items`, goal and tasks only) or moved on: `advance`
          * completes the step in progress and starts the next pending one, `done`/`start` complete and start steps by number, counted from 1.
          */
-        fun next(previous: Brief?, tool: String, input: JsonObject, result: String): Brief = when {
+        fun next(previous: Brief?, tool: String, input: JsonObject, result: () -> String): Brief = when {
             tool != UPDATE_PLAN -> {
                 // An MCP client may send a parameter left out as null.
                 fun field(name: String) = input[name]?.takeUnless { it.isJsonNull }?.asString
                 input(input["goal"].asString, input["tasks"].asString, field("plan_task"), field("title")).let {
-                    it.copy(planTask = it.planTask ?: previous?.planTask, title = it.title ?: previous?.title, folder = folderOf(result) ?: previous?.folder)
+                    it.copy(planTask = it.planTask ?: previous?.planTask, title = it.title ?: previous?.title, folder = folderOf(result()) ?: previous?.folder)
                 }
             }
             input.has("items") -> Brief(null, tasks(input.getAsJsonArray("items")), previous?.planTask, previous?.title, previous?.folder)

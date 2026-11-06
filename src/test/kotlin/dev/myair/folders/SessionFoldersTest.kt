@@ -222,6 +222,18 @@ class SessionFoldersTest {
     }
 
     @Test
+    fun `clear carries a session kept in sessions by hand`() {
+        val kept = appTree.unfile("old")
+        assertEquals(listOf("old", "new"), kept.carryOver("old", "new", emptySet()).unfiled)
+        assertSame(kept, kept.carryOver("old", "seen", setOf("seen")))
+    }
+
+    @Test
+    fun `a folder name with a control character is refused`() {
+        assertThrows<IllegalArgumentException> { tree.briefFolder("rtm/a\nb") { "x" } }
+    }
+
+    @Test
     fun `a session both filed and unfiled throws`() {
         assertThrows<IllegalArgumentException> { SessionFolders(listOf(Folder("f", "f", items = listOf(Item(SessionFolders.SESSION, "s")))), unfiled = listOf("s")) }
         assertThrows<IllegalArgumentException> { SessionFolders(unfiled = listOf("s", "s")) }

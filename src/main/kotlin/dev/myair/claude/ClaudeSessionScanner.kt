@@ -142,7 +142,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 artifacts = artifacts.published(line), calls = pending, background = background.launched(answers).notified(line),
                 brief = answers.fold(brief) { brief, (call, item) ->
                     if (call == null || !BRIEF_TOOL.matches(call.tool) || item["is_error"]?.asBoolean == true) brief
-                    else Brief.next(brief, call.tool, call.input, resultText(item, line))
+                    else Brief.next(brief, call.tool, call.input) { resultText(item, line) }
                 },
             )
         }

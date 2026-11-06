@@ -34,7 +34,8 @@ class BriefMcpToolset : McpToolset {
         "folder and title, when filing is on, file the session in the user's folder tree and title it in their session list, " +
         "without asking: read my_air_folders_get first and prefer an existing folder; a missing folder is created, but only " +
         "one level below an existing one, never at the top level or in a plan folder. plan_task, folder and title keep their " +
-        "value when a later call leaves them out. The user's own filing and renaming win over them. " +
+        "value when a later call leaves them out: give folder and title again only when the goal changes, since the user may " +
+        "have renamed or moved the folder meanwhile. The user's own filing and renaming win over them. " +
         "Changes nothing but this description and a folder it creates.",
     )
     suspend fun my_air_set_brief(

@@ -43,7 +43,7 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         dirs.forEach { require(it.isNotBlank()) { "blank directory in ${all.filter { f -> it in f.dirs }.map { f -> f.id }}" } }
         require(dirs.duplicates().isEmpty()) { "directories bound twice: ${dirs.duplicates()}" }
         (sequenceOf(folders) + all.asSequence().map { it.folders }).forEach { siblings ->
-            siblings.forEach { require(it.name.isNotBlank() && it.name == it.name.trim() && '/' !in it.name) { "bad folder name '${it.name}'" } }
+            siblings.forEach { require(it.name.isNotBlank() && it.name == it.name.trim() && '/' !in it.name && it.name.none(Char::isISOControl)) { "bad folder name '${it.name}'" } }
             require(siblings.map { it.name.lowercase() }.duplicates().isEmpty()) { "duplicate folder names among ${siblings.map { it.name }}" }
         }
         val plans = all.filter { it.plan != null }
@@ -188,10 +188,12 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
 
     /**
      * A tab switched from session [from] to [to] in the same process. `/clear` starts a session no scan has seen yet, which
-     * continues the same work and takes [from]'s folder; `/resume` lands on a session in [scanned], which stays where it is.
+     * continues the same work and takes [from]'s folder, or its place in `sessions` kept by hand; `/resume` lands on a
+     * session in [scanned], which stays where it is. A brief's folder is not carried: the new session's agent names its own.
      */
     fun carryOver(from: String, to: String, scanned: Set<String>): SessionFolders {
-        if (to in scanned || folderOf(to) != null) return this
+        if (to in scanned || folderOf(to) != null || to in unfiled) return this
+        if (from in unfiled) return unfile(to)
         return folderOf(from)?.let { assign(to, it) } ?: this
     }
 
