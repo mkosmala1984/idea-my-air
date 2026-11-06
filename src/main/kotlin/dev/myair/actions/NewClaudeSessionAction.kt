@@ -24,7 +24,7 @@ class NewClaudeSessionAction : DumbAwareAction() {
 class NewSessionInDirAction(text: String, inWorktree: Boolean, private val dir: () -> Path?, private val plan: () -> PlanStart?) :
     DumbAwareAction(text, null, if (inWorktree) AllIcons.Vcs.Branch else AllIcons.General.Add) {
     private val start: (AnActionEvent, Path) -> Unit =
-        if (inWorktree) { e, dir -> startInWorktree(e.project!!, dir, null, emptyList(), popupPoint(e), plan()) }
+        if (inWorktree) { e, dir -> startInWorktree(e.project!!, dir, null, emptyList(), popupPoint(e), plan(), askBranch = true) }
         else { e, dir -> ClaudeSessionOpener.startNew(e.project!!, dir, plan = plan()) }
 
     override fun getActionUpdateThread() = ActionUpdateThread.EDT

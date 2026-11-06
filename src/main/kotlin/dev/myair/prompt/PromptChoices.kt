@@ -10,10 +10,14 @@ const val DEFAULT_EFFORT = "medium"
 /** The configuration with no settings of its own: the IDE project's directory. */
 val DEFAULT_PRESET = Preset("Default")
 
-/** The panel's choices: [preset] gives the directories, and the rest start from it and may be changed. */
-data class Choice(val preset: Preset, val model: String, val effort: String, val worktree: Boolean) {
+/**
+ * The panel's choices: [preset] gives the directories, and the rest start from it and may be changed. [newBranch]: the
+ * worktree gets a new branch off the base, named in the panel.
+ */
+data class Choice(val preset: Preset, val model: String, val effort: String, val worktree: Boolean, val newBranch: Boolean = false) {
     init {
         require(effort in EFFORTS) { "effort $effort is not one of $EFFORTS" }
+        require(worktree || !newBranch) { "a new branch without a worktree" }
     }
 
     /** The preset to start: [base] only for a worktree, null meaning a base picked in the popup at start. */
@@ -23,7 +27,7 @@ data class Choice(val preset: Preset, val model: String, val effort: String, val
 fun choiceOf(preset: Preset) = Choice(preset, preset.model ?: DEFAULT_MODEL, preset.effort ?: DEFAULT_EFFORT, preset.worktree)
 
 /** The choices of the last start, each null when never made; the configuration is kept by name. */
-data class LastChoice(val preset: String?, val model: String?, val effort: String?, val worktree: Boolean?)
+data class LastChoice(val preset: String?, val model: String?, val effort: String?, val worktree: Boolean?, val newBranch: Boolean? = null)
 
 /**
  * A message typed but not sent, with the choices and the worktree [base] it was typed with; the panel opens on it
@@ -35,7 +39,7 @@ data class Draft(val text: String, val choice: LastChoice, val base: String?) {
     }
 }
 
-fun Choice.toLast() = LastChoice(preset.name, model, effort, worktree)
+fun Choice.toLast() = LastChoice(preset.name, model, effort, worktree, newBranch)
 
 /** The draft's choices when there is one, else the last start's. */
 fun opening(presets: List<Preset>, last: LastChoice, draft: Draft?) = restore(presets, draft?.choice ?: last)
@@ -43,7 +47,8 @@ fun opening(presets: List<Preset>, last: LastChoice, draft: Draft?) = restore(pr
 /** The last configuration while it still exists, else the first; each last choice over that configuration's own. */
 fun restore(presets: List<Preset>, last: LastChoice): Choice {
     val own = choiceOf(presets.firstOrNull { it.name == last.preset } ?: presets.first())
-    return Choice(own.preset, last.model ?: own.model, last.effort ?: own.effort, last.worktree ?: own.worktree)
+    val worktree = last.worktree ?: own.worktree
+    return Choice(own.preset, last.model ?: own.model, last.effort ?: own.effort, worktree, worktree && last.newBranch == true)
 }
 
 /** The gray note after a branch in the base list. */

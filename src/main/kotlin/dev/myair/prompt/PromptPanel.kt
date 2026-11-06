@@ -17,11 +17,11 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.DocumentAdapter
-import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
+import com.intellij.ui.components.JBTextField
 import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.ui.dsl.listCellRenderer.LcrInitParams
 import com.intellij.ui.dsl.listCellRenderer.listCellRenderer
@@ -40,22 +40,13 @@ import dev.myair.service.LatestRead
 import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.store.EFFORTS
 import dev.myair.store.PresetStore
-import java.awt.BasicStroke
 import java.awt.BorderLayout
 import java.awt.Dimension
-import java.awt.FlowLayout
-import java.awt.Graphics
-import java.awt.Graphics2D
 import java.awt.Point
-import java.awt.RenderingHints
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
-import java.awt.event.MouseAdapter
-import java.awt.event.MouseEvent
 import java.nio.file.Path
 import java.time.Instant
-import javax.swing.Icon
-import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.event.DocumentEvent
@@ -63,9 +54,16 @@ import javax.swing.event.DocumentEvent
 /** The choices of the last start, so the next panel opens on them, and under `.draft` a message not yet sent. */
 private const val LAST = "dev.myair.prompt"
 
-private val CARD = JBColor(0xEEF0F4, 0x2F3134)
-private val BAR = JBColor(0xE6E8EC, 0x292B2E)
-private val SEND = JBColor(0xD3D5DB, 0x4A4D52)
+/** Where the session works: the configuration's directory, a new worktree on the base, or on a new branch off it. */
+private enum class Workspace(val text: String, val worktree: Boolean, val newBranch: Boolean) {
+    CHECKOUT("Current checkout", false, false),
+    WORKTREE("New worktree", true, false),
+    NEW_BRANCH("New worktree, new branch", true, true);
+
+    companion object {
+        fun of(choice: Choice) = entries.single { it.worktree == choice.worktree && it.newBranch == choice.newBranch }
+    }
+}
 
 /** The repository of the configuration's directory: its branches and the one checked out. */
 private data class Repo(val git: GitRepo, val current: String)
@@ -113,12 +111,18 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
         choose(chip, EFFORTS, choice.effort, { it.replaceFirstChar(Char::uppercase) }) { update(choice.copy(effort = it)) }
     }
     private val workspaceChip = Chip(null) { chip ->
-        choose(chip, listOf(false, true), choice.worktree, { if (it) "New worktree" else "Current checkout" }, title = "Workspace") {
-            update(choice.copy(worktree = it))
+        choose(chip, Workspace.entries, Workspace.of(choice), { it.text }, title = "Workspace") {
+            update(choice.copy(worktree = it.worktree, newBranch = it.newBranch))
         }
     }
+    private val branchName = JBTextField(24).apply { emptyText.text = "TR-1234-short-description" }
+    private val suggestChip = Chip(AllIcons.Actions.Lightning) { chip -> suggest(chip) }.apply {
+        text = "Suggest"
+        chevron = false
+        toolTipText = "Haiku names the branch from the message, reading the Jira issue it names"
+    }
     private val branchChip = Chip(AllIcons.Vcs.Branch) { chip -> chooseBase(chip) }
-    private val send = SendButton { start() }
+    private val send = SendButton("Start the session (Enter)") { start() }
     private val error = JBLabel().apply { foreground = UIUtil.getErrorForeground() }
 
     init {
@@ -137,7 +141,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
         val bar = Rounded(BAR, JBUI.scale(12), squareTop = true).apply {
             layout = BorderLayout()
             border = JBUI.Borders.empty(2, 6)
-            add(row(workspaceChip), BorderLayout.WEST)
+            add(row(workspaceChip, branchName, suggestChip), BorderLayout.WEST)
             add(row(branchChip), BorderLayout.EAST)
         }
         add(card)
@@ -184,7 +188,9 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
         modelChip.text = modelLabel(new.model)
         effortChip.text = new.effort.replaceFirstChar(Char::uppercase)
         workspaceChip.icon = if (new.worktree) AllIcons.Actions.NewFolder else AllIcons.Nodes.Folder
-        workspaceChip.text = if (new.worktree) "New worktree" else "Current checkout"
+        workspaceChip.text = Workspace.of(new).text
+        branchName.isVisible = new.newBranch
+        suggestChip.isVisible = new.newBranch
         val found = repo?.getOrNull()
         // In the checkout the branch is only shown; a worktree is made off the base picked here.
         branchChip.text = when {
@@ -237,7 +243,26 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
         builder.createPopup().show(RelativePoint(chip, Point(0, chip.height)))
     }
 
+    /** Haiku's name for the branch, from the message; the message may be no more than a Jira key. */
+    private fun suggest(chip: Chip) {
+        chip.isEnabled = false
+        chip.text = "Naming..."
+        suggestInBackground(chip, choice.preset.dir(projectBase(project)), prompt.text) { result ->
+            chip.isEnabled = true
+            chip.text = "Suggest"
+            result.onSuccess { branchName.text = it }
+            error.text = result.exceptionOrNull()?.message.orEmpty()
+            error.isVisible = error.text.isNotEmpty()
+        }
+    }
+
     private fun start() {
+        val branch = branchName.text.trim().takeIf { choice.newBranch }
+        if (branch?.isEmpty() == true) {
+            error.text = "Name the new branch, or let Suggest name it from the message"
+            error.isVisible = true
+            return
+        }
         val text = prompt.text.trim().ifEmpty { null }
         saveChoice(LAST, choice.toLast())
         // Taken from the screen: [started] may close the popup holding the button, and the base popup of a worktree
@@ -245,12 +270,15 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
         val where = RelativePoint.fromScreen(RelativePoint(send, Point(0, send.height)).screenPoint)
         prompt.text = ""
         started()
-        startPreset(project, choice.toPreset(base), where, text)
+        startPreset(project, choice.toPreset(base), where, text, branch)
     }
 }
 
 private fun loadChoice(key: String) = PropertiesComponent.getInstance().run {
-    LastChoice(getValue("$key.preset"), getValue("$key.model"), getValue("$key.effort"), getValue("$key.worktree")?.toBooleanStrict())
+    LastChoice(
+        getValue("$key.preset"), getValue("$key.model"), getValue("$key.effort"), getValue("$key.worktree")?.toBooleanStrict(),
+        getValue("$key.newBranch")?.toBooleanStrict(),
+    )
 }
 
 /** Null removes the stored choices. */
@@ -259,6 +287,7 @@ private fun saveChoice(key: String, choice: LastChoice?) = PropertiesComponent.g
     setValue("$key.model", choice?.model)
     setValue("$key.effort", choice?.effort)
     setValue("$key.worktree", choice?.worktree?.toString())
+    setValue("$key.newBranch", choice?.newBranch?.toString())
 }
 
 private fun loadDraft(): Draft? {
@@ -272,99 +301,6 @@ private fun storeDraft(draft: Draft?) {
     PropertiesComponent.getInstance().setValue("$LAST.draft.text", draft?.text)
     PropertiesComponent.getInstance().setValue("$LAST.draft.base", draft?.base)
     saveChoice("$LAST.draft", draft?.choice)
-}
-
-private fun row(vararg chips: JComponent) = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(2), 0)).apply {
-    isOpaque = false
-    chips.forEach(::add)
-}
-
-/** A flat dropdown: icon, text and chevron, with a hover background; a click runs [click]. */
-private class Chip(icon: Icon?, private val click: (Chip) -> Unit) : JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)) {
-    private val label = JBLabel(icon)
-    private val down = JBLabel(AllIcons.General.ChevronDown)
-    private var hover = false
-    var text: String
-        get() = label.text
-        set(value) { label.text = value }
-    var icon: Icon?
-        get() = label.icon
-        set(value) { label.icon = value }
-    var chevron: Boolean
-        get() = down.isVisible
-        set(value) { down.isVisible = value }
-
-    init {
-        isOpaque = false
-        border = JBUI.Borders.empty(4, 6)
-        add(label)
-        add(down)
-        addMouseListener(object : MouseAdapter() {
-            override fun mouseEntered(e: MouseEvent) { hover = true; repaint() }
-            override fun mouseExited(e: MouseEvent) { hover = false; repaint() }
-            override fun mouseClicked(e: MouseEvent) { if (isEnabled) click(this@Chip) }
-        })
-    }
-
-    override fun setEnabled(enabled: Boolean) {
-        super.setEnabled(enabled)
-        label.isEnabled = enabled
-        down.isEnabled = enabled
-    }
-
-    override fun paintComponent(g: Graphics) {
-        if (!hover || !isEnabled) return
-        val g2 = g.create() as Graphics2D
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-        g2.color = JBUI.CurrentTheme.ActionButton.hoverBackground()
-        g2.fillRoundRect(0, 0, width, height, JBUI.scale(8), JBUI.scale(8))
-        g2.dispose()
-    }
-}
-
-/** A panel filled with [fill] and rounded, at the bottom only when [squareTop]. */
-private class Rounded(private val fill: JBColor, private val arc: Int, private val squareTop: Boolean) : JPanel() {
-    init {
-        isOpaque = false
-    }
-
-    override fun paintComponent(g: Graphics) {
-        val g2 = g.create() as Graphics2D
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-        // A square top is drawn above the panel, outside the clip.
-        val y = if (squareTop) -arc else 0
-        g2.color = fill
-        g2.fillRoundRect(0, y, width - 1, height - 1 - y, arc, arc)
-        g2.color = JBColor.border()
-        g2.drawRoundRect(0, y, width - 1, height - 1 - y, arc, arc)
-        g2.dispose()
-    }
-}
-
-/** The round send button with an up arrow. */
-private class SendButton(click: () -> Unit) : JButton() {
-    init {
-        isContentAreaFilled = false
-        isBorderPainted = false
-        isFocusPainted = false
-        toolTipText = "Start the session (Enter)"
-        addActionListener { click() }
-    }
-
-    override fun getPreferredSize() = Dimension(JBUI.scale(32), JBUI.scale(32))
-
-    override fun paintComponent(g: Graphics) {
-        val g2 = g.create() as Graphics2D
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-        g2.color = SEND
-        g2.fillOval(0, 0, width - 1, height - 1)
-        val (x, y, r) = Triple(width / 2, height / 2, JBUI.scale(6))
-        g2.color = UIUtil.getLabelForeground()
-        g2.stroke = BasicStroke(JBUI.scale(2f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
-        g2.drawLine(x, y + r, x, y - r)
-        g2.drawPolyline(intArrayOf(x - r + 1, x, x + r - 1), intArrayOf(y - 1, y - r, y - 1), 3)
-        g2.dispose()
-    }
 }
 
 /** The panel in place of an empty editor area; Air shows its own composer there too unless `air.inline.empty.state.prompt` is off. */

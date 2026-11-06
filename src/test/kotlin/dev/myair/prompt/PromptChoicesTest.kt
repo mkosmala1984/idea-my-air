@@ -23,6 +23,14 @@ class PromptChoicesTest {
     }
 
     @Test
+    fun `a new branch is restored only with a worktree, and never without one`() {
+        assertEquals(Choice(review, "sonnet", "high", true, newBranch = true), restore(presets, LastChoice("Review", null, null, null, true)))
+        assertEquals(Choice(review, "sonnet", "high", false), restore(presets, LastChoice("Review", null, null, false, true)))
+        assertEquals(Choice(DEFAULT_PRESET, "opus", "medium", true, newBranch = true).toLast().newBranch, true)
+        assertThrows<IllegalArgumentException> { Choice(review, "opus", "low", false, newBranch = true) }
+    }
+
+    @Test
     fun `a draft opens on the choices it was typed with, not the last start's`() {
         val last = LastChoice("Default", "fable", "low", false)
         val typed = Choice(review, "opus", "max", true)

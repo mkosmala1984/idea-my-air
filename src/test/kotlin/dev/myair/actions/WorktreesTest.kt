@@ -70,6 +70,13 @@ class WorktreesTest {
     }
 
     @Test
+    fun `a new branch's worktree directory is the branch reduced to letters, digits and hyphens`() {
+        assertEquals("TR-1234-fix-login", dirName("TR-1234-fix-login"))
+        assertEquals("feature-TR-1-x", dirName("feature/TR-1_x"))
+        assertThrows<IllegalStateException> { dirName("//") }
+    }
+
+    @Test
     fun `remote HEAD pointers are not branches`() {
         assertEquals(listOf("main", "feature/x", "origin/main"), parseBranches("refs/heads/main\nrefs/heads/feature/x\nrefs/remotes/origin/HEAD\nrefs/remotes/origin/main\n"))
     }

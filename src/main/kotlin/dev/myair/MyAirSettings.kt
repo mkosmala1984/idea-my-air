@@ -39,7 +39,12 @@ class MyAirSettings : SimplePersistentStateComponent<MyAirSettings.Options>(Opti
 
         /** Width of the terminal in session tabs, centered in a wider tab; 0 fills the tab. */
         var terminalColumns by property(0)
+
+        /** The tools Haiku may call to read a Jira issue when it names a branch, separated by spaces. */
+        var jiraTools by string("mcp__atlassian__getJiraIssue mcp__atlassian__getAccessibleAtlassianResources")
     }
+
+    val jiraTools: List<String> get() = state.jiraTools.orEmpty().split(Regex("\\s+")).filter { it.isNotEmpty() }
 
     val worktreesDir: String get() = checkNotNull(state.worktreesDir) { "worktrees directory is not set" }
 
@@ -70,6 +75,10 @@ class MyAirConfigurable : BoundConfigurable("My Air") {
         row("Session tab width:") {
             spinner(0..1000).bindIntValue(MyAirSettings.getInstance().state::terminalColumns)
                 .comment("Columns of the claude terminal, centered in a wider tab. 0 fills the tab.")
+        }
+        row("Jira tools for branch names:") {
+            textField().bindText(MyAirSettings.getInstance().state::jiraTools.toNonNullableProperty("")).columns(COLUMNS_LARGE)
+                .comment("MCP tools Haiku may call to read the Jira issue a task names when it suggests a branch name, separated by spaces.")
         }
         val presets = PresetsEditor()
         // What the file held at reset; null when it is broken, which leaves it to be fixed by hand.

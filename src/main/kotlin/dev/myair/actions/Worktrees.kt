@@ -36,10 +36,13 @@ fun defaultBranch(remotes: List<String>, originHead: String?, local: List<String
 }
 
 /** `<base>-<date>-<first 4 of session [id]>`, the base reduced to letters and digits: it names both the worktree directory and its branch. */
-fun worktreeName(base: String, date: LocalDate, id: String): String {
-    val slug = base.replace(Regex("[^A-Za-z0-9]+"), "-").trim('-')
-    check(slug.isNotEmpty()) { "base branch '$base' has no letters or digits" }
-    return "$slug-$date-${id.take(4)}"
+fun worktreeName(base: String, date: LocalDate, id: String): String = "${dirName(base)}-$date-${id.take(4)}"
+
+/** [branch] reduced to letters, digits and hyphens: the directory of a worktree on it. */
+fun dirName(branch: String): String {
+    val slug = branch.replace(Regex("[^A-Za-z0-9]+"), "-").trim('-')
+    check(slug.isNotEmpty()) { "branch '$branch' has no letters or digits" }
+    return slug
 }
 
 /** A relative [setting] resolves against [mainRoot]; [Path.resolve] returns an absolute one unchanged. */

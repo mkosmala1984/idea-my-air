@@ -26,11 +26,15 @@ import dev.myair.store.presetOf
 import java.nio.file.Path
 import kotlin.io.path.isDirectory
 
-/** Starts a session as [preset] says, with [prompt] as its first message; a missing directory is reported instead. */
-fun startPreset(project: Project, preset: Preset, where: RelativePoint, prompt: String? = null) {
+/**
+ * Starts a session as [preset] says, with [prompt] as its first message, in a worktree on a new [branch] when given;
+ * a missing directory is reported instead.
+ */
+fun startPreset(project: Project, preset: Preset, where: RelativePoint, prompt: String? = null, branch: String? = null) {
+    require(branch == null || preset.worktree) { "new branch $branch without a worktree" }
     val dir = preset.dir(projectBase(project))
     if (!allExist(project, preset, dir)) return
-    if (preset.worktree) startInWorktree(project, dir, preset.base, preset.claudeArgs(prompt), where)
+    if (preset.worktree) startInWorktree(project, dir, preset.base, preset.claudeArgs(prompt), where, branch = branch)
     else ClaudeSessionOpener.startNew(project, dir, args = preset.claudeArgs(prompt))
 }
 
