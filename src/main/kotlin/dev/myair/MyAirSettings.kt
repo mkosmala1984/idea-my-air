@@ -13,6 +13,9 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.ui.dsl.builder.bindIntValue
 import com.intellij.ui.dsl.builder.bindSelected
+import com.intellij.ui.dsl.builder.Cell
+import com.intellij.ui.dsl.builder.selected
+import com.intellij.ui.components.JBCheckBox
 import dev.myair.editor.ClaudeSessionEditor
 import com.intellij.ui.dsl.builder.bindText
 import dev.myair.actions.PresetsEditor
@@ -37,6 +40,9 @@ class MyAirSettings : SimplePersistentStateComponent<MyAirSettings.Options>(Opti
         /** Offer `my_air_set_brief` to agents and show the briefs they write. */
         var briefs by property(true)
 
+        /** Let agents name their session's folder and title in `my_air_set_brief`; only while [briefs] is on. */
+        var fileSessions by property(true)
+
         /** Width of the terminal in session tabs, centered in a wider tab; 0 fills the tab. */
         var terminalColumns by property(0)
 
@@ -49,6 +55,8 @@ class MyAirSettings : SimplePersistentStateComponent<MyAirSettings.Options>(Opti
     val worktreesDir: String get() = checkNotNull(state.worktreesDir) { "worktrees directory is not set" }
 
     val briefs: Boolean get() = state.briefs
+
+    val fileSessions: Boolean get() = state.briefs && state.fileSessions
 
     val terminalColumns: Int get() = state.terminalColumns
 
@@ -67,10 +75,17 @@ class MyAirConfigurable : BoundConfigurable("My Air") {
                 .validationOnApply { if (it.text.isBlank()) error("Enter a directory") else null }
                 .comment("New Claude Session in Worktree creates &lt;directory&gt;/&lt;id&gt;. A relative path resolves against the root of the repository's main checkout.")
         }
+        lateinit var briefs: Cell<JBCheckBox>
         row {
-            checkBox("Session briefs: let agents describe their goal and tasks (my_air_set_brief) and show them")
+            briefs = checkBox("Session briefs: let agents describe their goal and tasks (my_air_set_brief) and show them")
                 .bindSelected(MyAirSettings.getInstance().state::briefs)
                 .comment("Briefs show or hide at once. The IDE's MCP server lists its tools when the IDE starts, so the tool itself appears or goes away after a restart.")
+        }
+        row {
+            checkBox("Agents file and title their sessions (folder and title in my_air_set_brief)")
+                .bindSelected(MyAirSettings.getInstance().state::fileSessions)
+                .enabledIf(briefs.selected)
+                .comment("An agent may create a folder one level below an existing one; undo it in the folder history. Your own filing and /rename win. Sessions already placed stay when this is turned off.")
         }
         row("Session tab width:") {
             spinner(0..1000).bindIntValue(MyAirSettings.getInstance().state::terminalColumns)

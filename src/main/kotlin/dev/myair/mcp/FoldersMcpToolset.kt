@@ -191,7 +191,7 @@ class FoldersMcpToolset : McpToolset {
     @McpTool
     @McpDescription(
         "Snapshots of the folder structure, newest first, each taken just before a change: name, taken, source " +
-        "(ui: the user in the tree; auto: a new session filed, or one continued by /clear; mcp: a change list; restore: a " +
+        "(ui: the user in the tree; auto: a new session filed, or one continued by /clear; mcp: a change list; brief: a folder a session's brief created; restore: a " +
         "restore), and its folder and session counts.",
     )
     suspend fun my_air_history_list(): String = onEdt { it.history.toJson() }

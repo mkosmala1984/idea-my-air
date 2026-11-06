@@ -14,28 +14,38 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class SessionSystemPromptTest {
+    /** The settings that can occur: filing works only with briefs on. */
+    private val settings = listOf(true to true, true to false, false to false)
+
     @Test
     fun `the brief is asked for only while briefs are on`() {
-        assertTrue("my_air_set_brief" in appendedSystemPrompt(briefs = true))
-        assertFalse("my_air_set_brief" in appendedSystemPrompt(briefs = false))
+        assertTrue("my_air_set_brief" in appendedSystemPrompt(briefs = true, filing = false))
+        assertFalse("my_air_set_brief" in appendedSystemPrompt(briefs = false, filing = false))
+    }
+
+    @Test
+    fun `filing is asked for only with briefs and filing on`() {
+        assertTrue("my_air_folders_get first" in appendedSystemPrompt(briefs = true, filing = true))
+        assertFalse("my_air_folders_get first" in appendedSystemPrompt(briefs = true, filing = false))
+        assertFalse("my_air_folders_get first" in appendedSystemPrompt(briefs = false, filing = false))
     }
 
     @Test
     fun `both prompts point at the stored base`() {
-        listOf(true, false).forEach { assertTrue("branch.NAME.myAirBase" in appendedSystemPrompt(it)) }
+        settings.forEach { (briefs, filing) -> assertTrue("branch.NAME.myAirBase" in appendedSystemPrompt(briefs, filing)) }
     }
 
     @Test
     fun `both prompts name every folder tool`() {
         val tools = FoldersMcpToolset::class.java.declaredMethods.filter { it.isAnnotationPresent(McpTool::class.java) }.map { it.name }.toSet()
         assertEquals(setOf("my_air_sessions_find", "my_air_session_start", "my_air_folders_get", "my_air_folders_apply", "my_air_plan_get", "my_air_plan_apply", "my_air_history_list", "my_air_history_restore"), tools)
-        listOf(true, false).forEach { briefs -> tools.forEach { assertTrue(it in appendedSystemPrompt(briefs), it) } }
+        settings.forEach { (briefs, filing) -> tools.forEach { assertTrue(it in appendedSystemPrompt(briefs, filing), it) } }
     }
 
     @Test
     fun `the prompt is one line a Windows command line passes whole`() {
-        listOf(true, false).forEach { briefs ->
-            assertEquals(emptyList<Char>(), appendedSystemPrompt(briefs).filter { it in "\"<>\r\n" }.toList())
+        settings.forEach { (briefs, filing) ->
+            assertEquals(emptyList<Char>(), appendedSystemPrompt(briefs, filing).filter { it in "\"<>\r\n" }.toList())
         }
     }
 

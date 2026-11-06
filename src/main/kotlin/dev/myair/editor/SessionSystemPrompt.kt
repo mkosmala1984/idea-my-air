@@ -1,5 +1,6 @@
 package dev.myair.editor
 
+import dev.myair.claude.Brief
 import dev.myair.claude.ClaudeSession
 import dev.myair.folders.Folder
 import dev.myair.folders.PlanTask
@@ -12,7 +13,7 @@ import dev.myair.folders.SessionFolders
  * is read from git when needed, since the context pane may change it after the start. One line without `"`, `<` or `>`,
  * as it travels on a Windows command line.
  */
-fun appendedSystemPrompt(briefs: Boolean): String = listOfNotNull(
+fun appendedSystemPrompt(briefs: Boolean, filing: Boolean): String = listOfNotNull(
     "This session runs in a My Air tab of IntelliJ IDEA.",
     "My Air stores the base of a branch it created as `git config branch.NAME.myAirBase`, NAME being the branch: when the " +
         "current branch has one, diff, review and target pull requests against that base, not the default branch.",
@@ -28,6 +29,11 @@ fun appendedSystemPrompt(briefs: Boolean): String = listOfNotNull(
         "the work is finished. Add tasks freely, but delete or move milestones and tasks only after the user agreed.",
     if (!briefs) null else "Call the my_air_set_brief tool once you understand the user's first request, and again whenever the " +
         "goal changes or a task starts or finishes.",
+    if (!filing) null else "File and title this session through my_air_set_brief without asking: give title (at most " +
+        "${Brief.TITLE_CHARS} chars, in the user's language) in the first call and change it only when the goal changes; " +
+        "before giving folder, call my_air_folders_get first and pick the existing folder that fits, naming a new one only " +
+        "when none does, one level below an existing folder and never in a plan folder. Both stay until replaced, and the " +
+        "user's own filing and renaming win over them.",
 ).joinToString(" ")
 
 /** A new session's place in a plan, chosen where it was started: the plan folder it is filed in, and the task if one. */

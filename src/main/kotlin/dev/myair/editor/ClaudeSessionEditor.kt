@@ -79,7 +79,7 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
         val tab = TerminalToolWindowTabsManager.getInstance(project).createTabBuilder()
             .workingDirectory(file.cwd.toString())
             .shellCommand(
-                listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(briefs)) +
+                listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(briefs, MyAirSettings.getInstance().fileSessions)) +
                     (if (briefs) listOf("--settings", writeBriefReminderSettings(Homes.myAir.resolve("hooks")).toString()) else emptyList()) +
                     promptFile.let { if (it == null) emptyList() else listOf("--append-system-prompt-file", it.toString()) } + file.claudeArgs,
             )
