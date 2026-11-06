@@ -80,6 +80,7 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
             .workingDirectory(file.cwd.toString())
             .shellCommand(
                 listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(briefs)) +
+                    (if (briefs) listOf("--settings", writeBriefReminderSettings(Homes.myAir.resolve("hooks")).toString()) else emptyList()) +
                     promptFile.let { if (it == null) emptyList() else listOf("--append-system-prompt-file", it.toString()) } + file.claudeArgs,
             )
             // Fullscreen renderer: no flicker, mouse support; otherwise claude asks on every start whether to try it.
