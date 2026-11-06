@@ -171,9 +171,8 @@ class Drop(val change: (SessionFolders) -> SessionFolders, val path: TreePath, v
  * one it is dropped in front of or after the last; a task into a milestone of its plan, before the task it is dropped in
  * front of or last. A session whose brief names a task stays under it, so it does not move, and no session drops onto a
  * milestone or task, which only a brief puts it under. A plan folder does not go into another. [childIndex] is JTree's: -1 drops onto the node, otherwise between its children.
- * Sessions land in the folder of whatever they are dropped on or into, none under [UnfiledSessions], and that folder is what
- * the drop shows; a session of a bound project cannot go back to [UnfiledSessions], since it would stay in the project's
- * folder. A folder goes into a folder or the top level, before the folder it is dropped in front of, or after the last one;
+ * Sessions land in the folder of whatever they are dropped on or into, and that folder is what the drop shows; under
+ * [UnfiledSessions] they stay there ([SessionFolders.unfile]), whatever their project or brief say. A folder goes into a folder or the top level, before the folder it is dropped in front of, or after the last one;
  * the drop shows that spot, not the pointer's, since sessions, [RecentSessions] and [UnfiledSessions] always follow the folders. Nothing drops on or into [RecentSessions]. A project
  * lands the same way, as a new folder named after its directory and bound to it.
  */
@@ -189,10 +188,9 @@ fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, ch
         if (target.isRoot || path.path.any { (it as DefaultMutableTreeNode).userObject.let { item -> item is MilestoneRow || item is PlanTaskRow } }) return null
         if (dragged.any { structure.taskOf(it as ClaudeSession) != null }) return null
         val folderId = targetFolder(path)
-        if (folderId == null && dragged.any { structure.projectFolder((it as ClaudeSession).project) != null }) return null
         val home = generateSequence(path) { it.parentPath }
             .first { (it.lastPathComponent as DefaultMutableTreeNode).userObject.let { item -> item is Folder || item == UnfiledSessions } }
-        return Drop({ dragged.fold(it) { folders, session -> folders.assign((session as ClaudeSession).id, folderId) } }, home, -1)
+        return Drop({ dragged.fold(it) { folders, session -> (session as ClaudeSession).id.let { id -> if (folderId == null) folders.unfile(id) else folders.assign(id, folderId) } } }, home, -1)
     }
     val parentId = when (val item = target.userObject) {
         null -> null
