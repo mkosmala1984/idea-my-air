@@ -89,6 +89,9 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
             .processType(TerminalProcessType.NON_SHELL)
             .emulatorType(TerminalEmulatorType.Ghostty)
             .shouldAddToToolWindow(false)
+            // Without a name the builder derives one from the Terminal tool window, which is not registered yet while
+            // the platform restores editor tabs on startup ("No terminal tool window found"). The name itself is unused.
+            .tabName(file.title)
             .closeOnProcessTermination(false)
             .restoreOnProjectReopen(false)
             .requestFocus(false)
