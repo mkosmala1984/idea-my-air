@@ -17,6 +17,9 @@ enum class ChangeSource {
     /** An agent's change list. */
     MCP,
 
+    /** A folder an agent's brief named and created. */
+    BRIEF,
+
     /** A snapshot restored. */
     RESTORE;
 

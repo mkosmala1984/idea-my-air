@@ -140,7 +140,8 @@ class SessionFoldersTest {
         val folder = """{"id":"a","name":"a","folders":[],"items":[]}"""
         listOf(
             """{"folders":[]}""",
-            """{"version":4,"folders":[]}""",
+            """{"version":5,"nextId":1,"folders":[],"unfiled":[]}""",
+            """{"version":4,"nextId":1,"folders":[]}""",
             """{"version":1,"folders":[{"id":"a","name":"a","folders":[]}]}""",
             """{"version":1,"folders":[{"id":"a","name":"a","folders":[],"items":[{"type":"jira","id":"PW-1"}]}]}""",
             """{"version":1,"folders":[$folder,$folder]}""",
@@ -169,5 +170,60 @@ class SessionFoldersTest {
         file.writeText("broken")
         assertThrows<Exception> { StructureStore(file).update(ChangeSource.UI) { it.createFolder(null, "a", "a") } }
         assertEquals("broken", file.toFile().readText())
+    }
+
+    private fun briefed(id: String, folder: String?) =
+        ClaudeSession(id, Path.of("/app"), id, java.time.Instant.EPOCH, emptyList(), emptyList(), brief = dev.myair.claude.Brief("g", emptyList(), folder = folder))
+
+    private val appTree = tree.createFolder(null, "app", "app", dirs = listOf(Path.of("/app").toString()))
+
+    @Test
+    fun `placeOf follows the brief's folder below hand filing and nowhere, above the project`() {
+        val s = briefed("s", "fix")
+        assertEquals("fix", appTree.placeOf(s))
+        assertEquals("rtm", appTree.assign("s", "rtm").placeOf(s))
+        val nowhere = appTree.assign("s", "rtm").unfile("s")
+        assertNull(nowhere.placeOf(s))
+        assertEquals(listOf("s"), nowhere.unfiled)
+        assertNull(nowhere.folderOf("s"))
+        val refiled = nowhere.assign("s", "fix")
+        assertEquals("fix", refiled.placeOf(s))
+        assertEquals(emptyList(), refiled.unfiled)
+        assertEquals(listOf("s"), nowhere.assign("s", null).unfiled)
+        assertEquals("app", appTree.placeOf(briefed("s", null)))
+    }
+
+    @Test
+    fun `a brief's folder deleted or in a plan folder is ignored, and a renamed one keeps the session`() {
+        val s = briefed("s", "fix")
+        assertEquals("app", appTree.delete("fix").placeOf(s))
+        assertEquals("app", appTree.addPlan("tf").moveFolder("fix", "tf", 0).placeOf(s))
+        assertEquals("fix", appTree.rename("fix", "bugs").placeOf(s))
+    }
+
+    @Test
+    fun `briefFolder finds a folder or creates one level below an existing one`() {
+        val (same, found) = tree.briefFolder("RTM/Fixes") { "new" }
+        assertSame(tree, same)
+        assertEquals("fix", found.id)
+        val (created, made) = tree.briefFolder("rtm/new") { "n1" }
+        assertEquals("n1", made.id)
+        assertEquals("rtm/new", created.pathOf("n1"))
+        listOf("top", "rtm/a/b", "rtm/").forEach { assertThrows<IllegalArgumentException>(it) { tree.briefFolder(it) { "x" } } }
+        val planned = tree.addPlan("rtm")
+        listOf("rtm", "rtm/fixes", "rtm/new").forEach { assertThrows<IllegalArgumentException>(it) { planned.briefFolder(it) { "x" } } }
+    }
+
+    @Test
+    fun `version 4 round-trips the unfiled sessions, and version 3 reads with none`() {
+        val unfiled = tree.unfile("s1")
+        assertEquals(unfiled, SessionFolders.parse(unfiled.toJson()))
+        assertEquals(SessionFolders(nextId = 3), SessionFolders.parse("""{"version":3,"nextId":3,"folders":[]}"""))
+    }
+
+    @Test
+    fun `a session both filed and unfiled throws`() {
+        assertThrows<IllegalArgumentException> { SessionFolders(listOf(Folder("f", "f", items = listOf(Item(SessionFolders.SESSION, "s")))), unfiled = listOf("s")) }
+        assertThrows<IllegalArgumentException> { SessionFolders(unfiled = listOf("s", "s")) }
     }
 }

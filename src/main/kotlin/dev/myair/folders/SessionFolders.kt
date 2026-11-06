@@ -26,18 +26,19 @@ data class Folder(
 data class Item(val type: String, val id: String)
 
 /**
- * The user's folder tree, in the order the user arranged it. A session is filed in at most one folder; one filed nowhere
- * belongs to the folder bound to its project, else to the fixed `sessions` folder; one whose brief names a plan task
- * shows under that task. [nextId] numbers the next milestone or task. Operations naming a folder, milestone or task that
+ * The user's folder tree, in the order the user arranged it. A session is filed in at most one folder, or kept in the
+ * fixed `sessions` folder by hand ([unfiled]); [placeOf] says where each one shows. [nextId] numbers the next milestone or task. Operations naming a folder, milestone or task that
  * no longer exists change nothing, because another IDE may have deleted it; every other broken invariant throws.
  */
-data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: Int = 1) {
+data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: Int = 1, val unfiled: List<String> = emptyList()) {
     init {
         val all = all().toList()
         require(all.map { it.id }.duplicates().isEmpty()) { "duplicate folder ids ${all.map { it.id }.duplicates()}" }
         val items = all.flatMap { it.items }
         items.forEach { require(it.type == SESSION) { "unknown item type '${it.type}'" } }
         require(items.map { it.id }.duplicates().isEmpty()) { "sessions filed twice: ${items.map { it.id }.duplicates()}" }
+        require(unfiled.duplicates().isEmpty()) { "sessions unfiled twice: ${unfiled.duplicates()}" }
+        require(items.none { it.id in unfiled }) { "sessions both filed and unfiled: ${items.map { it.id }.filter { it in unfiled }}" }
         val dirs = all.flatMap { it.dirs }
         dirs.forEach { require(it.isNotBlank()) { "blank directory in ${all.filter { f -> it in f.dirs }.map { f -> f.id }}" } }
         require(dirs.duplicates().isEmpty()) { "directories bound twice: ${dirs.duplicates()}" }
@@ -97,10 +98,31 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
     fun taskOf(session: ClaudeSession) = session.brief?.planTask?.let(::findTask)
 
     /**
-     * Where the session shows: the plan folder of the task it names, else the folder it is filed in, else the folder bound
-     * to its [ClaudeSession.project], else null for `sessions`.
+     * Where the session shows: the plan folder of the task its brief names, else the folder the user filed it in, else
+     * `sessions` (null) when the user put it there, else the folder its brief names while that lies in no plan folder,
+     * else the folder bound to its [ClaudeSession.project], else `sessions`.
      */
-    fun placeOf(session: ClaudeSession) = taskOf(session)?.first?.id ?: folderOf(session.id) ?: projectFolder(session.project)?.id
+    fun placeOf(session: ClaudeSession): String? = taskOf(session)?.first?.id ?: folderOf(session.id)
+        ?: if (session.id in unfiled) null
+        else session.brief?.folder?.takeIf { find(it) != null && planFolderAt(it) == null } ?: projectFolder(session.project)?.id
+
+    /**
+     * The folder at [path] a brief files its session in, with the structure holding it: an existing one, else a new one
+     * named by the path's last segment under an existing folder, [newId] its id. A top-level folder, a missing parent and a
+     * folder at or in a plan folder are refused, since sessions in a plan are placed by their plan task.
+     */
+    fun briefFolder(path: String, newId: () -> String): Pair<SessionFolders, Folder> {
+        val (structure, id) = findByPath(path)?.let { this to it.id } ?: run {
+            val parentPath = path.substringBeforeLast('/', "")
+            val name = path.substringAfterLast('/')
+            require(parentPath.isNotEmpty()) { "'$path' would be a new top-level folder; new folders go below an existing one" }
+            require(name.isNotBlank() && name == name.trim()) { "bad folder name '$name'" }
+            val parent = requireNotNull(findByPath(parentPath)) { "no folder '$parentPath' to create '$name' in" }
+            newId().let { createFolder(parent.id, it, name) to it }
+        }
+        require(structure.planFolderAt(id) == null) { "'$path' is or lies in a plan folder; name the plan task in plan_task instead" }
+        return structure to checkNotNull(structure.find(id))
+    }
 
     /** The folder at [path], names joined by `/` and matched ignoring case like sibling names are, or null. */
     fun findByPath(path: String): Folder? {
@@ -151,12 +173,18 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         return copy(folders = folders.without(id)).withChildren(parentId) { it.toMutableList().apply { add(at, moved) } }
     }
 
-    /** Files the session in [folderId], taking it out of any other folder; null returns it to `sessions`. */
+    /**
+     * Files the session in [folderId], taking it out of any other folder and out of [unfiled]; null takes it out of its
+     * folder only, so a session of a bound project or with a brief's folder shows there again.
+     */
     fun assign(sessionId: String, folderId: String?): SessionFolders {
         if (folderId != null && find(folderId) == null) return this
-        val unfiled = copy(folders = folders.map { it.mapSubtree { f -> f.copy(items = f.items.filter { item -> item.id != sessionId }) } })
-        return if (folderId == null) unfiled else unfiled.edit(folderId) { it.copy(items = it.items + Item(SESSION, sessionId)) }
+        val out = copy(folders = folders.map { it.mapSubtree { f -> f.copy(items = f.items.filter { item -> item.id != sessionId }) } })
+        return if (folderId == null) out else out.copy(unfiled = unfiled - sessionId).edit(folderId) { it.copy(items = it.items + Item(SESSION, sessionId)) }
     }
+
+    /** Takes the session out of its folder and keeps it in `sessions`, whatever its project or brief say. */
+    fun unfile(sessionId: String): SessionFolders = assign(sessionId, null).let { if (sessionId in it.unfiled) it else it.copy(unfiled = it.unfiled + sessionId) }
 
     /**
      * A tab switched from session [from] to [to] in the same process. `/clear` starts a session no scan has seen yet, which
@@ -244,7 +272,7 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
     /** [snapshot] in place of this structure, keeping the higher [nextId], so ids handed out since it was taken are not handed out again. */
     fun restore(snapshot: SessionFolders) = snapshot.copy(nextId = maxOf(nextId, snapshot.nextId))
 
-    fun toJson(): String = GsonBuilder().setPrettyPrinting().create().toJson(linkedMapOf("version" to VERSION, "nextId" to nextId, "folders" to folders))
+    fun toJson(): String = GsonBuilder().setPrettyPrinting().create().toJson(linkedMapOf("version" to VERSION, "nextId" to nextId, "folders" to folders, "unfiled" to unfiled))
 
     private fun editPlan(folderId: String, change: (Plan) -> Plan?): SessionFolders {
         val folder = find(folderId) ?: return this
@@ -261,18 +289,22 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         const val SESSION = "session"
         /**
          * Version 2 added a folder's bound `project`; version 3 made it a list, [Folder.dirs], and added [Folder.plan] and
-         * [nextId]. Older files read as the same structure without plans.
+         * [nextId]; version 4 added [unfiled]. Older files read as the same structure without what came later.
          */
-        private const val VERSION = 3
-        private val FOLDER_FIELDS = mapOf(1 to setOf("id", "name", "folders", "items"), 2 to setOf("id", "name", "folders", "items", "project"), 3 to setOf("id", "name", "folders", "items", "dirs", "plan"))
+        private const val VERSION = 4
+        private val FOLDER_FIELDS = mapOf(1 to setOf("id", "name", "folders", "items"), 2 to setOf("id", "name", "folders", "items", "project"), 3 to setOf("id", "name", "folders", "items", "dirs", "plan"), 4 to setOf("id", "name", "folders", "items", "dirs", "plan"))
 
         /** Reads `structure.json`, throwing on anything it does not know rather than skipping it. */
         fun parse(text: String): SessionFolders {
             val root = JsonParser.parseString(text).asJsonObject
             val version = root.field("version").asInt
             require(version in 1..VERSION) { "unsupported structure version $version" }
-            root.only(if (version == VERSION) setOf("version", "nextId", "folders") else setOf("version", "folders"))
-            return SessionFolders(root.field("folders").asJsonArray.map { folder(it.asJsonObject, version) }, if (version == VERSION) root.field("nextId").asInt else 1)
+            root.only(when (version) { 4 -> setOf("version", "nextId", "folders", "unfiled"); 3 -> setOf("version", "nextId", "folders"); else -> setOf("version", "folders") })
+            return SessionFolders(
+                root.field("folders").asJsonArray.map { folder(it.asJsonObject, version) },
+                if (version >= 3) root.field("nextId").asInt else 1,
+                if (version == 4) root.field("unfiled").asJsonArray.map { it.asString } else emptyList(),
+            )
         }
 
         private fun folder(json: JsonObject, version: Int): Folder {
@@ -284,7 +316,7 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
                 json.field("items").asJsonArray.map { it.asJsonObject.let { item -> Item(item.field("type").asString, item.field("id").asString) } },
                 // Gson leaves out nulls: version 2 wrote `project` only on bound folders, version 3 `plan` only on plan folders.
                 when (version) {
-                    VERSION -> json.field("dirs").asJsonArray.map { it.asString }
+                    3, 4 -> json.field("dirs").asJsonArray.map { it.asString }
                     else -> listOfNotNull(json.get("project")?.asString)
                 },
                 json.get("plan")?.asJsonObject?.let(::plan),
