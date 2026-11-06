@@ -43,11 +43,7 @@ class BriefMcpToolset : McpToolset {
         try {
             Brief.input(goal, tasks, plan_task)
             if (plan_task != null) {
-                val folders = withContext(Dispatchers.EDT) { ClaudeSessionsService.getInstance().folders }
-                require(folders.findTask(plan_task) != null) {
-                    val open = folders.all().flatMap { f -> f.plan?.tasks().orEmpty().filterNot { it.status.closed }.map { "${it.id} ${it.title} (${folders.pathOf(f.id)})" } }
-                    "no plan task '$plan_task'; open tasks: " + open.joinToString("; ").ifEmpty { "none" }
-                }
+                withContext(Dispatchers.EDT) { ClaudeSessionsService.getInstance().folders }.requireTask(plan_task)
             }
         } catch (e: IllegalArgumentException) {
             throw McpExpectedError(e.message ?: e.toString())

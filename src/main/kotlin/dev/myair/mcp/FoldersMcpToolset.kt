@@ -4,16 +4,28 @@ import com.intellij.mcpserver.McpExpectedError
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
+import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
+import dev.myair.actions.Git
+import dev.myair.actions.GitFailure
+import dev.myair.actions.createWorktree
+import dev.myair.actions.rememberBase
+import dev.myair.actions.runningDirs
+import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.PlanStart
+import dev.myair.editor.projectBase
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.Folder
 import dev.myair.folders.FolderChanges
 import dev.myair.folders.PlanChanges
 import dev.myair.folders.SessionFolders
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.store.PresetStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import java.nio.file.Path
+import java.util.UUID
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -56,7 +68,56 @@ class FoldersMcpToolset : McpToolset {
 
     @McpTool
     @McpDescription(
-        "The user's folder tree in their order: each folder's path, the directories bound to it (empty for most), plan (for a " +
+        "Starts a new Claude Code session in a My Air tab of this IDE: claude runs there with prompt as its first message. " +
+            "Start one only when the user asked for it in this conversation. The new session does not see this conversation, " +
+            "so its prompt must say everything it needs. Arguments left out take the values of the configuration named in " +
+            "preset, else claude's own settings, in the IDE project's directory. Returns the new session's id, cwd (where it " +
+            "runs: the new worktree when one was made) and project.",
+    )
+    suspend fun my_air_session_start(
+        @McpDescription("The session's first message.") prompt: String,
+        @McpDescription("The project directory it starts in; default: the IDE project's.") dir: String? = null,
+        @McpDescription("claude --model: opus, sonnet, haiku or a full model id.") model: String? = null,
+        @McpDescription("claude --effort: low, medium, high, xhigh or max.") effort: String? = null,
+        @McpDescription("JSON array of directories for claude --add-dir.") add_dirs: String? = null,
+        @McpDescription("true: start in a new worktree of dir's repository, off base.") worktree: Boolean? = null,
+        @McpDescription(
+            "Required with worktree: the branch the worktree checks out (for a remote one such as origin/main, its local " +
+                "namesake); when another worktree holds it and cannot be freed, a new branch off it.",
+        )
+        base: String? = null,
+        @McpDescription("Only with worktree: a new branch of this name off base, checked out in the worktree.") branch: String? = null,
+        @McpDescription("A plan task id such as T12: the session is filed in that task's plan folder and gets the plan as context.") plan_task: String? = null,
+        @McpDescription("The name of a session configuration of the user; the other arguments replace its fields.") preset: String? = null,
+    ): String {
+        val project = currentCoroutineContext().project
+        val (start, plan, running) = onEdt { service ->
+            val saved = if (preset == null) emptyList()
+            else PresetStore.INSTANCE.read().getOrElse { throw IllegalArgumentException("Cannot read ${PresetStore.INSTANCE.file}: ${it.message}") }
+            val start = sessionStartPreset(saved, preset, dir, model, effort, add_dirs, worktree, base)
+            require(branch == null || start.worktree) { "branch without worktree" }
+            val plan = plan_task?.let { service.folders.requireTask(it) }?.let { (folder, task) -> PlanStart(folder.id, task.id) }
+            Triple(start, plan, runningDirs())
+        }
+        val sessionProject = start.dir(projectBase(project))
+        val args = expected {
+            val missing = start.missingDirs(sessionProject)
+            require(missing.isEmpty()) { "not directories: ${missing.joinToString()}" }
+            start.claudeArgs(prompt)
+        }
+        val id = UUID.randomUUID().toString()
+        val repo = if (start.worktree) withContext(Dispatchers.IO) { expected { Git.repo(sessionProject) } } else null
+        val cwd = if (repo == null) sessionProject else withContext(Dispatchers.IO) { expected { createWorktree(repo, checkNotNull(start.base), branch, id, running) } }
+        withContext(Dispatchers.EDT) {
+            repo?.let { rememberBase(it, checkNotNull(start.base)) }
+            ClaudeSessionOpener.startNew(project, sessionProject, cwd, id, args, plan)
+        }
+        return startedJson(id, cwd, sessionProject)
+    }
+
+    @McpTool
+    @McpDescription(
+        "The user's folder tree in their order:each folder's path, the directories bound to it (empty for most), plan (for a " +
             "plan folder how many of its tasks are done, else null; read it with my_air_plan_get), the ids of sessions filed " +
             "directly in it, and its subfolders. A bound folder also holds every session run in a bound directory or a directory " +
             "below it (worktrees included) not filed in another folder; the most specific binding wins.",
@@ -165,12 +226,15 @@ class FoldersMcpToolset : McpToolset {
     }
 
     /** Runs [block] on the EDT, where the service's state lives; an input error reaches the agent with its message. */
-    private suspend fun <T> onEdt(block: (ClaudeSessionsService) -> T): T = withContext(Dispatchers.EDT) {
-        try {
-            block(ClaudeSessionsService.getInstance())
-        } catch (e: IllegalArgumentException) {
-            throw McpExpectedError(e.message ?: e.toString())
-        }
+    private suspend fun <T> onEdt(block: (ClaudeSessionsService) -> T): T = withContext(Dispatchers.EDT) { expected { block(ClaudeSessionsService.getInstance()) } }
+
+    /** Runs [block]; an input error, or a failed `git` (whose message carries its stderr), reaches the agent with its message. */
+    private fun <T> expected(block: () -> T): T = try {
+        block()
+    } catch (e: IllegalArgumentException) {
+        throw McpExpectedError(e.message ?: e.toString())
+    } catch (e: GitFailure) {
+        throw McpExpectedError(e.message!!)
     }
 
     /** Like [onEdt], for tools that need the folders; an unreadable `structure.json` is reported, as Folders mode shows it. */

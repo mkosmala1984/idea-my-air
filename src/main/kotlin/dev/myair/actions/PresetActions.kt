@@ -24,7 +24,6 @@ import dev.myair.store.PresetStore
 import dev.myair.store.continuationPrompt
 import dev.myair.store.presetOf
 import java.nio.file.Path
-import kotlin.io.path.isDirectory
 
 /**
  * Starts a session as [preset] says, with [prompt] as its first message, in a worktree on a new [branch] when given;
@@ -50,7 +49,7 @@ fun continueSession(project: Project, session: ClaudeSession, workTree: Path) {
 
 /** Whether [dir] and [preset]'s added directories all exist; the missing ones are reported. */
 private fun allExist(project: Project, preset: Preset, dir: Path): Boolean {
-    val missing = (listOf(dir) + preset.addDirs.map(Path::of)).filterNot { it.isDirectory() }
+    val missing = preset.missingDirs(dir)
     if (missing.isNotEmpty()) Messages.showErrorDialog(project, "Directories of \"${preset.name}\" no longer exist:\n${missing.joinToString("\n")}", "Cannot Start Session")
     return missing.isEmpty()
 }

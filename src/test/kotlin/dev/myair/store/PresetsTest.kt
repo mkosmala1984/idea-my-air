@@ -26,6 +26,13 @@ class PresetsTest {
     }
 
     @Test
+    fun `names the start directory and added directories that are not directories`(@TempDir temp: Path) {
+        val gone = temp.resolve("gone")
+        assertEquals(listOf(gone), Preset("Dirs", addDirs = listOf(temp.toString(), gone.toString())).missingDirs(temp))
+        assertEquals(listOf(gone), Preset("Dirs").missingDirs(gone))
+    }
+
+    @Test
     fun `survives a round trip through json, also without optional values`() {
         val presets = listOf(full, Preset("Plain"), Preset("Ask", worktree = true))
         assertEquals(presets, parsePresets(presetsJson(presets)))

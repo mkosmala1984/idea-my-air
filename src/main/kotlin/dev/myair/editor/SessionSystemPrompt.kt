@@ -19,7 +19,8 @@ fun appendedSystemPrompt(briefs: Boolean): String = listOfNotNull(
     "The IDE's MCP server has My Air tools, each described in full by its own description: my_air_sessions_find finds " +
         "the user's Claude Code sessions (by date, words in the title or project, folder), for example an earlier session to " +
         "continue from; my_air_folders_get reads the folders the user files sessions in, my_air_folders_apply changes them " +
-        "only after the user approved the change, and my_air_history_list with my_air_history_restore undo such changes.",
+        "only after the user approved the change, and my_air_history_list with my_air_history_restore undo such changes; " +
+        "my_air_session_start starts a new session in a tab, only when the user asks for one.",
     "A project the user plans has one or more plan folders with milestones and tasks: at the start call my_air_plan_get with " +
         "the working directory, and when it returns plans, tell the user which task fits the request or propose a new one" +
         (if (briefs) ", and name that task as plan_task in my_air_set_brief." else ".") +

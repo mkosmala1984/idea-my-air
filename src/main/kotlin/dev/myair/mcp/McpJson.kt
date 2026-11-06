@@ -7,9 +7,14 @@ import dev.myair.folders.Folder
 import dev.myair.folders.progress
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.StructureHistory
+import java.nio.file.Path
 import java.time.ZoneId
 
 private val gson = GsonBuilder().serializeNulls().setPrettyPrinting().create()
+
+/** What `my_air_session_start` returns. */
+fun startedJson(id: String, cwd: Path, project: Path): String =
+    gson.toJson(linkedMapOf("id" to id, "cwd" to cwd.toString(), "project" to project.toString()))
 
 fun SessionPage.toJson(structure: SessionFolders, zone: ZoneId): String = gson.toJson(
     linkedMapOf(

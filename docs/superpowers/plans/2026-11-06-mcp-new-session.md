@@ -1,5 +1,13 @@
 # MCP tool: start a new session
 
+| Task | Status | Commit |
+|---|---|---|
+| 1 | done | |
+| 2 | done | |
+| 3 | done | |
+| 4 | done | |
+| 5 | blocked: sandbox check by hand not run yet | |
+
 ## TL;DR
 
 - Goal: a `my_air_session_start` MCP tool, so an agent can start a new Claude Code session in a My Air tab: first message, model, effort, directory, added directories, optionally a worktree (fixed base, optional new branch) and a plan task.

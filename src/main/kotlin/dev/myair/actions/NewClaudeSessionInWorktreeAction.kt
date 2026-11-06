@@ -56,29 +56,43 @@ fun startInWorktree(
     branch: String? = null, askBranch: Boolean = false,
 ) = background(project, "Reading branches", { Git.repo(dir) }) { repo ->
     require(branch == null || !askBranch) { "a branch named and asked for" }
-    val recent = recentBases(repo.mainRoot)
     fun create(base: String, branch: String?) {
         val id = UUID.randomUUID().toString()
-        val name = branch?.let(::dirName) ?: worktreeName(base, LocalDate.now(), id)
-        val path = worktreePath(repo.mainRoot, MyAirSettings.getInstance().worktreesDir, name)
-        val sessions = ClaudeSessionsService.getInstance()
-        val running = sessions.sessions.filter { it.id in sessions.live }.flatMap { listOf(it.cwd, it.workDir) }
-        background(project, "Creating worktree", {
-            if (branch != null) Git.addBranchWorktree(repo.mainRoot, path, branch, base)
-            else Git.addWorktree(repo.mainRoot, path, base, "worktree-$name") { tree -> running.any { it.startsWith(tree) } }
-            copyIncluded(repo.mainRoot, path, Git.includedFiles(repo.mainRoot))
-        }) {
-            PropertiesComponent.getInstance().setList(recentKey(repo.mainRoot), pushRecent(recent, base, repo.branches))
+        val running = runningDirs()
+        background(project, "Creating worktree", { createWorktree(repo, base, branch, id, running) }) { path ->
+            rememberBase(repo, base)
             ClaudeSessionOpener.startNew(project, dir, path, id, args, plan)
         }
     }
     fun picked(base: String) = if (askBranch) branchPopup(project, dir, base) { create(base, it) }.show(where) else create(base, branch)
-    if (base != null) {
-        if (base in repo.branches) picked(base) else Messages.showErrorDialog(project, "Branch $base is not in ${repo.mainRoot}.", "Cannot Create Worktree")
-        return@background
-    }
-    basePopup("Base Branch for New Worktree", baseChoices(repo.branches, repo.default, recent), ::picked).show(where)
+    if (base != null) picked(base)
+    else basePopup("Base Branch for New Worktree", baseChoices(repo.branches, repo.default, recentBases(repo.mainRoot)), ::picked).show(where)
 }
+
+/**
+ * A new worktree of [repo] for session [id], on the local branch of [base] ([Git.addWorktree], falling back to a new
+ * branch `worktree-<name>`), or on a new [branch] off [base] ([Git.addBranchWorktree]), with the `.worktreeinclude` files
+ * copied in. A worktree holding the branch is not removed while a directory of [running] lies in it. Off the EDT.
+ */
+fun createWorktree(repo: GitRepo, base: String, branch: String?, id: String, running: List<Path>): Path {
+    require(base in repo.branches) { "Branch $base is not in ${repo.mainRoot}." }
+    val name = branch?.let(::dirName) ?: worktreeName(base, LocalDate.now(), id)
+    val path = worktreePath(repo.mainRoot, MyAirSettings.getInstance().worktreesDir, name)
+    if (branch != null) Git.addBranchWorktree(repo.mainRoot, path, branch, base)
+    else Git.addWorktree(repo.mainRoot, path, base, "worktree-$name") { tree -> running.any { it.startsWith(tree) } }
+    copyIncluded(repo.mainRoot, path, Git.includedFiles(repo.mainRoot))
+    return path
+}
+
+/** The directories running sessions started in and work in now. EDT. */
+fun runningDirs(): List<Path> {
+    val sessions = ClaudeSessionsService.getInstance()
+    return sessions.sessions.filter { it.id in sessions.live }.flatMap { listOf(it.cwd, it.workDir) }
+}
+
+/** Puts [base] first among the recent bases of [repo]. EDT. */
+fun rememberBase(repo: GitRepo, base: String) =
+    PropertiesComponent.getInstance().setList(recentKey(repo.mainRoot), pushRecent(recentBases(repo.mainRoot), base, repo.branches))
 
 /** Check out [base] (null to [chosen]), or a new branch off it named in [showNewBranchPopup]. */
 private fun branchPopup(project: Project, dir: Path, base: String, chosen: (String?) -> Unit): ListPopup =

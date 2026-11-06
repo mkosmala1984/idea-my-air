@@ -11,6 +11,7 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.fileSize
 import kotlin.io.path.getLastModifiedTime
+import kotlin.io.path.isDirectory
 import kotlin.io.path.readText
 
 /** The levels `claude --effort` takes. */
@@ -40,6 +41,9 @@ data class Preset(
 
     /** The directory its sessions start in: [project], else [ideBase], the IDE project's. */
     fun dir(ideBase: Path): Path = project?.let(Path::of) ?: ideBase
+
+    /** Of [dir], where a session starts, and [addDirs], those that are not directories. */
+    fun missingDirs(dir: Path): List<Path> = (listOf(dir) + addDirs.map(Path::of)).filterNot { it.isDirectory() }
 
     /**
      * The `claude` arguments it adds to `--session-id`, ending with [prompt], the session's first message. It follows

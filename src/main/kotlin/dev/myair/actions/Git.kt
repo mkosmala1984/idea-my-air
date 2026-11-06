@@ -38,7 +38,10 @@ fun lineCount(bytes: ByteArray): Int {
     return bytes.count { it == newline } + if (bytes.isNotEmpty() && bytes.last() != newline) 1 else 0
 }
 
-/** Runs the `git` on PATH; any exit code outside `ok` throws with git's stderr. */
+/** A `git` run that ended with an exit code its caller did not expect; the message carries git's stderr. */
+class GitFailure(message: String) : IllegalStateException(message)
+
+/** Runs the `git` on PATH; any exit code outside `ok` throws [GitFailure] with git's stderr. */
 object Git {
     fun run(dir: Path, vararg args: String, input: String? = null, ok: Set<Int> = setOf(0)): String =
         bytes(dir, *args, input = input, ok = ok).toString(Charsets.UTF_8)
@@ -51,7 +54,7 @@ object Git {
         val stdout = process.inputStream.readAllBytes()
         val exit = process.waitFor()
         stdin.get()
-        check(exit in ok) { "git ${args.joinToString(" ")} failed in $dir (exit $exit):\n${stderr.get().trim()}" }
+        if (exit !in ok) throw GitFailure("git ${args.joinToString(" ")} failed in $dir (exit $exit):\n${stderr.get().trim()}")
         return stdout
     }
 
