@@ -10,23 +10,30 @@ data class BriefTask(val content: String, val status: TaskStatus)
 
 /**
  * What a session is for, as its agent last described it with `my_air_set_brief`; [goal] is null for a Claude Desktop
- * plan (`update_plan`), which lists tasks only. [planTask] is the id of the plan task the session works on.
+ * plan (`update_plan`), which lists tasks only. [planTask] is the id of the plan task the session works on, [title] the
+ * session's title and [folder] the id of the folder it files itself in; the three keep their value until a call replaces it.
  */
-data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: String? = null) {
+data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: String? = null, val title: String? = null, val folder: String? = null) {
     val done: Int get() = tasks.count { it.status == TaskStatus.COMPLETED }
 
     val current: BriefTask? get() = tasks.firstOrNull { it.status == TaskStatus.IN_PROGRESS }
 
     companion object {
         /**
-         * The brief after an accepted call of [tool] with [input], the call's `input` object, made while [previous] was
-         * current. A plan is either replaced (`items`) or moved on: `advance` completes the step in progress and starts the
-         * next pending one, `done`/`start` complete and start steps by number, counted from 1.
+         * The brief after an accepted call of [tool] with [input], the call's `input` object, and [result], the text of its
+         * result, made while [previous] was current. A brief call's folder is the id its result names, so a renamed or
+         * moved folder keeps the session. A plan is either replaced (`items`, goal and tasks only) or moved on: `advance`
+         * completes the step in progress and starts the next pending one, `done`/`start` complete and start steps by number, counted from 1.
          */
-        fun next(previous: Brief?, tool: String, input: JsonObject): Brief = when {
-            // An MCP client may send a parameter left out as null.
-            tool != UPDATE_PLAN -> input(input["goal"].asString, input["tasks"].asString, input["plan_task"]?.takeUnless { it.isJsonNull }?.asString)
-            input.has("items") -> Brief(null, tasks(input.getAsJsonArray("items")))
+        fun next(previous: Brief?, tool: String, input: JsonObject, result: String): Brief = when {
+            tool != UPDATE_PLAN -> {
+                // An MCP client may send a parameter left out as null.
+                fun field(name: String) = input[name]?.takeUnless { it.isJsonNull }?.asString
+                input(input["goal"].asString, input["tasks"].asString, field("plan_task"), field("title")).let {
+                    it.copy(planTask = it.planTask ?: previous?.planTask, title = it.title ?: previous?.title, folder = folderOf(result) ?: previous?.folder)
+                }
+            }
+            input.has("items") -> Brief(null, tasks(input.getAsJsonArray("items")), previous?.planTask, previous?.title, previous?.folder)
             else -> {
                 val brief = checkNotNull(previous) { "plan moved on before it was set: $input" }
                 val (done, start) = if (input.has("advance")) {
@@ -49,7 +56,7 @@ data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: St
          * The arguments of `my_air_set_brief`, checked against the rules its description gives the agent; whether [planTask]
          * exists is the tool's to check, since a task deleted later leaves an accepted call as it was.
          */
-        fun input(goal: String, tasks: String, planTask: String? = null): Brief {
+        fun input(goal: String, tasks: String, planTask: String? = null, title: String? = null): Brief {
             require(goal.isNotBlank() && goal.length <= GOAL_CHARS) { "goal must be one non-blank sentence of at most $GOAL_CHARS chars" }
             val items = try {
                 JsonParser.parseString(tasks).asJsonArray
@@ -61,7 +68,16 @@ data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: St
             parsed.forEach { require(it.content.isNotBlank() && it.content.length <= TASK_CHARS) { "task content must be non-blank, at most $TASK_CHARS chars: '${it.content}'" } }
             require(parsed.count { it.status == TaskStatus.IN_PROGRESS } <= 1) { "at most one task may be in_progress" }
             require(planTask == null || PLAN_TASK.matches(planTask)) { "plan_task must be a task id such as T12, got '$planTask'" }
-            return Brief(goal, parsed, planTask)
+            require(title == null || (title.isNotBlank() && title.length <= TITLE_CHARS)) { "title must be non-blank, at most $TITLE_CHARS chars" }
+            return Brief(goal, parsed, planTask, title)
+        }
+
+        /** What `my_air_set_brief` returns when it was given a folder: the folder's id, which the scanner reads back ([next]). */
+        fun folderResult(id: String, path: String, created: Boolean) = "ok, folder $id at '$path'" + if (created) " (created)" else ""
+
+        private fun folderOf(result: String): String? {
+            if (result == OK) return null
+            return checkNotNull(FOLDER_RESULT.matchEntire(result)) { "unknown $SET_BRIEF result '$result'" }.groupValues[1]
         }
 
         /** Items as both tools write them: `{"content": ..., "status": "pending" | "in_progress" | "completed"}`. */
@@ -71,6 +87,9 @@ data class Brief(val goal: String?, val tasks: List<BriefTask>, val planTask: St
         }
 
         private val PLAN_TASK = Regex("T[1-9][0-9]*")
+        private val FOLDER_RESULT = Regex("""ok, folder (\S+) at '.*'( \(created\))?""")
+        const val OK = "ok"
+        const val TITLE_CHARS = 60
         const val GOAL_CHARS = 200
         const val TASK_CHARS = 120
         const val MAX_TASKS = 15

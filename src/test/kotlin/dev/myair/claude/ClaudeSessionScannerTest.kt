@@ -461,14 +461,35 @@ class ClaudeSessionScannerTest {
         assertEquals(listOf(Path.of("C:\\a.kt"), Path.of("C:\\b.kt"), Path.of("C:\\n.ipynb")), next.toSession(file)!!.changedFiles)
     }
 
-    private fun briefCall(id: String, goal: String, tasks: String) =
-        assistant("""{"type":"tool_use","id":"$id","name":"mcp__idea__my_air_set_brief","input":{"goal":"$goal","tasks":"${tasks.replace("\"", "\\\"")}","projectPath":"E:\\dev"}}""")
+    private fun briefCall(id: String, goal: String, tasks: String, extra: String = "") =
+        assistant("""{"type":"tool_use","id":"$id","name":"mcp__idea__my_air_set_brief","input":{"goal":"$goal","tasks":"${tasks.replace("\"", "\\\"")}","projectPath":"E:\\dev"$extra}}""")
 
     private fun planCall(id: String, input: String) =
         assistant("""{"type":"tool_use","id":"$id","name":"mcp__ccd_turn__update_plan","input":$input}""")
 
-    private fun result(id: String, error: Boolean = false) =
-        user("""[{"tool_use_id":"$id","type":"tool_result","content":"ok"${if (error) ""","is_error":true""" else ""}}]""")
+    private fun result(id: String, error: Boolean = false, text: String = "ok", array: Boolean = false) =
+        user("""[{"tool_use_id":"$id","type":"tool_result","content":${if (array) """[{"type":"text","text":"$text"}]""" else "\"$text\""}${if (error) ""","is_error":true""" else ""}}]""")
+
+    @Test
+    fun `the brief's folder is read from the result in either content shape`() {
+        val s = parse(write("s1",
+            user("\"prompt\""),
+            briefCall("t1", "G", "[]", extra = ""","folder":"rtm/fixes""""), result("t1", text = "ok, folder f1 at 'rtm/fixes' (created)", array = true),
+            briefCall("t2", "G", "[]", extra = ""","folder":"rtm/x""""), result("t2", text = "ok, folder f2 at 'rtm/x'"),
+        ))!!
+        assertEquals("f2", s.brief!!.folder)
+    }
+
+    @Test
+    fun `a custom title beats the brief's, which beats the AI title`() {
+        val lines = arrayOf(
+            """{"type":"ai-title","aiTitle":"AI","sessionId":"s1"}""",
+            user("\"first prompt\""),
+            briefCall("t1", "G", "[]", extra = ""","title":"Brief title""""), result("t1"),
+        )
+        assertEquals("Brief title", parse(write("s1", *lines))!!.title)
+        assertEquals("Mine", parse(write("s2", *lines, """{"type":"custom-title","customTitle":"Mine","sessionId":"s1"}"""))!!.title)
+    }
 
     @Test
     fun `the brief is the last call of the brief tool that succeeded`() {

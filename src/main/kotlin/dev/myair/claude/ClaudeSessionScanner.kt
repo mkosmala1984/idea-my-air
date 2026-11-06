@@ -142,7 +142,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 artifacts = artifacts.published(line), calls = pending, background = background.launched(answers).notified(line),
                 brief = answers.fold(brief) { brief, (call, item) ->
                     if (call == null || !BRIEF_TOOL.matches(call.tool) || item["is_error"]?.asBoolean == true) brief
-                    else Brief.next(brief, call.tool, call.input)
+                    else Brief.next(brief, call.tool, call.input, resultText(item, line))
                 },
             )
         }
@@ -150,7 +150,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         /** Null for a transcript with neither a title nor a human prompt: there is nothing to resume. */
         fun toSession(file: Path, desktopProject: Path? = null): ClaudeSession? {
             val c = conversation
-            val title = c.customTitle ?: c.aiTitle ?: c.prompts.firstOrNull()?.lineSequence()?.first()?.take(80) ?: return null
+            val title = c.customTitle ?: brief?.title ?: c.aiTitle ?: c.prompts.firstOrNull()?.lineSequence()?.first()?.take(80) ?: return null
             val cwd = Path.of(checkNotNull(c.cwd) { "titled session without cwd: $file" })
             val lastMessage = checkNotNull(messages.last) { "titled session without a message: $file" }
             val env = environment
@@ -321,6 +321,14 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             var transcript = from
             val offset = forEachCompleteLine(file, from.offset) { transcript = transcript.next(Line(it)) }
             return transcript.copy(offset = offset)
+        }
+
+        /** The text of a `tool_result` [item]: its `content` string, or the one text block an MCP tool's result holds. */
+        private fun resultText(item: JsonObject, line: Line): String {
+            val content = item["content"]
+            if (content.isJsonPrimitive) return content.asString
+            val block = line.check(content.asJsonArray.singleOrNull()?.asJsonObject?.takeIf { it["type"].asString == "text" }, "tool result without one text block")
+            return block["text"].asString
         }
 
         /** [this] with the shell, monitor, brief and plan calls of [line], when it is an assistant message of the main conversation. */
