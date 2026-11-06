@@ -2,11 +2,11 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
+| 1 | done | `929b61b` |
+| 2 | done | `eb724c6` |
+| 3 | done | `439c026` |
+| 4 | done | `4d859e8` |
+| 5 | blocked: sandbox check by hand not run (needs the new build installed or a sandbox driven by the user) | |
 
 ## TL;DR
 
@@ -59,7 +59,7 @@
 - Produces: `Brief.next(previous: Brief?, tool: String, input: JsonObject, result: String): Brief`. `result` is the text of the tool's result.
 - Produces: `Brief.folderResult(id: String, path: String, created: Boolean): String` and `const val Brief.OK = "ok"`. The tool returns these texts (Task 4).
 
-- [ ] **Step 1: Write the failing tests in `BriefTest`**
+- [x] **Step 1: Write the failing tests in `BriefTest`**
 
 ```kotlin
 @Test
@@ -92,7 +92,7 @@ fun `a Desktop plan keeps title, folder and plan task`() {
 
 (`input` parses a JSON literal into a `JsonObject`; add it as a private helper if the class has none.) The last test fixes the current behaviour that `items` replaces the whole brief: from now on `items` replaces `goal` and `tasks` only.
 
-- [ ] **Step 2: Write the failing scanner tests in `ClaudeSessionScannerTest`**
+- [x] **Step 2: Write the failing scanner tests in `ClaudeSessionScannerTest`**
 
 Extend `briefCall` with optional `extra: String = ""` JSON fields in its input, and `result` with an optional `text: String = "ok"` and `array: Boolean = false` (`content: [{"type":"text","text":...}]`).
 
@@ -112,23 +112,23 @@ fun `a custom title beats the brief's, which beats the AI title`() {
 
 Write the second test with the transcript's real `ai-title` and `custom-title` lines, as other tests in the file build them.
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `./gradlew test --tests dev.myair.claude.BriefTest --tests dev.myair.claude.ClaudeSessionScannerTest`
 Expected: compilation fails on `title`, `folder`, `folderResult` and `OK`.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 - In `Brief.kt`, `next` for `my_air_set_brief`: `input(...)` from the call's fields, then `copy(planTask = planTask ?: previous?.planTask, title = title ?: previous?.title, folder = folderOf(result) ?: previous?.folder)`. `folderOf` returns null for `OK`, the id for `^ok, folder (\S+) at '.*'( \(created\))?$`, and throws `IllegalStateException` for anything else. `items` keeps `planTask`, `title` and `folder` of `previous`. The `done`/`start` branch already copies.
 - In `ClaudeSessionScanner.Transcript.next`, pass the result text of `item["content"]`: a string as is, an array as the `text` of its single `text` item. Any other shape throws through `line.check`.
 - In `toSession`, the title is `c.customTitle ?: brief?.title ?: c.aiTitle ?: <first prompt>`.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `./gradlew test --tests 'dev.myair.claude.*'`
 Expected: PASS. Fix existing tests that relied on `items` dropping `planTask` only if the spec says so; it does not, so they should pass as they are.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/main/kotlin/dev/myair/claude src/test/kotlin/dev/myair/claude
@@ -150,7 +150,7 @@ Plan: docs/superpowers/plans/2026-11-06-self-filing-sessions.md"
 - Produces: `fun SessionFolders.briefFolder(path: String, newId: () -> String): Pair<SessionFolders, Folder>` returns the folder at `path` (created when missing) and the structure holding it. It throws `IllegalArgumentException` per the spec's table.
 - Produces: `ChangeSource.BRIEF`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 - `placeOf follows the brief's folder below hand filing and nowhere, above the project`: build a structure with folder `app` bound to `/app`, folder `rtm` with subfolder `fixes` (id `fx`), and a session in `/app` whose brief has `folder = "fx"`, then assert, in order:
   - `placeOf` is `fx`;
@@ -168,12 +168,12 @@ Plan: docs/superpowers/plans/2026-11-06-self-filing-sessions.md"
 - `version 4 round-trips unfiled, and version 3 reads with none`: `parse(toJson())` equals the structure with `unfiled = listOf("s1")`; a version 3 literal parses with `unfiled` empty.
 - `a session both filed and unfiled throws`: `assertThrows<IllegalArgumentException> { SessionFolders(listOf(Folder("f", "f", items = listOf(Item(SESSION, "s")))), unfiled = listOf("s")) }`.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./gradlew test --tests dev.myair.folders.SessionFoldersTest`
 Expected: compilation fails on `unfile`, `briefFolder` and the `unfiled` parameter.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `placeOf`: `taskOf(session)?.first?.id ?: folderOf(session.id) ?: if (session.id in unfiled) null else session.brief?.folder?.takeIf { find(it) != null && planFolderAt(it) == null } ?: projectFolder(session.project)?.id`.
 
@@ -184,12 +184,12 @@ Other changes:
 - `toJson` writes `unfiled`.
 - Update the KDoc of `SessionFolders` and of `placeOf` to the spec's order.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `./gradlew test --tests 'dev.myair.folders.*' --tests 'dev.myair.mcp.*'`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/kotlin/dev/myair/folders src/test/kotlin/dev/myair/folders
@@ -206,25 +206,25 @@ Plan: docs/superpowers/plans/2026-11-06-self-filing-sessions.md"
 **Interfaces:**
 - Consumes: `SessionFolders.unfile` (Task 2).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `a session dropped on sessions is unfiled, a bound project's too`: drop a filed session and a session of a bound project on the `UnfiledSessions` node. The drop is not null, and applying it gives `unfiled` containing both ids, `folderOf` null for both, and `placeOf` null for both.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `./gradlew test --tests dev.myair.toolwindow.SessionTreeTest`
 Expected: FAIL. The drop is null for the bound project's session.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `dropChange`, remove the refusal `folderId == null && dragged.any { projectFolder(...) != null }`. With `folderId == null`, fold with `unfile(id)`; otherwise use `assign(id, folderId)`. Update the KDoc sentence about bound projects.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `./gradlew test --tests 'dev.myair.toolwindow.*'`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/kotlin/dev/myair/toolwindow/SessionTree.kt src/test/kotlin/dev/myair/toolwindow/SessionTreeTest.kt
@@ -247,7 +247,7 @@ Plan: docs/superpowers/plans/2026-11-06-self-filing-sessions.md"
 - Produces: `MyAirSettings.fileSessions: Boolean` (`briefs && state.fileSessions`).
 - Produces: `appendedSystemPrompt(briefs: Boolean, filing: Boolean): String`.
 
-- [ ] **Step 1: Write the failing tests in `SessionSystemPromptTest`**
+- [x] **Step 1: Write the failing tests in `SessionSystemPromptTest`**
 
 ```kotlin
 @Test
@@ -260,12 +260,12 @@ fun `filing is asked for only with briefs and filing on`() {
 
 Make the existing tests iterate over every `(briefs, filing)` pair that can occur: `(true, true)`, `(true, false)` and `(false, false)`.
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `./gradlew test --tests dev.myair.editor.SessionSystemPromptTest`
 Expected: compilation fails on `filing`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 - `appendedSystemPrompt` adds, when `filing`, one sentence. It must contain the phrase `my_air_folders_get first` and cover the spec's three rules: title at most 60 chars in the user's language, set first and changed with the goal; read the folders first, prefer an existing folder, create one level below an existing folder only when none fits, no plan folders; the user's filing wins.- `ClaudeSessionEditor` passes `MyAirSettings.getInstance().fileSessions`.
 - `MyAirSettings`: `var fileSessions by property(true)`, getter `val fileSessions get() = briefs && state.fileSessions`, and the checkbox "Agents file and title their sessions (folder and title in my_air_set_brief)" `.enabledIf(<the briefs checkbox>.selected)`.
@@ -276,12 +276,12 @@ Expected: compilation fails on `filing`.
   - With `folder`, on the EDT, it runs `ClaudeSessionsService.getInstance().updateFolders(ChangeSource.BRIEF) { it.briefFolder(folder) { UUID.randomUUID().toString() }.also { (_, f) -> found = f } .first }`, with `created` being whether the structure changed. It returns `Brief.folderResult(found.id, folders.pathOf(found.id), created)`. Without `folder` it returns `Brief.OK`.
   - `IllegalArgumentException` becomes `McpExpectedError`, as today.
 
-- [ ] **Step 4: Run all tests and build**
+- [x] **Step 4: Run all tests and build**
 
 Run: `./gradlew test buildPlugin`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/kotlin src/test/kotlin
@@ -294,7 +294,7 @@ Plan: docs/superpowers/plans/2026-11-06-self-filing-sessions.md"
 **Files:**
 - Modify: `CLAUDE.md` (the Tab store paragraph on `pins.json`/tree, the plan folders paragraph, and the transcripts paragraph on titles)
 
-- [ ] **Step 1: Update `CLAUDE.md`**
+- [x] **Step 1: Update `CLAUDE.md`**
 
 Cover the title order, `Brief.folder` from the result, the `placeOf` order with `unfiled`, `structure.json` version 4, `ChangeSource.BRIEF`, and the `fileSessions` setting. State it in the file's existing sentence style.
 
@@ -306,7 +306,7 @@ Run: `env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daem
 - dragging it to `sessions` keeps it there after its next brief;
 - a brief naming a new subfolder adds that folder, and `my_air_history_list` shows a `brief` snapshot.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add CLAUDE.md docs/superpowers/plans/2026-11-06-self-filing-sessions.md
