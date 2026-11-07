@@ -17,6 +17,7 @@ import dev.myair.MyAirSettings
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
+import dev.myair.claude.shownBy
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import dev.myair.service.ClaudeSessionsService
@@ -141,9 +142,9 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
             .map { it.title }
     }
 
-    /** [file]'s registry status, by pid, and the number of its own background tasks still running ([runningTasks]). */
+    /** [file]'s registry status ([shownBy]) and the number of its own background tasks still running ([runningTasks]). */
     private fun activity(file: ClaudeSessionVirtualFile, live: Map<String, LiveSession>, sessions: Map<String, ClaudeSession>): Pair<SessionStatus?, Int> {
-        val status = live.values.firstOrNull { it.pid == file.pid }?.status
+        val status = live.shownBy(file.pid, file.job)?.value?.status
         val started = file.pid?.let { ProcessHandle.of(it).flatMap { process -> process.info().startInstant() }.getOrNull() }
         return status to runningTasks(sessions[file.sessionId]?.background.orEmpty(), started)
     }

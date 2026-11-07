@@ -31,6 +31,14 @@ data class LiveSession(
 )
 
 /**
+ * The entry of the session a tab's process shows, by session id: the job it attached to when it did ([job]), else the
+ * session its process [pid] runs or parked into a job.
+ */
+fun Map<String, LiveSession>.shownBy(pid: Long?, job: String?): Map.Entry<String, LiveSession>? = entries.firstOrNull { (_, live) ->
+    if (job != null) live.job == job else pid != null && (live.pid == pid || pid in live.parkedBy)
+}
+
+/**
  * Reads `~/.claude/sessions/<pid>.json`, which every running `claude` process keeps up to date.
  * A file outlives a crashed process, so an entry counts only while its pid still belongs to the process that wrote it.
  */

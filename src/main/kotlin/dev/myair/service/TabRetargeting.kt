@@ -3,6 +3,8 @@ package dev.myair.service
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.project.ProjectManager
 import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
+import dev.myair.claude.shownBy
 import dev.myair.actions.Git
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.editor.SessionTerminals
@@ -14,13 +16,18 @@ import java.nio.file.Path
 
 const val NEW_SESSION_TITLE = "New session"
 
+/** What a tab shows: its session, that session's title and the status of the process the tab shows it through. */
+data class TabTarget(val sessionId: String, val title: String, val status: SessionStatus?)
+
 /**
- * The session and title a tab running process [pid] shows now. `/clear` and `/resume` keep the process but switch its
- * session, which the registry reports under the same pid. A process not (or no longer) registered keeps its session.
+ * What a tab running process [pid], attached to [job] if any, shows now ([shownBy]). `/clear` and `/resume` keep the
+ * process but switch its session, which the registry reports under the same pid; `/bg` parks it into a job's session. A
+ * process not (or no longer) registered keeps its session, without a status.
  */
-fun retarget(sessionId: String, title: String, pid: Long?, live: Map<String, LiveSession>, titles: Map<String, String>): Pair<String, String> {
-    val current = live.entries.firstOrNull { it.value.pid == pid }?.key ?: sessionId
-    return current to (titles[current] ?: if (current == sessionId) title else NEW_SESSION_TITLE)
+fun retarget(sessionId: String, title: String, pid: Long?, job: String?, live: Map<String, LiveSession>, titles: Map<String, String>): TabTarget {
+    val shown = live.shownBy(pid, job)
+    val current = shown?.key ?: sessionId
+    return TabTarget(current, titles[current] ?: if (current == sessionId) title else NEW_SESSION_TITLE, shown?.value?.status)
 }
 
 /**
@@ -38,9 +45,8 @@ fun retargetOpenTabs(
         val base = projectBase(project)
         val open = editors.openFiles.filterIsInstance<ClaudeSessionVirtualFile>()
         for (file in open + SessionTerminals.getInstance().detached().filter { it.first == project }.map { it.second }) {
-            val (sessionId, title) = retarget(file.sessionId, file.title, file.pid, live, titles)
-            // By pid rather than session id: another process may run the same session ("Open Anyway").
-            val status = live.values.firstOrNull { it.pid == file.pid }?.status
+            // By pid or job rather than session id: another process may run the same session ("Open Anyway").
+            val (sessionId, title, status) = retarget(file.sessionId, file.title, file.pid, file.job, live, titles)
             val isUnread = sessionId in unread
             val mark = tabMark(file.project, heads[workDirs[sessionId] ?: file.cwd], heads[file.project], base, heads[base])
             if (sessionId == file.sessionId && title == file.title && status == file.status && isUnread == file.unread && mark == file.mark) continue

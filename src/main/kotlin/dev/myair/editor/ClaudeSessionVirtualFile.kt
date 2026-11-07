@@ -45,6 +45,10 @@ class ClaudeSessionVirtualFile(
     @Volatile
     var pid: Long? = null
 
+    /** The background job [pid] attached to (`claude attach`), whose session and status the tab shows; null for a process of its own. */
+    @Volatile
+    var job: String? = null
+
     /** The status the registry reports for [pid]; null until the process registers and after it ends. */
     @Volatile
     var status: SessionStatus? = null
