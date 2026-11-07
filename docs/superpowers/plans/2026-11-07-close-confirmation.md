@@ -2,7 +2,7 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
+| 1 | done | |
 | 2 | | |
 | 3 | | |
 
@@ -18,9 +18,9 @@ Commits carry `Plan-Task: <n>/3` and `Plan: docs/superpowers/plans/2026-11-07-cl
 
 Files: `src/main/kotlin/dev/myair/editor/CloseConfirmation.kt`, `src/test/kotlin/dev/myair/editor/CloseConfirmationTest.kt`.
 
-- [ ] Tests: `interrupts` for each status × tasks (null status with 0 tasks false; IDLE with a task true; WORKING and NEEDS_INPUT true). `confirmation` for one and several titles in each of PROJECT, EXIT, RESTART (title, message, buttons); empty titles throw.
-- [ ] Implement `interrupts`, `enum class Closing`, `data class Confirmation(title, message, ok, cancel)`, `confirmation(closing, titles)`.
-- [ ] `./gradlew test --tests dev.myair.editor.CloseConfirmationTest`, commit.
+- [x] Tests: `interrupts` for each status × tasks (null status with 0 tasks false; IDLE with a task true; WORKING and NEEDS_INPUT true). `confirmation` for one and several titles in each of PROJECT, EXIT, RESTART (title, message, buttons); empty titles throw.
+- [x] Implement `interrupts`, `enum class Closing`, `data class Confirmation(title, message, ok, cancel)`, `confirmation(closing, titles)`.
+- [x] `./gradlew test --tests dev.myair.editor.CloseConfirmationTest`, commit.
 
 ## Task 2: wiring
 
