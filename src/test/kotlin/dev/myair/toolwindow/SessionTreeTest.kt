@@ -340,7 +340,7 @@ class SessionTreeTest {
 
     @Test
     fun `urgency follows the live status, unread only when idle`() {
-        fun live(status: SessionStatus) = LiveSession(1, "cli", status, null, Instant.EPOCH)
+        fun live(status: SessionStatus) = LiveSession(1, "cli", status, null, Instant.EPOCH, Path.of("/p"), Instant.EPOCH)
         assertEquals(Urgency.NEEDS_INPUT, urgencyOf(live(SessionStatus.NEEDS_INPUT), unread = true))
         assertEquals(Urgency.WORKING, urgencyOf(live(SessionStatus.WORKING), unread = true))
         assertEquals(Urgency.UNREAD, urgencyOf(live(SessionStatus.IDLE), unread = true))

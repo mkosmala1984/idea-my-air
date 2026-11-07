@@ -26,7 +26,7 @@ class BriefTextTest {
 
     @Test
     fun `the tooltip carries the status, settled, Desktop and project before the brief`() {
-        val waiting = LiveSession(1, "cli", SessionStatus.NEEDS_INPUT, "dialog open", Instant.EPOCH)
+        val waiting = LiveSession(1, "cli", SessionStatus.NEEDS_INPUT, "dialog open", Instant.EPOCH, Path.of("/p"), Instant.EPOCH)
         assertEquals(
             listOf("Needs input: dialog open", "Settled", "Desktop", "Project: rtm", "Goal: Move AGC config", "✓ export", "▶ map", "○ e2e", "Asked: Migrate AGC"),
             tooltipLines(session.copy(desktop = true), waiting, unread = false, settled = true, project = Path.of("/rtm")),
@@ -37,7 +37,7 @@ class BriefTextTest {
 
     @Test
     fun `an idle session reads as unread reply or waiting for prompt`() {
-        val idle = LiveSession(1, "cli", SessionStatus.IDLE, null, Instant.EPOCH)
+        val idle = LiveSession(1, "cli", SessionStatus.IDLE, null, Instant.EPOCH, Path.of("/p"), Instant.EPOCH)
         assertEquals("Unread reply", tooltipLines(session, idle, unread = true, settled = false, project = null).first())
         assertEquals("Waiting for prompt", tooltipLines(session, idle, unread = false, settled = false, project = null).first())
         assertEquals(listOf("Asked: Migrate AGC"), tooltipLines(session.copy(brief = null), null, unread = true, settled = false, project = null))

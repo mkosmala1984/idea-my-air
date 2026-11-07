@@ -21,13 +21,13 @@ enum class SessionStatus {
 /**
  * [pid] is the `claude` process running the session; it keeps its pid when `/clear` or `/resume` switch it to another
  * session. [entrypoint] is what started it, e.g. "cli" or "claude-desktop". [waitingFor] says what a
- * [SessionStatus.NEEDS_INPUT] session is blocked on, e.g. "dialog open". [since] is when [status] last changed.
- * [job]: the background job (`claude --bg`, `/bg`) the process runs the session for, which `claude attach <job>` opens;
+ * [SessionStatus.NEEDS_INPUT] session is blocked on, e.g. "dialog open". [since] is when [status] last changed. [cwd] is
+ * where the process started and [started] when, both known before the session has a transcript. [job]:the background job (`claude --bg`, `/bg`) the process runs the session for, which `claude attach <job>` opens;
  * [pid] is then the job's worker. [parkedBy]: the interactive `claude` processes that `/bg` parked into this job, which show it.
  */
 data class LiveSession(
     val pid: Long, val entrypoint: String, val status: SessionStatus, val waitingFor: String?, val since: Instant,
-    val job: String? = null, val parkedBy: Set<Long> = emptySet(),
+    val cwd: Path, val started: Instant, val job: String? = null, val parkedBy: Set<Long> = emptySet(),
 )
 
 /**
@@ -88,7 +88,9 @@ class LiveSessionRegistry(
         }
         val entrypoint = checkNotNull(o["entrypoint"]) { "no entrypoint in $file" }.asString
         val job = if (bg) checkNotNull(o["jobId"]) { "no jobId in $file" }.asString else null
-        val live = LiveSession(pid, entrypoint, status, o["waitingFor"]?.asString, Instant.ofEpochMilli(since), job)
+        val cwd = Path.of(checkNotNull(o["cwd"]) { "no cwd in $file" }.asString)
+        val started = Instant.ofEpochMilli(checkNotNull(o["startedAt"]) { "no startedAt in $file" }.asLong)
+        val live = LiveSession(pid, entrypoint, status, o["waitingFor"]?.asString, Instant.ofEpochMilli(since), cwd, started, job)
         return Record(o["sessionId"].asString, live, o["parkedJobId"]?.asString)
     }
 

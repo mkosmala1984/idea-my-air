@@ -479,7 +479,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         return { (root == null || inWorkTree(it, root, heads)) && it.matches(query, service.branchOf(it)) }
     }
 
-    private fun shownSessions() = service.pins.shown(service.sessions, showSettled)
+    private fun shownSessions() = service.pins.shown(service.listed, showSettled)
 
     /** [shownSessions] less those older than [maxAgeDays]; the list above keeps them, as it holds running and pinned ones. */
     private fun treeSessions(): List<ClaudeSession> {

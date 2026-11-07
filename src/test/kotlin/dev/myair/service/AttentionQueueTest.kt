@@ -13,7 +13,7 @@ class AttentionQueueTest {
     /** s1 has the newest message, s5 the oldest. */
     private val sessions = (1..5).map { ClaudeSession("s$it", Path.of("/p"), "t$it", Instant.ofEpochMilli(100L - it), emptyList(), emptyList()) }
 
-    private fun live(status: SessionStatus, since: Long = 0) = LiveSession(1, "cli", status, null, Instant.ofEpochMilli(since))
+    private fun live(status: SessionStatus, since: Long = 0) = LiveSession(1, "cli", status, null, Instant.ofEpochMilli(since), Path.of("/p"), Instant.EPOCH)
 
     @Test
     fun `sessions waiting for input come first, longest waiting first, then unread replies, oldest first`() {

@@ -16,7 +16,7 @@ class LiveSessionRegistryTest {
     lateinit var dir: Path
 
     private fun entry(pid: Long, session: String, status: String, extra: String = "") = dir.resolve("$pid.json").writeText(
-        """{"pid":$pid,"sessionId":"$session","cwd":"E:\\x","procStart":"${pid * 10}","kind":"interactive","entrypoint":"cli",$extra"status":"$status","statusUpdatedAt":${pid * 1000}}"""
+        """{"pid":$pid,"sessionId":"$session","cwd":"E:\\x","startedAt":${pid * 100},"procStart":"${pid * 10}","kind":"interactive","entrypoint":"cli",$extra"status":"$status","statusUpdatedAt":${pid * 1000}}"""
     )
 
     @Test
@@ -30,10 +30,10 @@ class LiveSessionRegistryTest {
         val live = LiveSessionRegistry(dir) { pid, procStart -> pid in alive && procStart == pid * 10 }.read()
         assertEquals(
             mapOf(
-                "a" to LiveSession(1, "cli", SessionStatus.WORKING, null, Instant.ofEpochMilli(1000)),
-                "b" to LiveSession(2, "cli", SessionStatus.NEEDS_INPUT, "dialog open", Instant.ofEpochMilli(2000)),
-                "c" to LiveSession(3, "cli", SessionStatus.IDLE, null, Instant.ofEpochMilli(3000)),
-                "e" to LiveSession(5, "cli", SessionStatus.WORKING, null, Instant.ofEpochMilli(5000)),
+                "a" to LiveSession(1, "cli", SessionStatus.WORKING, null, Instant.ofEpochMilli(1000), Path.of("E:\\x"), Instant.ofEpochMilli(100)),
+                "b" to LiveSession(2, "cli", SessionStatus.NEEDS_INPUT, "dialog open", Instant.ofEpochMilli(2000), Path.of("E:\\x"), Instant.ofEpochMilli(200)),
+                "c" to LiveSession(3, "cli", SessionStatus.IDLE, null, Instant.ofEpochMilli(3000), Path.of("E:\\x"), Instant.ofEpochMilli(300)),
+                "e" to LiveSession(5, "cli", SessionStatus.WORKING, null, Instant.ofEpochMilli(5000), Path.of("E:\\x"), Instant.ofEpochMilli(500)),
             ),
             live,
         )
@@ -70,7 +70,7 @@ class LiveSessionRegistryTest {
     fun `a background job's worker is the entry of its session, with the job's id`() {
         dir.resolve("7244.json").writeText(bgRecord)
         assertEquals(
-            mapOf(bgSession to LiveSession(7244, "cli", SessionStatus.IDLE, null, Instant.ofEpochMilli(1794051976814), job = "0aa16524")),
+            mapOf(bgSession to LiveSession(7244, "cli", SessionStatus.IDLE, null, Instant.ofEpochMilli(1794051976814), Path.of("E:\\dev\\projects\\my-air"), Instant.ofEpochMilli(1794051965907), job = "0aa16524")),
             read(),
         )
     }

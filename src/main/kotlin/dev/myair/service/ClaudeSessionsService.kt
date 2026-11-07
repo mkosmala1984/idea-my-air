@@ -55,12 +55,15 @@ class ClaudeSessionsService : Disposable {
     private data class State(
         val sessions: List<ClaudeSession> = emptyList(), val live: Map<String, LiveSession> = emptyMap(), val pins: Pins = Pins(),
         val folders: SessionFolders = SessionFolders(), val foldersError: String? = null,
-        val heads: Map<Path, Git.Head?> = emptyMap(),
+        val heads: Map<Path, Git.Head?> = emptyMap(), val unscanned: List<ClaudeSession> = emptyList(),
     )
 
     private var state = State()
 
     val sessions get() = state.sessions
+
+    /** [sessions] and the running ones without a transcript yet ([unscannedSessions]), newest first, for the session lists. */
+    val listed get() = withUnscanned(state.sessions, state.unscanned)
 
     /** Session id to its running `claude` process; a session absent here has no process. */
     val live get() = state.live
@@ -109,11 +112,15 @@ class ClaudeSessionsService : Disposable {
     fun refresh() {
         // Nobody reads the Future, so an exception would vanish with it and freeze the list; log it as an IDE error instead.
         refresher.execute {
-            val (scanned, current, heads) = try {
+            val (scanned, current, unscanned, heads) = try {
                 // With briefs turned off nothing downstream sees them: rows, tree, tooltips and the board.
                 val briefs = MyAirSettings.getInstance().briefs
-                val scanned = inProjects(scanner.scan(desktop.read()).map { if (briefs) it else it.copy(brief = null) })
-                Triple(scanned, registry.read(), tabHeads(scanned))
+                val read = scanner.scan(desktop.read()).map { if (briefs) it else it.copy(brief = null) }
+                val current = registry.read()
+                val ids = read.mapTo(HashSet()) { it.id }
+                // Together, so a new session in a worktree finds its project among the directories the others ran in.
+                val (scanned, unscanned) = inProjects(read + unscannedSessions(read, current)).partition { it.id in ids }
+                Read(scanned, current, unscanned, tabHeads(scanned + unscanned))
             } catch (e: Throwable) {
                 thisLogger().error("Claude session refresh failed", e)
                 return@execute
@@ -134,7 +141,7 @@ class ClaudeSessionsService : Disposable {
                 val unreadChanged = updateBoard(scanned, current, pinned.settled)
                 // On every refresh, changed or not: an idle detached session changes nothing, yet its time runs out.
                 SessionTerminals.getInstance().retireIdle(current, scanned.associateBy { it.id }, Instant.now())
-                val next = State(scanned, current, pinned, read, error, heads)
+                val next = State(scanned, current, pinned, read, error, heads, unscanned)
                 if (loaded && !unreadChanged && next == state) return@invokeLater
                 if (failure != null && error != foldersError) thisLogger().error("Cannot read ${structure.file}", failure)
                 loaded = true
@@ -175,6 +182,10 @@ class ClaudeSessionsService : Disposable {
     }
 
     private fun changed() = listeners.forEach { it() }
+
+    private data class Read(
+        val scanned: List<ClaudeSession>, val live: Map<String, LiveSession>, val unscanned: List<ClaudeSession>, val heads: Map<Path, Git.Head?>,
+    )
 
     private fun retargetTabs() {
         val titles = sessions.associate { it.id to it.title }

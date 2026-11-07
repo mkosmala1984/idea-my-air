@@ -3,12 +3,13 @@ package dev.myair.service
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import org.junit.jupiter.api.Test
+import java.nio.file.Path
 import java.time.Instant
 import kotlin.test.assertEquals
 
 class TabRetargetingTest {
     private fun live(pid: Long, status: SessionStatus = SessionStatus.IDLE, job: String? = null, parkedBy: Set<Long> = emptySet()) =
-        LiveSession(pid, "cli", status, null, Instant.EPOCH, job, parkedBy)
+        LiveSession(pid, "cli", status, null, Instant.EPOCH, Path.of("/p"), Instant.EPOCH, job, parkedBy)
 
     private fun retarget(pid: Long?, live: Map<String, LiveSession>, titles: Map<String, String> = emptyMap(), job: String? = null) =
         retarget("old", "Old title", pid, job, live, titles)
