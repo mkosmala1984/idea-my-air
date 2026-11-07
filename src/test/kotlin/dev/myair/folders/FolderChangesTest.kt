@@ -61,6 +61,11 @@ class FolderChangesTest {
     }
 
     @Test
+    fun `set_workdir refuses a relative directory, though one resolves against the IDE's own`() {
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"set_workdir","path":"rtm","dir":"src"}]""") }
+    }
+
+    @Test
     fun `bind and unbind move a directory between folders`() {
         val bound = apply("""[{"op":"bind","path":"rtm","dir":"/app"},{"op":"unbind","dir":"/app"},{"op":"bind","path":"testflo","dir":"/app"}]""")
         assertEquals(listOf("/app"), bound.findByPath("testflo")!!.dirs)

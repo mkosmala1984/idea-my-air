@@ -88,7 +88,7 @@ object FolderChanges {
             "set_workdir" -> {
                 require(change.has("dir")) { "'dir' is missing (null clears the working directory)" }
                 val dir = if (change.get("dir").isJsonNull) null else Path.of(change.string("dir"))
-                require(dir == null || dir.isDirectory()) { "'$dir' is not a directory" }
+                require(dir == null || dir.isAbsolute && dir.isDirectory()) { "'$dir' is not an absolute directory" }
                 folders.setWorkdir(folders.at(change.string("path")).id, dir?.toString())
             }
             "rename" -> folders.rename(folders.at(change.string("path")).id, change.string("name"))
