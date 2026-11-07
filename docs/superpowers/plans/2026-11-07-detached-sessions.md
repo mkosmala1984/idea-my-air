@@ -5,8 +5,8 @@
 | 1 | done | `02ffec3` |
 | 2 | done | `0436d8d` |
 | 3 | done | `40f12b5` |
-| 4 | done | |
-| 5 | | |
+| 4 | done | `7239b6c` |
+| 5 | done | |
 
 ## TL;DR
 
@@ -72,7 +72,7 @@ Test `src/test/kotlin/dev/myair/editor/RetirementTest.kt`: the spec's table, and
 - CLAUDE.md: the editor paragraph (process ownership, prompt file lifetime, detached sessions in finders).
 - `docs/ideas.md`: the close/exit confirmation.
 
-- [ ] Commit.
+- [x] Commit.
 
 ## Verification
 
