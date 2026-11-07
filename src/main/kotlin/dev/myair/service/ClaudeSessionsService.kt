@@ -12,6 +12,8 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.ProjectManager
 import dev.myair.actions.Git
 import dev.myair.editor.ClaudeSessionVirtualFile
+import dev.myair.editor.SessionTerminals
+import java.time.Instant
 import dev.myair.editor.projectBase
 import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.claude.ClaudeHomeWatcher
@@ -130,6 +132,8 @@ class ClaudeSessionsService : Disposable {
                 val pinned = pinStore.update { it.prune(scanned, current) }
                 // Before the check below: a session the user looked at changes the board and nothing else.
                 val unreadChanged = updateBoard(scanned, current, pinned.settled)
+                // On every refresh, changed or not: an idle detached session changes nothing, yet its time runs out.
+                SessionTerminals.getInstance().retireIdle(current, scanned.associateBy { it.id }, Instant.now())
                 val next = State(scanned, current, pinned, read, error, heads)
                 if (loaded && !unreadChanged && next == state) return@invokeLater
                 if (failure != null && error != foldersError) thisLogger().error("Cannot read ${structure.file}", failure)
@@ -198,7 +202,8 @@ class ClaudeSessionsService : Disposable {
  */
 private fun tabHeads(sessions: List<ClaudeSession>): Map<Path, Git.Head?> {
     val projects = ProjectManager.getInstance().openProjects.toList()
-    val tabs = projects.flatMap { FileEditorManager.getInstance(it).openFiles.filterIsInstance<ClaudeSessionVirtualFile>() }
+    val tabs = projects.flatMap { FileEditorManager.getInstance(it).openFiles.filterIsInstance<ClaudeSessionVirtualFile>() } +
+        SessionTerminals.getInstance().detached().map { it.second }
     val dirs = sessions.flatMap { listOf(it.cwd, it.workDir, it.project) } + tabs.flatMap { listOf(it.cwd, it.project) } + projects.map(::projectBase)
     return dirs.distinct().associateWith(Git::head)
 }

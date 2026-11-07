@@ -18,6 +18,7 @@ import dev.myair.claude.LiveSession
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.Homes
 import dev.myair.store.PromptFiles
+import dev.myair.tabs.TabsSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -95,6 +96,7 @@ class SessionTerminals(private val scope: CoroutineScope) {
 
     /** Ends every detached process that [retires] at [now], reading its status from [live] by pid and its tasks from [sessions]. */
     fun retireIdle(live: Map<String, LiveSession>, sessions: Map<String, ClaudeSession>, now: Instant) {
+        val before = runtimes.size
         for ((project, file) in detached()) {
             val detachedAt = checkNotNull(runtimes.getValue(file).detachedAt)
             val status = live.values.firstOrNull { it.pid == file.pid }?.status
@@ -104,6 +106,8 @@ class SessionTerminals(private val scope: CoroutineScope) {
             thisLogger().info("claude for session ${file.sessionId} (pid ${file.pid}) ends: idle without a tab since $detachedAt in ${project.name}")
             close(file)
         }
+        // Other IDEs and the taskbar open a detached session here; one gone sends them elsewhere.
+        if (runtimes.size != before) TabsSync.getInstance().publish()
     }
 
     /** Ends the processes that last showed in [project], detached ones included. */

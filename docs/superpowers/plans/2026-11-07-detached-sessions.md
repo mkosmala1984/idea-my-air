@@ -2,9 +2,9 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
+| 1 | done | `02ffec3` |
+| 2 | done | `0436d8d` |
+| 3 | done | |
 | 4 | | |
 | 5 | | |
 
@@ -25,7 +25,7 @@
 
 Test `src/test/kotlin/dev/myair/editor/RetirementTest.kt`: the spec's table, and a task started before the process.
 
-- [ ] Write the test, see it fail, implement, see it pass. Commit.
+- [x] Write the test, see it fail, implement, see it pass. Commit.
 
 ## Task 2: `SessionTerminals` and the editor
 
@@ -49,7 +49,7 @@ Test `src/test/kotlin/dev/myair/editor/RetirementTest.kt`: the spec's table, and
 - `type()` uses the current view.
 - `dispose()` → `release`.
 
-- [ ] `./gradlew test buildPlugin` passes. Commit.
+- [x] `./gradlew test buildPlugin` passes (except `ContextCardsTest`, which fails the same on `33ac8f7`: `panel {}` needs an Application). Commit.
 
 ## Task 3: detached sessions everywhere a tab counts
 
@@ -58,7 +58,7 @@ Test `src/test/kotlin/dev/myair/editor/RetirementTest.kt`: the spec's table, and
 - `ClaudeSessionsService.retargetTabs` calls `SessionTerminals.retireIdle` after retargeting.
 - `CloseAndSettleAction` calls `close(file)` before closing the tab.
 
-- [ ] Tests pass, build passes. Commit.
+- [x] Tests pass, build passes. Commit.
 
 ## Task 4: setting and hint
 

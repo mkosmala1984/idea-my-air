@@ -14,6 +14,7 @@ import com.sun.jna.ptr.IntByReference
 import com.sun.jna.win32.StdCallLibrary
 import com.sun.jna.win32.W32APIOptions
 import dev.myair.editor.ClaudeSessionVirtualFile
+import dev.myair.editor.SessionTerminals
 import dev.myair.store.OpenTab
 import java.nio.file.Path
 
@@ -27,16 +28,20 @@ object SessionHosts {
     /** Air's editor tab file; it exposes the Claude session id through getThreadId() or getSessionId(). */
     private const val AIR_TAB_CLASS = "com.intellij.air.thread.view.AgentThreadViewVirtualFile"
 
+    /**
+     * The tab showing [sessionId], or the tab of a session whose process runs on without one ([SessionTerminals.detached]):
+     * [focus] reopens that, and the new tab shows the same process.
+     */
     fun findTab(sessionId: String): SessionTab? = ProjectManager.getInstance().openProjects.firstNotNullOfOrNull { project ->
         FileEditorManager.getInstance(project).openFiles.firstOrNull { sessionId in sessionIds(it).orEmpty() }?.let { SessionTab(project, it) }
-    }
+    } ?: SessionTerminals.getInstance().detached().firstOrNull { (_, file) -> file.sessionId == sessionId }?.let { (project, file) -> SessionTab(project, file) }
 
-    /** Every session tab in this IDE, for the other IDEs to see. */
+    /** Every session tab in this IDE, and every detached session, which another IDE opens here too, for the other IDEs to see. */
     fun openTabs(): List<OpenTab> = ProjectManager.getInstance().openProjects.flatMap { project ->
         FileEditorManager.getInstance(project).openFiles.mapNotNull { file ->
             sessionIds(file)?.let { OpenTab(it, (file as? ClaudeSessionVirtualFile)?.title ?: file.presentableName, project.name) }
         }
-    }
+    } + SessionTerminals.getInstance().detached().map { (project, file) -> OpenTab(listOf(file.sessionId), file.title, project.name) }
 
     /** Sessions whose tab is selected in a project window that is active now: what the user looks at. */
     fun visibleSessions(): List<String> = ProjectManager.getInstance().openProjects.filter { WindowManager.getInstance().getFrame(it)?.isActive == true }

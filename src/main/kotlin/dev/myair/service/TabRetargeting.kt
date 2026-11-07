@@ -5,6 +5,7 @@ import com.intellij.openapi.project.ProjectManager
 import dev.myair.claude.LiveSession
 import dev.myair.actions.Git
 import dev.myair.editor.ClaudeSessionVirtualFile
+import dev.myair.editor.SessionTerminals
 import dev.myair.editor.TabMark
 import dev.myair.editor.projectBase
 import dev.myair.editor.tabMark
@@ -23,7 +24,7 @@ fun retarget(sessionId: String, title: String, pid: Long?, live: Map<String, Liv
 }
 
 /**
- * Points every open session tab at the session its process shows now, with that session's title, status, [unread] and
+ * Points every open session tab, and every detached session ([SessionTerminals.detached]), at the session its process shows now, with that session's title, status, [unread] and
  * [TabMark] (from where it works, [workDirs], else where the tab started, and the work trees [heads] holds), and publishes
  * the tabs to the other IDEs when a session or title changed. Returns the session switches, from to to.
  */
@@ -35,7 +36,8 @@ fun retargetOpenTabs(
     for (project in ProjectManager.getInstance().openProjects) {
         val editors = FileEditorManagerEx.getInstanceEx(project)
         val base = projectBase(project)
-        for (file in editors.openFiles.filterIsInstance<ClaudeSessionVirtualFile>()) {
+        val open = editors.openFiles.filterIsInstance<ClaudeSessionVirtualFile>()
+        for (file in open + SessionTerminals.getInstance().detached().filter { it.first == project }.map { it.second }) {
             val (sessionId, title) = retarget(file.sessionId, file.title, file.pid, live, titles)
             // By pid rather than session id: another process may run the same session ("Open Anyway").
             val status = live.values.firstOrNull { it.pid == file.pid }?.status
@@ -50,7 +52,7 @@ fun retargetOpenTabs(
             file.status = status
             file.unread = isUnread
             file.mark = mark
-            editors.updateFilePresentation(file)
+            if (file in open) editors.updateFilePresentation(file)
         }
     }
     if (changed) TabsSync.getInstance().publish()
