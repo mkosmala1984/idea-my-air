@@ -10,17 +10,24 @@ import java.nio.file.Path
 
 /**
  * A user folder of Folders mode; toString() is the node id TreeState keeps expansion and selection by. A folder bound to
- * [dirs] also holds the sessions of those directories filed nowhere else; one with a [plan] is a plan folder.
+ * [dirs] also holds the sessions of those directories filed nowhere else; one with a [plan] is a plan folder. Sessions
+ * started from it or a folder below it run in [workdir], which holds no session and may be any folder's too.
  */
 data class Folder(
     val id: String, val name: String, val folders: List<Folder> = emptyList(), val items: List<Item> = emptyList(),
-    val dirs: List<String> = emptyList(), val plan: Plan? = null,
+    val dirs: List<String> = emptyList(), val plan: Plan? = null, val workdir: String? = null,
 ) {
     override fun toString() = id
+
+    /** Where a session started from this folder runs: its [workdir], else its first bound directory. */
+    val startDir: String? get() = workdir ?: dirs.firstOrNull()
 
     /** This folder and every folder below it. */
     fun subtree(): Sequence<Folder> = sequenceOf(this) + folders.asSequence().flatMap { it.subtree() }
 }
+
+/** The folder of [ancestry] (top-down) that decides where a session started from its last one runs: the nearest with a [Folder.startDir]. */
+fun startFolder(ancestry: List<Folder>): Folder? = ancestry.lastOrNull { it.startDir != null }
 
 /** Something filed in a folder. Version 1 knows only sessions; a new type extends [SessionFolders.parse], it is never skipped. */
 data class Item(val type: String, val id: String)
@@ -42,6 +49,7 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         val dirs = all.flatMap { it.dirs }
         dirs.forEach { require(it.isNotBlank()) { "blank directory in ${all.filter { f -> it in f.dirs }.map { f -> f.id }}" } }
         require(dirs.duplicates().isEmpty()) { "directories bound twice: ${dirs.duplicates()}" }
+        all.filter { it.workdir?.isBlank() == true }.let { require(it.isEmpty()) { "blank working directory in ${it.map { f -> f.id }}" } }
         (sequenceOf(folders) + all.asSequence().map { it.folders }).forEach { siblings ->
             siblings.forEach { require(it.name.isNotBlank() && it.name == it.name.trim() && '/' !in it.name && it.name.none(Char::isISOControl)) { "bad folder name '${it.name}'" } }
             require(siblings.map { it.name.lowercase() }.duplicates().isEmpty()) { "duplicate folder names among ${siblings.map { it.name }}" }
@@ -71,6 +79,9 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
      * directory are two rows that bind separately.
      */
     fun projectFolder(cwd: Path) = all().flatMap { f -> f.dirs.asSequence().map { f to it } }.filter { cwd.isAtOrUnder(it.second) }.maxByOrNull { it.second.length }?.first
+
+    /** The folder deciding where a session started from folder [id] runs ([startFolder]). */
+    fun startFolder(id: String) = startFolder(ancestry(id))
 
     /** The folders from the top level down to [id], inclusive; empty when there is no such folder. */
     fun ancestry(id: String): List<Folder> {
@@ -203,6 +214,9 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
     /** Binds [dir] to the folder; its sessions filed nowhere else show there. */
     fun bind(folderId: String, dir: String) = if (find(folderId) == null) this else edit(folderId) { it.copy(dirs = it.dirs + dir) }
 
+    /** Sets the folder's working directory, or clears it with null. */
+    fun setWorkdir(folderId: String, dir: String?) = if (find(folderId) == null) this else edit(folderId) { it.copy(workdir = dir) }
+
     /** Unbinds [dir] from whichever folder it is bound to. */
     fun unbind(dir: String) = copy(folders = folders.map { it.mapSubtree { f -> f.copy(dirs = f.dirs - dir) } })
 
@@ -291,10 +305,10 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         const val SESSION = "session"
         /**
          * Version 2 added a folder's bound `project`; version 3 made it a list, [Folder.dirs], and added [Folder.plan] and
-         * [nextId]; version 4 added [unfiled]. Older files read as the same structure without what came later.
+         * [nextId]; version 4 added [unfiled] and later an optional [Folder.workdir], written only when set. Older files read as the same structure without what came later.
          */
         private const val VERSION = 4
-        private val FOLDER_FIELDS = mapOf(1 to setOf("id", "name", "folders", "items"), 2 to setOf("id", "name", "folders", "items", "project"), 3 to setOf("id", "name", "folders", "items", "dirs", "plan"), 4 to setOf("id", "name", "folders", "items", "dirs", "plan"))
+        private val FOLDER_FIELDS = mapOf(1 to setOf("id", "name", "folders", "items"), 2 to setOf("id", "name", "folders", "items", "project"), 3 to setOf("id", "name", "folders", "items", "dirs", "plan"), 4 to setOf("id", "name", "folders", "items", "dirs", "plan", "workdir"))
 
         /** Reads `structure.json`, throwing on anything it does not know rather than skipping it. */
         fun parse(text: String): SessionFolders {
@@ -322,6 +336,7 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
                     else -> listOfNotNull(json.get("project")?.asString)
                 },
                 json.get("plan")?.asJsonObject?.let(::plan),
+                json.get("workdir")?.asString,
             )
         }
 

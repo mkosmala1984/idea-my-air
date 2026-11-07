@@ -8,6 +8,7 @@ import java.nio.file.Path
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -237,5 +238,31 @@ class SessionFoldersTest {
     fun `a session both filed and unfiled throws`() {
         assertThrows<IllegalArgumentException> { SessionFolders(listOf(Folder("f", "f", items = listOf(Item(SessionFolders.SESSION, "s")))), unfiled = listOf("s")) }
         assertThrows<IllegalArgumentException> { SessionFolders(unfiled = listOf("s", "s")) }
+    }
+
+    @Test
+    fun `version 4 round-trips a working directory and writes none when unset`() {
+        val set = tree.setWorkdir("fix", "/dev/rtm")
+        assertEquals(set, SessionFolders.parse(set.toJson()))
+        assertFalse("workdir" in tree.toJson())
+    }
+
+    @Test
+    fun `a working directory may repeat and may equal a bound directory, but not be blank`() {
+        val shared = tree.bind("rtm", "/dev/rtm").setWorkdir("fix", "/dev/rtm").setWorkdir("tf", "/dev/rtm")
+        assertEquals("/dev/rtm", shared.find("fix")!!.workdir)
+        assertThrows<IllegalArgumentException> { tree.setWorkdir("fix", " ") }
+    }
+
+    @Test
+    fun `the nearest folder with a working directory or a bound one decides, its working directory first`() {
+        val f = tree.bind("rtm", "/bound").createFolder("fix", "deep", "deep")
+        assertEquals("/bound", f.startFolder("deep")!!.startDir)
+        val w = f.setWorkdir("fix", "/work")
+        assertEquals("fix", w.startFolder("deep")!!.id)
+        assertEquals("/work", w.setWorkdir("rtm", "/other").startFolder("deep")!!.startDir)
+        assertEquals("/other", w.setWorkdir("rtm", "/other").startFolder("rtm")!!.startDir)
+        assertEquals("/gone", tree.setWorkdir("tf", "/gone").startFolder("tf")!!.startDir)
+        assertNull(tree.startFolder("tf"))
     }
 }
