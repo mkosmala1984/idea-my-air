@@ -22,8 +22,13 @@ enum class SessionStatus {
  * [pid] is the `claude` process running the session; it keeps its pid when `/clear` or `/resume` switch it to another
  * session. [entrypoint] is what started it, e.g. "cli" or "claude-desktop". [waitingFor] says what a
  * [SessionStatus.NEEDS_INPUT] session is blocked on, e.g. "dialog open". [since] is when [status] last changed.
+ * [job]: the background job (`claude --bg`, `/bg`) the process runs the session for, which `claude attach <job>` opens;
+ * [pid] is then the job's worker. [parkedBy]: the interactive `claude` processes that `/bg` parked into this job, which show it.
  */
-data class LiveSession(val pid: Long, val entrypoint: String, val status: SessionStatus, val waitingFor: String?, val since: Instant)
+data class LiveSession(
+    val pid: Long, val entrypoint: String, val status: SessionStatus, val waitingFor: String?, val since: Instant,
+    val job: String? = null, val parkedBy: Set<Long> = emptySet(),
+)
 
 /**
  * Reads `~/.claude/sessions/<pid>.json`, which every running `claude` process keeps up to date.
@@ -33,13 +38,34 @@ class LiveSessionRegistry(
     private val dir: Path,
     private val isSameProcess: (pid: Long, procStart: Long) -> Boolean = ::isSameProcess,
 ) {
-    fun read(): Map<String, LiveSession> = dir.listDirectoryEntries("*.json").mapNotNull(::entry).toMap()
+    /** One record per session; a job's worker wins over another process of the session, which would only show it. */
+    fun read(): Map<String, LiveSession> {
+        val (parked, running) = dir.listDirectoryEntries("*.json").mapNotNull(::entry).partition { it.parkedJob != null }
+        val parkedBy = parked.groupBy({ it.parkedJob }, { it.live.pid })
+        return running.groupBy { it.sessionId }.mapValues { (_, records) ->
+            val live = (records.firstOrNull { it.live.job != null } ?: records.last()).live
+            if (live.job == null) live else live.copy(parkedBy = parkedBy[live.job].orEmpty().toSet())
+        }
+    }
 
-    /** The entry [file] holds, or null when its process is gone or has not reported a status yet. */
-    internal fun entry(file: Path): Pair<String, LiveSession>? {
+    /** What one file says; [parkedJob]: the job `/bg` parked this interactive process into, whose session it shows. */
+    internal class Record(val sessionId: String, val live: LiveSession, val parkedJob: String?)
+
+    /**
+     * The record [file] holds, or null when its process is gone or has not reported a status yet, or when it runs no
+     * conversation: a daemon, or a spare worker started ahead for the next job, both of which claude's own lists leave out.
+     */
+    internal fun entry(file: Path): Record? {
         // A `claude` that exits between the listing and this read has deleted its file: the process is gone.
         val text = try { file.readText() } catch (_: NoSuchFileException) { return null }
         val o = JsonParser.parseString(text).asJsonObject
+        if (o["spare"]?.asBoolean == true) return null
+        val bg = when (val kind = checkNotNull(o["kind"]) { "no kind in $file" }.asString) {
+            "interactive" -> false
+            "bg" -> true
+            "daemon", "daemon-worker" -> return null
+            else -> error("unknown session kind '$kind' in $file")
+        }
         val pid = o["pid"].asLong
         val procStart = checkNotNull(o["procStart"]) { "no procStart in $file" }.asString.toLong()
         if (!isSameProcess(pid, procStart)) return null
@@ -53,7 +79,9 @@ class LiveSessionRegistry(
             else -> error("unknown session status '$s' in $file")
         }
         val entrypoint = checkNotNull(o["entrypoint"]) { "no entrypoint in $file" }.asString
-        return o["sessionId"].asString to LiveSession(pid, entrypoint, status, o["waitingFor"]?.asString, Instant.ofEpochMilli(since))
+        val job = if (bg) checkNotNull(o["jobId"]) { "no jobId in $file" }.asString else null
+        val live = LiveSession(pid, entrypoint, status, o["waitingFor"]?.asString, Instant.ofEpochMilli(since), job)
+        return Record(o["sessionId"].asString, live, o["parkedJobId"]?.asString)
     }
 
     companion object {
