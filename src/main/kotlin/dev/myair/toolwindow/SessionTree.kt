@@ -9,6 +9,7 @@ import dev.myair.folders.Folder
 import dev.myair.folders.Milestone
 import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
+import dev.myair.folders.startFolder
 import java.nio.file.Path
 import java.util.UUID
 import kotlin.io.path.extension
@@ -160,11 +161,12 @@ fun targetFolder(path: TreePath): String? = path.path.map { (it as DefaultMutabl
 
 /**
  * The directory a session started from the node at [path] runs in: a project row's, or for a folder or a row of its plan
- * the first directory bound to it or to the nearest folder above it; null for any other node.
+ * the working directory or first bound directory of it or the nearest folder above it having either ([startFolder]);
+ * null for any other node.
  */
 fun nodeDir(path: TreePath): Path? = when (val item = (path.lastPathComponent as DefaultMutableTreeNode).userObject) {
     is Path -> item
-    is Folder, is MilestoneRow, is PlanTaskRow, is NoTask -> path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>().lastOrNull { it.dirs.isNotEmpty() }?.dirs?.first()?.let(Path::of)
+    is Folder, is MilestoneRow, is PlanTaskRow, is NoTask -> startFolder(path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>())?.startDir?.let(Path::of)
     else -> null
 }
 

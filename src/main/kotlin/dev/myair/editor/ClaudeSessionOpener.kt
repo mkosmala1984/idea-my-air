@@ -62,7 +62,8 @@ object ClaudeSessionOpener {
 
     /**
      * Starts `claude` with [args] in [cwd], which is [sessionProject] or one of its worktrees; the tab opens in [project].
-     * With [plan], the session is filed in that plan folder first, so it shows there and its tab adds the plan to its prompt.
+     * It is filed in [folderId] first (by default [plan]'s folder), so it shows there; with [plan] its tab adds the plan
+     * to its prompt.
      */
     fun startNew(
         project: Project,
@@ -71,8 +72,9 @@ object ClaudeSessionOpener {
         id: String = UUID.randomUUID().toString(),
         args: List<String> = emptyList(),
         plan: PlanStart? = null,
+        folderId: String? = plan?.folderId,
     ) {
-        plan?.let { ClaudeSessionsService.getInstance().updateFolders(ChangeSource.UI) { folders -> folders.assign(id, it.folderId) } }
+        folderId?.let { ClaudeSessionsService.getInstance().updateFolders(ChangeSource.UI) { folders -> folders.assign(id, it) } }
         val file = ClaudeSessionVirtualFile(id, cwd, sessionProject, NEW_SESSION_TITLE, listOf("--session-id", id) + args, planStart = plan)
         openTab(project, file)
         // The tab just opened with focus, so the current window holds it.

@@ -221,8 +221,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         PopupHandler.installPopupMenu(
             tree,
             DefaultActionGroup(
-                NewSessionInDirAction("New Claude Session", false, selectedDir, editing::selectedPlanStart),
-                NewSessionInDirAction("New Claude Session in Worktree...", true, selectedDir, editing::selectedPlanStart),
+                NewSessionInDirAction("New Claude Session", false, selectedDir, editing::selectedPlanStart) { editing.selectedFolder()?.id },
+                NewSessionInDirAction("New Claude Session in Worktree...", true, selectedDir, editing::selectedPlanStart) { editing.selectedFolder()?.id },
                 openInIdeaAction(selectedOpenDir), openInTerminalAction(selectedOpenDir), Separator.getInstance(),
                 pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree),
                 Separator.getInstance(), newFolder, rename, delete, Separator.getInstance(), *planActions.toTypedArray(),

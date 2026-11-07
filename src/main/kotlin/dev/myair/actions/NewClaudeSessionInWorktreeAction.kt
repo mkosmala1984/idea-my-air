@@ -53,7 +53,7 @@ fun popupPoint(e: AnActionEvent): RelativePoint {
  */
 fun startInWorktree(
     project: Project, dir: Path, base: String?, args: List<String>, where: RelativePoint, plan: PlanStart? = null,
-    branch: String? = null, askBranch: Boolean = false,
+    branch: String? = null, askBranch: Boolean = false, folderId: String? = plan?.folderId,
 ) = background(project, "Reading branches", { Git.repo(dir) }) { repo ->
     require(branch == null || !askBranch) { "a branch named and asked for" }
     fun create(base: String, branch: String?) {
@@ -61,7 +61,7 @@ fun startInWorktree(
         val running = runningDirs()
         background(project, "Creating worktree", { createWorktree(repo, base, branch, id, running) }) { path ->
             rememberBase(repo, base)
-            ClaudeSessionOpener.startNew(project, dir, path, id, args, plan)
+            ClaudeSessionOpener.startNew(project, dir, path, id, args, plan, folderId)
         }
     }
     fun picked(base: String) = if (askBranch) branchPopup(project, dir, base) { create(base, it) }.show(where) else create(base, branch)

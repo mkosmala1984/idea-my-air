@@ -8,6 +8,7 @@ import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import dev.myair.claude.TaskStatus
 import dev.myair.folders.Folder
+import dev.myair.folders.Plan
 import dev.myair.folders.SessionFolders
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -150,6 +151,25 @@ class SessionTreeTest {
         assertNull(nodeDir(pathTo(3, 0, 0)))
         val projects = projectsTree(sessions, NO_BRANCH)
         assertEquals(Path.of("/rtm"), nodeDir(TreePath(arrayOf(projects, projects.getChildAt(0)))))
+    }
+
+    @Test
+    fun `a folder's working directory gives the directory below it, a nearer one or binding winning, kept though missing`() {
+        val work = Path.of("/work").toString()
+        val bound = structure.setWorkdir("empty", work).createFolder("empty", "p", "rtm", dirs = listOf(Path.of("/rtm").toString())).createFolder("p", "sub", "sub")
+        fun dirs(folders: SessionFolders): (IntArray) -> Path? {
+            val root = foldersTree(folders, sessions, NO_BRANCH, null)
+            return { indices -> nodeDir(TreePath(indices.fold(listOf(root)) { nodes, i -> nodes + nodes.last().getChildAt(i) as DefaultMutableTreeNode }.toTypedArray())) }
+        }
+        assertEquals(Path.of("/work"), dirs(bound)(intArrayOf(1)))
+        assertEquals(Path.of("/rtm"), dirs(bound)(intArrayOf(1, 0)))
+        assertEquals(Path.of("/rtm"), dirs(bound)(intArrayOf(1, 0, 0)))
+        val worked = bound.setWorkdir("p", Path.of("/gone").toString())
+        assertEquals(Path.of("/gone"), dirs(worked)(intArrayOf(1, 0, 0)))
+        val planned = structure.setWorkdir("empty", work).createFolder("empty", "plan", "plan", plan = Plan()).addMilestone("plan", "first")
+        val withTask = planned.addTask(planned.find("plan")!!.plan!!.milestones.single().id, "task")
+        assertEquals("rtm(fix, s3, s1), empty(plan(M1(T2))), recent(s3, s2, s1), sessions(${Path.of("/tf")}(s2))", shape(foldersTree(withTask, sessions, NO_BRANCH, null)))
+        assertEquals(Path.of("/work"), dirs(withTask)(intArrayOf(1, 0, 0, 0)))
     }
 
     @Test
