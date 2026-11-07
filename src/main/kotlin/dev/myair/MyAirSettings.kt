@@ -46,6 +46,9 @@ class MyAirSettings : SimplePersistentStateComponent<MyAirSettings.Options>(Opti
         /** Width of the terminal in session tabs, centered in a wider tab; 0 fills the tab. */
         var terminalColumns by property(0)
 
+        /** A session tab that closes leaves its `claude` running until it is idle ([dev.myair.editor.SessionTerminals]). */
+        var keepDetached by property(true)
+
         /** The tools Haiku may call to read a Jira issue when it names a branch, separated by spaces. */
         var jiraTools by string("mcp__atlassian__getJiraIssue mcp__atlassian__getAccessibleAtlassianResources")
     }
@@ -59,6 +62,8 @@ class MyAirSettings : SimplePersistentStateComponent<MyAirSettings.Options>(Opti
     val fileSessions: Boolean get() = state.briefs && state.fileSessions
 
     val terminalColumns: Int get() = state.terminalColumns
+
+    val keepDetached: Boolean get() = state.keepDetached
 
     companion object {
         fun getInstance(): MyAirSettings = service()

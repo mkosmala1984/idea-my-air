@@ -33,6 +33,7 @@
 
   <applicationListeners>
     <listener class="dev.myair.tabs.SeenOnActivation" topic="com.intellij.openapi.application.ApplicationActivationListener"/>
+    <listener class="dev.myair.editor.SessionTerminals$ProjectClose" topic="com.intellij.openapi.project.ProjectCloseListener"/>
   </applicationListeners>
 
   <projectListeners>
