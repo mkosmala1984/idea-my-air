@@ -27,7 +27,7 @@ Tools › Install My Air Build and Restart (`InstallMyAirBuildAction`, shown onl
 - Compiles against the locally installed IDE (`local("E:/dev/apps/jetbrains/IntelliJ IDEA Ultimate")`, IU-263.7307.200; `sinceBuild` 263), not a downloaded one. Its classes are Java 25 (class version 69), hence `jvmToolchain(25)` with the IDE's own JBR registered in `gradle.properties`.
 - Tests are plain JUnit 5 without the IntelliJ test framework. IDE jars are on the test classpath, so tests may use libraries the IDE ships (Gson, JNA), but not platform services. Keep logic that needs tests out of IDE-service code, as `retarget` (`TabRetargeting.kt`) and `TabStore` are.
 - `ClaudeHomeWatcherTest` and `TabStoreTest` measure real file-system events and timings.
-- `air-plugin/` is the unpacked JetBrains Air plugin (gitignored), kept as a reference only: inspect it with `javap`, never put it on the classpath.
+- `air-plugin/` is the unpacked JetBrains Air plugin (gitignored), kept as a reference only: inspect it with `javap`, never put it on the classpath. `docs/air-plugin-analysis.md` says how to decompile and search it and what its session tabs do; add what a new analysis finds there.
 
 ## Where the data comes from
 
