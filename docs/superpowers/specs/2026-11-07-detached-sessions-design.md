@@ -5,10 +5,7 @@
 - **Goal:** closing a session tab no longer kills `claude` mid-turn. The process detaches and keeps working. It ends once it has been detached for at least 60 s and is idle. This is what Air 263 does (`DetachedTerminalRetirement`).
 - **Approach:** the terminal moves from the editor into an application service, `SessionTerminals`. It is built on the platform's `TransferableTerminalSession` (internal API, the one Air 263 uses), which keeps the process apart from its view: `bind(project)` gives a new `TerminalView` to a live process, `close()` ends it. The editor binds on open and only lets go on dispose. Reopening the session from anywhere binds again, with no second process.
 - **Retirement rule:** a pure function `retires(detachedFor, status, runningTasks)`. It is checked on every `ClaudeSessionsService` refresh (file events, and at least every 60 s).
-- **Decisions for you:**
-  1. Does a detached session that **needs input** (a permission prompt) stay alive until answered? Recommended: yes. Killing it drops the pending tool call.
-  2. Should the new setting "Keep sessions running after their tab closes" default to **on**? Recommended: on.
-  3. Should closing a project or exiting the IDE with detached sessions still running **ask first**, as Air does? Recommended: not in this change.
+- **Decided (2026-11-07):** a detached session that **needs input** stays alive until answered; the setting "Keep sessions running after their tab closes" defaults to **on**; asking before closing a project or exiting the IDE with detached sessions is a later improvement (`docs/ideas.md`), not this change.
 - **Risks:** `TransferableTerminalSession` is `@ApiStatus.Internal` and may change in the next build. Retiring kills background tasks that the transcript does not show as running.
 - **Out of scope:** keeping sessions across an IDE restart (Air's `claude --bg` daemon mode), moving a detached session to another IDE process, showing detached sessions differently in the tree.
 
@@ -62,7 +59,7 @@ fun retires(detachedFor: Duration, status: SessionStatus?, runningTasks: Int): B
 | `IDLE` | 0 | 60 s | yes |
 | `IDLE` | 1 | 10 min | no (a background shell or Monitor of this process still runs) |
 | `WORKING` | 0 | 10 min | no |
-| `NEEDS_INPUT` | 0 | 10 min | no (decision 1; with "no", this row retires) |
+| `NEEDS_INPUT` | 0 | 10 min | no |
 | null (not registered yet) | 0 | 10 min | no; a process that never registers ends through `sessionState` instead |
 
 `runningTasks` counts the session's `BackgroundTask`s with `end == null` that started at or after the process's own start (`ProcessHandle.of(pid).info().startInstant()`). Tasks of an earlier process stay open in the transcript forever (the transcript does not record that they died) and must not keep a new process alive.
@@ -114,7 +111,7 @@ These iterate `openFiles` today. Each also takes `SessionTerminals.detached()`, 
 
 ### Setting
 
-`MyAirSettings.keepDetached` ("Keep sessions running after their tab closes", Settings › Tools › My Air), default per decision 2. Off: `release` calls `close`.
+`MyAirSettings.keepDetached` ("Keep sessions running after their tab closes", Settings › Tools › My Air), on by default. Off: `release` calls `close`.
 
 ## Verification
 
