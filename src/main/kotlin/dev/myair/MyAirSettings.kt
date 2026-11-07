@@ -96,6 +96,11 @@ class MyAirConfigurable : BoundConfigurable("My Air") {
             spinner(0..1000).bindIntValue(MyAirSettings.getInstance().state::terminalColumns)
                 .comment("Columns of the claude terminal, centered in a wider tab. 0 fills the tab.")
         }
+        row {
+            checkBox("Keep sessions running after their tab closes")
+                .bindSelected(MyAirSettings.getInstance().state::keepDetached)
+                .comment("claude goes on without the tab and ends once it has been idle for a minute with no background task of its own. Open the session again to see it. Close and Settle ends it at once.")
+        }
         row("Jira tools for branch names:") {
             textField().bindText(MyAirSettings.getInstance().state::jiraTools.toNonNullableProperty("")).columns(COLUMNS_LARGE)
                 .comment("MCP tools Haiku may call to read the Jira issue a task names when it suggests a branch name, separated by spaces.")

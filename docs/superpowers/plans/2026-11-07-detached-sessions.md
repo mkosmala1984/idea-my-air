@@ -4,8 +4,8 @@
 |---|---|---|
 | 1 | done | `02ffec3` |
 | 2 | done | `0436d8d` |
-| 3 | done | |
-| 4 | | |
+| 3 | done | `40f12b5` |
+| 4 | done | |
 | 5 | | |
 
 ## TL;DR
@@ -65,7 +65,7 @@ Test `src/test/kotlin/dev/myair/editor/RetirementTest.kt`: the spec's table, and
 - `MyAirSettings.keepDetached` (default true), with a checkbox in `MyAirConfigurable`.
 - When a tab closes on a `WORKING` session with the setting on, a balloon shows once per IDE run (notification group `My Air`).
 
-- [ ] Build passes. Commit.
+- [x] Build passes. Commit.
 
 ## Task 5: docs
 

@@ -29,6 +29,7 @@
     <editorTabColorProvider implementation="dev.myair.editor.ClaudeSessionTabColorProvider"/>
     <postStartupActivity implementation="dev.myair.tabs.TabsSyncStartup"/>
     <editorEmptyStateComponentProvider implementation="dev.myair.prompt.PromptEmptyState"/>
+    <notificationGroup id="My Air" displayType="BALLOON"/>
   </extensions>
 
   <applicationListeners>

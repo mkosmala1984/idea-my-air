@@ -15,6 +15,9 @@ import com.intellij.util.concurrency.ThreadingAssertions
 import dev.myair.MyAirSettings
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.Homes
 import dev.myair.store.PromptFiles
@@ -54,6 +57,9 @@ class SessionTerminals(private val scope: CoroutineScope) {
 
     private val runtimes = HashMap<ClaudeSessionVirtualFile, Runtime>()
 
+    /** Whether this run already said that a closed tab leaves its session working. */
+    private var hinted = false
+
     /** Shows [file]'s process in [editor], starting it on first use; the editor that showed it before gets [ClaudeSessionEditor.showElsewhere]. */
     fun attach(file: ClaudeSessionVirtualFile, editor: ClaudeSessionEditor, project: Project) {
         ThreadingAssertions.assertEventDispatchThread()
@@ -80,6 +86,12 @@ class SessionTerminals(private val scope: CoroutineScope) {
         runtime.owner = null
         runtime.detachedAt = Instant.now()
         thisLogger().info("claude for session ${file.sessionId} (pid ${file.pid}) runs on without a tab")
+        if (file.status == SessionStatus.WORKING && !hinted) {
+            hinted = true
+            NotificationGroupManager.getInstance().getNotificationGroup("My Air")
+                .createNotification("\"${file.title}\" keeps working. Open it again from Claude Sessions.", NotificationType.INFORMATION)
+                .notify(runtime.project)
+        }
     }
 
     /** Ends [file]'s process now; nothing when it has none. */
