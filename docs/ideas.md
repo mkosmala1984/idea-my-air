@@ -7,4 +7,3 @@
 - nowy worktree bez tworzenia brancha, lub usuwa istniejący worktree z tym branchem jeżeli można
 - inny kolor/oznaczenie zakładki gdy inny branch/worktree
 - branch diff-synchronizacja z aktywną sesją, wyswietla diff obecnego brancha sesji z ostatnich branchem
-- pytanie przy zamykaniu projektu albo IDE, gdy działają odczepione sesje (jak w Air 263)

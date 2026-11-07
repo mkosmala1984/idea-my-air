@@ -3,8 +3,8 @@
 | Task | Status | Commit |
 |---|---|---|
 | 1 | done | `cd539b42f1` |
-| 2 | done | |
-| 3 | | |
+| 2 | done | `c85a0edf86` |
+| 3 | done (manual sandbox check open) | |
 
 ## TL;DR
 
@@ -33,7 +33,7 @@ Files: `SessionTerminals.kt`, `CloseConfirmation.kt`, `plugin.xml`.
 
 ## Task 3: docs and build
 
-- [ ] CLAUDE.md: the `SessionTerminals` paragraph names the questions; the Install action line says it asks when a session works. `docs/ideas.md`: drop the idea.
-- [ ] `./gradlew test buildPlugin` (4 `ContextCardsTest` failures predate this change).
+- [x] CLAUDE.md: the `SessionTerminals` paragraph names the questions; the Install action line says it asks when a session works. `docs/ideas.md`: drop the idea.
+- [x] `./gradlew test buildPlugin` (4 `ContextCardsTest` failures predate this change).
 - [ ] Manual check in the sandbox, not done by the agent: close a project with a working session (Keep Open keeps it, Close Project ends it); exit with one working and one idle session (only the working one is listed); Install My Air Build and Restart with a working session.
-- [ ] Commit.
+- [x] Commit.
