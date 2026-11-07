@@ -54,4 +54,22 @@ class RetirementTest {
     fun `a process whose start is unknown runs no task`() {
         assertEquals(0, runningTasks(listOf(task("t", start)), null))
     }
+
+    @Test
+    fun `closing a tab detaches a started process when sessions are kept or the tab reopens`() {
+        assertEquals(Release.DETACH, releaseOf(owns = true, started = true, ended = false, keep = true, reopening = false))
+        assertEquals(Release.DETACH, releaseOf(owns = true, started = true, ended = false, keep = false, reopening = true))
+        assertEquals(Release.CLOSE, releaseOf(owns = true, started = true, ended = false, keep = false, reopening = false))
+    }
+
+    @Test
+    fun `closing a tab ends a process that never started or already ended`() {
+        assertEquals(Release.CLOSE, releaseOf(owns = true, started = false, ended = false, keep = true, reopening = true))
+        assertEquals(Release.CLOSE, releaseOf(owns = true, started = true, ended = true, keep = true, reopening = false))
+    }
+
+    @Test
+    fun `a tab that does not show the process leaves it alone`() {
+        assertEquals(Release.IGNORE, releaseOf(owns = false, started = true, ended = false, keep = false, reopening = false))
+    }
 }

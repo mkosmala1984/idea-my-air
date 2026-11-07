@@ -22,3 +22,18 @@ fun retires(detachedFor: Duration, status: SessionStatus?, runningTasks: Int): B
  */
 fun runningTasks(tasks: List<BackgroundTask>, processStart: Instant?): Int =
     if (processStart == null) 0 else tasks.count { it.end == null && it.started >= processStart }
+
+/** What closing a session tab does to its process. */
+enum class Release { IGNORE, CLOSE, DETACH }
+
+/**
+ * A tab that does not show the process ([owns]) leaves it alone. One that does ends it when it never started (it starts only
+ * once a view shows, so it never would) or already ended, and when sessions are not kept, unless the platform closes the
+ * tab to reopen it ([reopening], a move to another window); otherwise it runs on, detached.
+ */
+fun releaseOf(owns: Boolean, started: Boolean, ended: Boolean, keep: Boolean, reopening: Boolean): Release = when {
+    !owns -> Release.IGNORE
+    !started || ended -> Release.CLOSE
+    keep || reopening -> Release.DETACH
+    else -> Release.CLOSE
+}

@@ -75,14 +75,16 @@ class SessionTerminals(private val scope: CoroutineScope) {
         editor.show(session.bind(project))
     }
 
-    /**
-     * [editor] closes. A process [editor] does not show is left alone; one it shows ends, unless sessions are kept or the
-     * platform closes the tab to reopen it (a move to another window), and is otherwise detached.
-     */
+    /** [editor] closes: its process ends, runs on detached or is left to the tab now showing it ([releaseOf]). */
     fun release(file: ClaudeSessionVirtualFile, editor: ClaudeSessionEditor) {
-        val runtime = runtimes[file]?.takeIf { it.owner == editor } ?: return
-        if (runtime.ended) return close(file)
-        if (!MyAirSettings.getInstance().keepDetached && file.getUserData(FileEditorManagerKeys.CLOSING_TO_REOPEN) != true) return close(file)
+        val runtime = runtimes[file] ?: return
+        val started = runtime.session.let { it != null && it.sessionState.value != TerminalViewSessionState.NotStarted }
+        val reopening = file.getUserData(FileEditorManagerKeys.CLOSING_TO_REOPEN) == true
+        when (releaseOf(runtime.owner == editor, started, runtime.ended, MyAirSettings.getInstance().keepDetached, reopening)) {
+            Release.IGNORE -> return
+            Release.CLOSE -> return close(file)
+            Release.DETACH -> {}
+        }
         runtime.owner = null
         runtime.detachedAt = Instant.now()
         thisLogger().info("claude for session ${file.sessionId} (pid ${file.pid}) runs on without a tab")

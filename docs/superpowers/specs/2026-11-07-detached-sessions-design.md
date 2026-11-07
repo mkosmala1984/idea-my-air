@@ -34,16 +34,17 @@ Decompiled from `air-plugin/lib/modules` (263.7307.200):
 | Event | Today | After |
 |---|---|---|
 | tab closed, setting on | `claude` ends | `claude` keeps running, detached |
-| tab closed, setting off | `claude` ends | `claude` ends |
+| tab closed, setting off | `claude` ends | `claude` ends, unless the platform closes the tab to reopen it (`CLOSING_TO_REOPEN`, a move to another window) |
+| tab closed before its process started | `claude` never starts | the same: the process starts only once a view shows, so it ends at once (`releaseOf`) |
 | Close and Settle | `claude` ends | `claude` ends (the session is done, like Air's `ARCHIVED`) |
-| a detached session opened from the tree, the pinned list, the taskbar or another IDE | n/a | the same process shows in a new tab of the window it is opened from (`bind` into that project) |
+| a detached session opened from the tree, the pinned list, the taskbar or another IDE | n/a | the same process shows in a new tab of the window it last showed in, as opening goes where a session runs (`findTab`, then `bind`) |
 | a detached session retires | n/a | `close()`; the session stays in the list without a process, as after `/exit` |
 | `claude` exits while detached (`/exit`, a crash) | n/a | the runtime is dropped, and so is its prompt file |
 | project closed | tabs close, `claude` ends | the same, detached sessions last bound in that project included |
 | IDE exit | `claude` ends | the same |
 | the same tab opened in two splits | each editor starts its own `claude` on the same id | the newest editor binds the view; the other shows "Shown in another split" with **Show Here**, which binds it back |
 
-Hint: when a tab of a session whose status is `WORKING` closes and the setting is on, a balloon says, once per IDE run: "The session keeps running. Open it again from Claude Sessions."
+Hint: when a tab of a session whose status is `WORKING` closes and the setting is on, a balloon says, once per IDE run: `"<title>" keeps working. Open it again from Claude Sessions.`
 
 ### Retirement rule
 

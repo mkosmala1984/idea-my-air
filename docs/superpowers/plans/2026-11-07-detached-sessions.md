@@ -76,4 +76,6 @@ Test `src/test/kotlin/dev/myair/editor/RetirementTest.kt`: the spec's table, and
 
 ## Verification
 
+Status: unit tests (`RetirementTest`, 9) and `./gradlew test buildPlugin` pass; the sandbox scenarios are **not run yet** (waiting for the user).
+
 Unit tests from Task 1, and `./gradlew test buildPlugin`. Then the spec's 12 sandbox scenarios, run by hand in `runIde`.
