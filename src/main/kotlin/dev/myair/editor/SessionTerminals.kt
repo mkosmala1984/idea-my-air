@@ -1,6 +1,7 @@
 package dev.myair.editor
 
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
@@ -43,7 +44,12 @@ import kotlin.time.toKotlinDuration
  * the EDT only.
  */
 @Service(Service.Level.APP)
-class SessionTerminals(private val scope: CoroutineScope) {
+class SessionTerminals(private val scope: CoroutineScope) : Disposable {
+    // Every process lives here, so an exit cannot miss one: before this service there is none.
+    init {
+        ApplicationManager.getApplication().addApplicationListener(ExitConfirmation(), this)
+    }
+
     /**
      * [session] is null while the process starts; [owner] the editor showing it, null while detached since [detachedAt].
      * [ended]: the process exited by itself while a tab showed it, which keeps showing the ended terminal until it closes.
@@ -113,15 +119,33 @@ class SessionTerminals(private val scope: CoroutineScope) {
         val before = runtimes.size
         for ((project, file) in detached()) {
             val detachedAt = checkNotNull(runtimes.getValue(file).detachedAt)
-            val status = live.values.firstOrNull { it.pid == file.pid }?.status
-            val started = file.pid?.let { ProcessHandle.of(it).flatMap { process -> process.info().startInstant() }.getOrNull() }
-            val tasks = runningTasks(sessions[file.sessionId]?.background.orEmpty(), started)
+            val (status, tasks) = activity(file, live, sessions)
             if (!retires(java.time.Duration.between(detachedAt, now).toKotlinDuration(), status, tasks)) continue
             thisLogger().info("claude for session ${file.sessionId} (pid ${file.pid}) ends: idle without a tab since $detachedAt in ${project.name}")
             close(file)
         }
         // Other IDEs and the taskbar open a detached session here; one gone sends them elsewhere.
         if (runtimes.size != before) TabsSync.getInstance().publish()
+    }
+
+    /**
+     * The titles of the sessions that ending the processes of [project] (with a tab or detached), or all when null, would
+     * interrupt ([interrupts]), read from [ClaudeSessionsService]'s last refresh.
+     */
+    fun interrupted(project: Project?): List<String> {
+        ThreadingAssertions.assertEventDispatchThread()
+        val service = ClaudeSessionsService.getInstance()
+        val sessions = service.sessions.associateBy { it.id }
+        return runtimes.filter { project == null || it.value.project == project }.keys
+            .filter { file -> activity(file, service.live, sessions).let { (status, tasks) -> interrupts(status, tasks) } }
+            .map { it.title }
+    }
+
+    /** [file]'s registry status, by pid, and the number of its own background tasks still running ([runningTasks]). */
+    private fun activity(file: ClaudeSessionVirtualFile, live: Map<String, LiveSession>, sessions: Map<String, ClaudeSession>): Pair<SessionStatus?, Int> {
+        val status = live.values.firstOrNull { it.pid == file.pid }?.status
+        val started = file.pid?.let { ProcessHandle.of(it).flatMap { process -> process.info().startInstant() }.getOrNull() }
+        return status to runningTasks(sessions[file.sessionId]?.background.orEmpty(), started)
     }
 
     /** Ends the processes that last showed in [project], detached ones included. */
@@ -180,6 +204,8 @@ class SessionTerminals(private val scope: CoroutineScope) {
         override fun projectClosing(project: Project) = getInstance().closeAll(project)
         override fun projectClosed(project: Project) = getInstance().closeAll(project)
     }
+
+    override fun dispose() {}
 
     companion object {
         fun getInstance(): SessionTerminals = ApplicationManager.getApplication().getService(SessionTerminals::class.java)

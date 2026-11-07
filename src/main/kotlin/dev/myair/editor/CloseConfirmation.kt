@@ -1,5 +1,10 @@
 package dev.myair.editor
 
+import com.intellij.openapi.application.ApplicationListener
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ProjectCloseHandler
+import com.intellij.openapi.ui.Messages
 import dev.myair.claude.SessionStatus
 
 /**
@@ -27,4 +32,24 @@ fun confirmation(closing: Closing, titles: List<String>): Confirmation {
         if (one) "'${titles.single()}' is still running. ${closing.ends} ends it."
         else "${titles.size} Claude sessions are still running:\n\n${titles.joinToString("\n")}\n\n${closing.ends} ends them."
     return Confirmation("${closing.title} with Running Claude Session${if (one) "" else "s"}?", message, closing.ok, closing.cancel)
+}
+
+/** Asks before [project] closes with sessions it would interrupt; during an exit [ExitConfirmation] already asked about all. */
+class ProjectCloseConfirmation : ProjectCloseHandler {
+    override fun canClose(project: Project): Boolean =
+        ApplicationManager.getApplication().isExitInProgress || confirmed(project, Closing.PROJECT)
+}
+
+/** Asks before the IDE exits or restarts with sessions it would interrupt; registered by [SessionTerminals]. */
+class ExitConfirmation : ApplicationListener {
+    override fun canExitApplication() = confirmed(null, Closing.EXIT)
+    override fun canRestartApplication() = confirmed(null, Closing.RESTART)
+}
+
+/** Whether [closing] may go on: nothing of [project] (of every project when null) would be interrupted, or the user says so. */
+private fun confirmed(project: Project?, closing: Closing): Boolean {
+    val titles = SessionTerminals.getInstance().interrupted(project)
+    if (titles.isEmpty()) return true
+    val (title, message, ok, cancel) = confirmation(closing, titles)
+    return Messages.showOkCancelDialog(project, message, title, ok, cancel, Messages.getWarningIcon()) == Messages.OK
 }

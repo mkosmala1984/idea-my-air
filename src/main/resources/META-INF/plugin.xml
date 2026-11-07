@@ -17,6 +17,7 @@
   <depends optional="true" config-file="my-air-branch-diff.xml">dev.kosmala.branch-diff-tree</depends>
 
   <extensions defaultExtensionNs="com.intellij">
+    <projectCloseHandler implementation="dev.myair.editor.ProjectCloseConfirmation"/>
     <toolWindow id="Claude Sessions" anchor="right" icon="AllIcons.Toolwindows.ToolWindowMessages"
                 factoryClass="dev.myair.toolwindow.SessionsToolWindowFactory"/>
     <toolWindow id="Session Context" anchor="right" secondary="true" icon="AllIcons.Actions.Preview"

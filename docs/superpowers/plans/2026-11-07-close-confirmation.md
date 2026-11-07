@@ -2,8 +2,8 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | done | |
-| 2 | | |
+| 1 | done | `cd539b42f1` |
+| 2 | done | |
 | 3 | | |
 
 ## TL;DR
@@ -26,10 +26,10 @@ Files: `src/main/kotlin/dev/myair/editor/CloseConfirmation.kt`, `src/test/kotlin
 
 Files: `SessionTerminals.kt`, `CloseConfirmation.kt`, `plugin.xml`.
 
-- [ ] `SessionTerminals`: one private helper giving a file's registry status and running tasks, used by `retireIdle` and by new `interrupted(project: Project?)`; make it `Disposable` and register `ExitConfirmation` in `init`.
-- [ ] `ProjectCloseConfirmation` (skips while `isExitInProgress`) and `ExitConfirmation` (exit and restart), both through `Messages.showOkCancelDialog` with the warning icon.
-- [ ] `plugin.xml`: `<projectCloseHandler implementation="dev.myair.editor.ProjectCloseConfirmation"/>`.
-- [ ] `./gradlew test`, commit.
+- [x] `SessionTerminals`: one private helper giving a file's registry status and running tasks, used by `retireIdle` and by new `interrupted(project: Project?)`; make it `Disposable` and register `ExitConfirmation` in `init`.
+- [x] `ProjectCloseConfirmation` (skips while `isExitInProgress`) and `ExitConfirmation` (exit and restart), both through `Messages.showOkCancelDialog` with the warning icon.
+- [x] `plugin.xml`: `<projectCloseHandler implementation="dev.myair.editor.ProjectCloseConfirmation"/>`.
+- [x] `./gradlew test`, commit.
 
 ## Task 3: docs and build
 
