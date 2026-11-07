@@ -2,8 +2,9 @@ package dev.myair.toolwindow
 
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.KotlinUiDslService
 import com.intellij.ui.dsl.builder.MAX_LINE_LENGTH_WORD_WRAP
-import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.dsl.builder.Panel
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -20,6 +21,13 @@ class ContextCardsTest {
 
     @AfterEach
     fun dispose() = frame.dispose()
+
+    // The DSL's `panel` looks its implementation up as an application service, and these tests run without an application.
+    // The implementation is Kotlin-internal, hence the reflection.
+    private val dsl = Class.forName("com.intellij.ui.dsl.builder.impl.KotlinUiDslServiceImpl")
+        .getDeclaredConstructor().newInstance() as KotlinUiDslService
+
+    private fun panel(init: Panel.() -> Unit) = dsl.panel(init)
 
     private fun layOut(panel: JComponent, width: Int) {
         frame.contentPane.add(panel)
