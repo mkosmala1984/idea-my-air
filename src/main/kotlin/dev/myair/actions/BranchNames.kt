@@ -1,6 +1,6 @@
 package dev.myair.actions
 
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
+import dev.myair.editor.claudeExecutable
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -35,7 +35,7 @@ fun namingPrompt(text: String) = """
  */
 fun suggestBranchName(dir: Path, text: String, jiraTools: List<String>): String {
     require(text.isNotBlank()) { "no task to name a branch for" }
-    val claude = checkNotNull(PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS("claude")) { "claude executable not found on PATH" }
+    val claude = claudeExecutable()
     val args = listOf(claude.path, "-p", "--model", "haiku", "--no-session-persistence", "--output-format", "text") +
         (if (jiraTools.isEmpty()) emptyList() else listOf("--allowedTools") + jiraTools) + listOf("--", namingPrompt(text))
     val process = ProcessBuilder(args).directory(dir.toFile()).start()

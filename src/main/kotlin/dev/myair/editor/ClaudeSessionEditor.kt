@@ -88,7 +88,9 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
     /** What a restored tab shows instead of starting: its directory is gone, or its session already runs elsewhere. */
     private fun restoreBlocker(): JComponent? {
         if (!file.cwd.isDirectory()) return notice("Session directory no longer exists:\n${file.cwd}")
-        val live = LiveSessionRegistry(Homes.claude.resolve("sessions")).read()[file.sessionId] ?: return null
+        val live = LiveSessionRegistry(Homes.claude.resolve("sessions")).read()[file.sessionId]
+        // A background job's tab attaches to it ([SessionTerminals.start]).
+        if (live == null || live.job != null) return null
         val running = RunningElsewhere(file.title, live, file.cwd)
         val switch = running.host?.let { "Switch to Window" to { SessionHosts.bringToFront(it) } }
         return notice(running.message, listOfNotNull(switch, "Open Anyway" to ::openAnyway))

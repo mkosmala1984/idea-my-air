@@ -29,11 +29,12 @@ enum class Release { IGNORE, CLOSE, DETACH }
 /**
  * A tab that does not show the process ([owns]) leaves it alone. One that does ends it when it never started (it starts only
  * once a view shows, so it never would) or already ended, and when sessions are not kept, unless the platform closes the
- * tab to reopen it ([reopening], a move to another window); otherwise it runs on, detached.
+ * tab to reopen it ([reopening], a move to another window); otherwise it runs on, detached. A process showing a background
+ * [job] is only a view of it, kept for nothing but a reopen: the job runs on without it.
  */
-fun releaseOf(owns: Boolean, started: Boolean, ended: Boolean, keep: Boolean, reopening: Boolean): Release = when {
+fun releaseOf(owns: Boolean, started: Boolean, ended: Boolean, keep: Boolean, reopening: Boolean, job: Boolean): Release = when {
     !owns -> Release.IGNORE
     !started || ended -> Release.CLOSE
-    keep || reopening -> Release.DETACH
+    reopening || keep && !job -> Release.DETACH
     else -> Release.CLOSE
 }

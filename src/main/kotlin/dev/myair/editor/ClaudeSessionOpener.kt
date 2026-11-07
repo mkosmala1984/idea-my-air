@@ -36,7 +36,8 @@ object ClaudeSessionOpener {
         if (tab != null) return SessionHosts.focus(tab)
         if (TabsSync.getInstance().focusElsewhere(session.id)) return
         val live = ClaudeSessionsService.getInstance().live[session.id]
-        if (live != null) {
+        // A background job runs without a window of its own; the tab attaches to it rather than starting a second process.
+        if (live != null && live.job == null) {
             val running = RunningElsewhere(session.title, live, session.cwd)
             if (switchToWindow && running.host != null) return SessionHosts.bringToFront(running.host)
             if (!confirm(project, running)) return

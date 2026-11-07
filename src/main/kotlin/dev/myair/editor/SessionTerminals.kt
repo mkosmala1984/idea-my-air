@@ -16,6 +16,7 @@ import com.intellij.util.concurrency.ThreadingAssertions
 import dev.myair.MyAirSettings
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
+import dev.myair.claude.LiveSessionRegistry
 import dev.myair.claude.SessionStatus
 import dev.myair.claude.shownBy
 import com.intellij.notification.NotificationGroupManager
@@ -32,6 +33,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.plugins.terminal.ShellStartupOptions
 import org.jetbrains.plugins.terminal.TerminalEmulatorType
 import org.jetbrains.plugins.terminal.startup.TerminalProcessType
+import java.io.File
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.io.path.deleteIfExists
@@ -87,7 +89,8 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
         val runtime = runtimes[file] ?: return
         val started = runtime.session.let { it != null && it.sessionState.value != TerminalViewSessionState.NotStarted }
         val reopening = file.getUserData(FileEditorManagerKeys.CLOSING_TO_REOPEN) == true
-        when (releaseOf(runtime.owner == editor, started, runtime.ended, MyAirSettings.getInstance().keepDetached, reopening)) {
+        val job = jobOf(file) != null
+        when (releaseOf(runtime.owner == editor, started, runtime.ended, MyAirSettings.getInstance().keepDetached, reopening, job)) {
             Release.IGNORE -> return
             Release.CLOSE -> return close(file)
             Release.DETACH -> {}
@@ -130,15 +133,22 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
     }
 
     /**
+     * The background job [file]'s process shows: the one it attached to, else the one `/bg` parked it into, as
+     * [ClaudeSessionsService]'s last refresh saw it. Ending such a process ends only a view of the job, which runs on.
+     */
+    fun jobOf(file: ClaudeSessionVirtualFile): String? =
+        file.job ?: ClaudeSessionsService.getInstance().live.shownBy(file.pid, null)?.value?.job
+
+    /**
      * The titles of the sessions that ending the processes of [project] (with a tab or detached), or all when null, would
-     * interrupt ([interrupts]), read from [ClaudeSessionsService]'s last refresh.
+     * interrupt ([interrupts]), read from [ClaudeSessionsService]'s last refresh. A job outlives its views, so ending one interrupts nothing.
      */
     fun interrupted(project: Project?): List<String> {
         ThreadingAssertions.assertEventDispatchThread()
         val service = ClaudeSessionsService.getInstance()
         val sessions = service.sessions.associateBy { it.id }
         return runtimes.filter { project == null || it.value.project == project }.keys
-            .filter { file -> activity(file, service.live, sessions).let { (status, tasks) -> interrupts(status, tasks) } }
+            .filter { file -> jobOf(file) == null && activity(file, service.live, sessions).let { (status, tasks) -> interrupts(status, tasks) } }
             .map { it.title }
     }
 
@@ -155,19 +165,24 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
     }
 
     private fun start(file: ClaudeSessionVirtualFile, editor: ClaudeSessionEditor, project: Project) {
-        val claude = checkNotNull(PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS("claude")) { "claude executable not found on PATH" }
+        val claude = claudeExecutable()
         val settings = MyAirSettings.getInstance()
         val service = ClaudeSessionsService.getInstance()
         val folders = service.folders
-        val promptFile = sessionPlan(folders, file.sessionId, service.sessions.firstOrNull { it.id == file.sessionId }, file.planStart)
+        // Read now: a tab restored on startup opens before the service's first refresh.
+        val job = LiveSessionRegistry(Homes.claude.resolve("sessions")).read()[file.sessionId]?.job
+        file.job = job
+        // claude refuses or forks a `--resume` of a session a job runs; `attach` opens the job itself, with its own prompt.
+        val promptFile = if (job != null) null else sessionPlan(folders, file.sessionId, service.sessions.firstOrNull { it.id == file.sessionId }, file.planStart)
             ?.let { (folder, task) -> PromptFiles.write(Homes.myAir.resolve("prompts"), planPrompt(folders, folder, task, settings.briefs)) }
+        val command = if (job != null) listOf(claude.path, "attach", job)
+        else listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(settings.briefs, settings.fileSessions)) +
+            (if (settings.briefs) listOf("--settings", writeBriefReminderSettings(Homes.myAir.resolve("hooks")).toString()) else emptyList()) +
+            promptFile.let { if (it == null) emptyList() else listOf("--append-system-prompt-file", it.toString()) } + file.claudeArgs
+        if (job != null) thisLogger().info("claude for session ${file.sessionId} attaches to its background job $job")
         val options = ShellStartupOptions.Builder()
             .workingDirectory(file.cwd.toString())
-            .shellCommand(
-                listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(settings.briefs, settings.fileSessions)) +
-                    (if (settings.briefs) listOf("--settings", writeBriefReminderSettings(Homes.myAir.resolve("hooks")).toString()) else emptyList()) +
-                    promptFile.let { if (it == null) emptyList() else listOf("--append-system-prompt-file", it.toString()) } + file.claudeArgs,
-            )
+            .shellCommand(command)
             // Fullscreen renderer: no flicker, mouse support; otherwise claude asks on every start whether to try it.
             // Skip auto-install of claude's own JetBrains plugin into this IDE, as Air does.
             .envVariables(mapOf("CLAUDE_CODE_NO_FLICKER" to "1", "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL" to "true"))
@@ -212,3 +227,5 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
         fun getInstance(): SessionTerminals = ApplicationManager.getApplication().getService(SessionTerminals::class.java)
     }
 }
+
+fun claudeExecutable(): File = checkNotNull(PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS("claude")) { "claude executable not found on PATH" }

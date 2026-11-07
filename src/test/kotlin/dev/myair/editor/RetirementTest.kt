@@ -57,19 +57,26 @@ class RetirementTest {
 
     @Test
     fun `closing a tab detaches a started process when sessions are kept or the tab reopens`() {
-        assertEquals(Release.DETACH, releaseOf(owns = true, started = true, ended = false, keep = true, reopening = false))
-        assertEquals(Release.DETACH, releaseOf(owns = true, started = true, ended = false, keep = false, reopening = true))
-        assertEquals(Release.CLOSE, releaseOf(owns = true, started = true, ended = false, keep = false, reopening = false))
+        assertEquals(Release.DETACH, releaseOf(owns = true, started = true, ended = false, keep = true, reopening = false, job = false))
+        assertEquals(Release.DETACH, releaseOf(owns = true, started = true, ended = false, keep = false, reopening = true, job = false))
+        assertEquals(Release.CLOSE, releaseOf(owns = true, started = true, ended = false, keep = false, reopening = false, job = false))
     }
 
     @Test
     fun `closing a tab ends a process that never started or already ended`() {
-        assertEquals(Release.CLOSE, releaseOf(owns = true, started = false, ended = false, keep = true, reopening = true))
-        assertEquals(Release.CLOSE, releaseOf(owns = true, started = true, ended = true, keep = true, reopening = false))
+        assertEquals(Release.CLOSE, releaseOf(owns = true, started = false, ended = false, keep = true, reopening = true, job = false))
+        assertEquals(Release.CLOSE, releaseOf(owns = true, started = true, ended = true, keep = true, reopening = false, job = false))
+    }
+
+    @Test
+    fun `closing a tab showing a background job ends its view even when sessions are kept, and detaches it only to reopen`() {
+        assertEquals(Release.CLOSE, releaseOf(owns = true, started = true, ended = false, keep = true, reopening = false, job = true))
+        assertEquals(Release.DETACH, releaseOf(owns = true, started = true, ended = false, keep = true, reopening = true, job = true))
+        assertEquals(Release.DETACH, releaseOf(owns = true, started = true, ended = false, keep = false, reopening = true, job = true))
     }
 
     @Test
     fun `a tab that does not show the process leaves it alone`() {
-        assertEquals(Release.IGNORE, releaseOf(owns = false, started = true, ended = false, keep = false, reopening = false))
+        assertEquals(Release.IGNORE, releaseOf(owns = false, started = true, ended = false, keep = false, reopening = false, job = false))
     }
 }
