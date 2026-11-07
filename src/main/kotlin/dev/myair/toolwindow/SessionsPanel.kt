@@ -207,6 +207,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             FolderAction("Remove Plan", null, on { it is Folder && it.plan != null }, { canEditFolders() && editing.canRemovePlan() }, editing::removePlan),
             FolderAction("Bind Directory...", null, on { it is Folder }, ::canEditFolders, editing::bindDirectory),
             FolderAction("Unbind Directory...", null, on { it is Folder && it.dirs.isNotEmpty() }, ::canEditFolders, editing::unbindDirectory),
+            FolderAction("Set Working Directory...", null, on { it is Folder }, ::canEditFolders, editing::setWorkingDirectory),
+            FolderAction("Clear Working Directory", null, on { it is Folder && it.workdir != null }, ::canEditFolders, editing::clearWorkingDirectory),
             FolderAction("Add Milestone...", AllIcons.Nodes.Bookmark, on { (it is Folder && it.plan != null) || it is MilestoneRow }, ::canEditFolders, editing::addMilestone),
             FolderAction("Add Task...", AllIcons.General.Add, on { it is MilestoneRow || it is PlanTaskRow }, ::canEditFolders, editing::addTask),
             FolderAction("Mark Milestone Done", AllIcons.Actions.Checked, on { it is MilestoneRow && !it.milestone.done }, ::canEditFolders) { editing.setMilestoneDone(true) },
@@ -440,7 +442,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private fun readBranches() {
         val dirs = (tree.model.root as DefaultMutableTreeNode).depthFirstEnumeration().toList().flatMap {
             when (val item = (it as DefaultMutableTreeNode).userObject) {
-                is Folder -> item.dirs.map(Path::of)
+                is Folder -> (item.dirs + listOfNotNull(item.workdir)).map(Path::of)
                 is Path -> listOf(item)
                 is WorkDirRow -> listOf(item.session.workDir)
                 is AddedDir -> listOf(item.path)

@@ -21,6 +21,7 @@ import dev.myair.editor.sessionIcon
 import dev.myair.folders.Folder
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.progress
+import dev.myair.folders.startFolder
 import java.nio.file.Path
 import javax.swing.Icon
 import javax.swing.JList
@@ -134,11 +135,14 @@ class SessionRenderer(
                     else -> d.grow(AllIcons.Nodes.Folder)
                 }
                 append(item.name)
-                item.plan?.let {
-                    append("  ${progress(it.tasks())}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-                    toolTipText = describedTooltip(emptyList(), it.description)
-                }
+                val chain = node.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>()
+                val starts = startFolder(chain)?.let { "New sessions start in: ${it.startDir} (from ${chain.take(chain.indexOf(it) + 1).joinToString("/") { f -> f.name }})" }
+                toolTipText = describedTooltip(listOfNotNull(starts), item.plan?.description)
+                item.plan?.let { append("  ${progress(it.tasks())}", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
                 if (item.dirs.isNotEmpty()) append("  " + item.dirs.joinToString { dirLabel(Path.of(it)) }, SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                item.workdir?.let(Path::of)?.let {
+                    append("  ⌂ " + dirLabel(it), if (isGone(it)) SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES else SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                }
             }
             is MilestoneRow -> {
                 icon = d.grow(if (item.milestone.done) AllIcons.Actions.Checked else AllIcons.Nodes.Bookmark)

@@ -125,6 +125,15 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
         update { it.bind(folder.id, dir) }
     }
 
+    /** Sets the selected folder's working directory to one picked in a chooser; any folder may share it. */
+    fun setWorkingDirectory() {
+        val folder = selectedFolder()!!
+        val file = FileChooser.chooseFile(FileChooserDescriptorFactory.createSingleFolderDescriptor(), project, null) ?: return
+        update { it.setWorkdir(folder.id, Path.of(file.path).toString()) }
+    }
+
+    fun clearWorkingDirectory() = update { it.setWorkdir(selectedFolder()!!.id, null) }
+
     /** Unbinds one of the selected folder's directories, asking which when it has several. */
     fun unbindDirectory() {
         val dirs = selectedFolder()!!.dirs
