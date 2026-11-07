@@ -2,9 +2,7 @@
 - background tasks, dodanie szczegółów, statusu
 - domyślne przypinanie zakładki z sesją 
 - lista sesji pasująca do obecnego worktree
-- wyszukiwanie sesji po branchu
 - przeniesienie sesji do innej instancji idea po worktree/branch
-- mcp utwórz nową sesję
 - pokaż niezacomitowane zmiany
 - nowy worktree bez tworzenia brancha, lub usuwa istniejący worktree z tym branchem jeżeli można
 - inny kolor/oznaczenie zakładki gdy inny branch/worktree

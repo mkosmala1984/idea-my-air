@@ -387,6 +387,10 @@ class GitTest {
         git(worktree, "checkout", "--detach")
         assertEquals(Git.Head(worktree, null), Git.head(worktree))
         assertEquals(null, Git.head(dir.resolve("plain").createDirectories()))
+        // A removed worktree is no part of the repository its folder lay in.
+        git(repo, "worktree", "remove", "--force", worktree.toString())
+        assertEquals(null, Git.head(worktree))
+        assertEquals(null, Git.head(repo.resolve("gone")))
         // A repository without commits has its branch already.
         assertEquals("main", Git.headBranch(dir.resolve("unborn").createDirectories().also { git(it, "init", "-b", "main") }))
     }

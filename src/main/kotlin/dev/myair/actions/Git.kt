@@ -111,9 +111,11 @@ object Git {
 
     /**
      * The work tree [dir] lies in and its branch, read from its HEAD file without running git, so a refresh can ask it
-     * for every session and row; null outside a repository. A linked worktree's `.git` is a file naming its git dir.
+     * for every session and row; null outside a repository and for a folder gone, which would otherwise read the
+     * repository above it (a removed worktree, its main checkout's). A linked worktree's `.git` is a file naming its git dir.
      */
     fun head(dir: Path): Head? {
+        if (!dir.exists()) return null
         val dotGit = generateSequence(dir.toAbsolutePath()) { it.parent }.map { it.resolve(".git") }.firstOrNull { it.exists() } ?: return null
         val gitDir = if (dotGit.isDirectory()) dotGit else dotGit.readText().trim().let {
             check(it.startsWith(GITDIR)) { "$dotGit does not name a git dir: $it" }

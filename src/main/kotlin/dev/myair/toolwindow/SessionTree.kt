@@ -30,6 +30,11 @@ class AddedDir(val session: ClaudeSession, val path: Path) {
     override fun toString() = "dir ${session.id} $path"
 }
 
+/** The [branch] checked out in [dir], the row right below the [WorkDirRow] or [AddedDir] of that directory. */
+class BranchRow(val session: ClaudeSession, val dir: Path, val branch: String) {
+    override fun toString() = "branch ${session.id} $dir $branch"
+}
+
 /** The group of [session]'s brief: its goal and tasks. */
 class BriefGroup(val session: ClaudeSession) {
     override fun toString() = "brief ${session.id}"
@@ -77,35 +82,39 @@ object RecentSessions {
 
 const val RECENT_COUNT = 10
 
-/** Projects mode: projects ordered by their most recent session; [sessions] arrive newest first. */
-fun projectsTree(sessions: List<ClaudeSession>) = node(null, projectNodes(sessions))
+/** Projects mode: projects ordered by their most recent session; [sessions] arrive newest first; [branchOf] as [sessionNode] takes it. */
+fun projectsTree(sessions: List<ClaudeSession>, branchOf: (Path) -> String?) = node(null, projectNodes(sessions, branchOf))
 
 /**
  * Folders mode: the user's folders in their order, each with its subfolders and then its sessions newest first (see
  * [SessionFolders.placeOf]), then [RecentSessions] and [UnfiledSessions] last. A plan folder holds, after its subfolders,
  * its milestones with their tasks, each task the sessions whose brief names it, then [NoTask] with its other sessions
  * when there are any. Sessions filed but absent from [sessions] are not shown. A [filter] keeps the sessions it accepts,
- * the folders, milestones and tasks on their path, [RecentSessions] and [UnfiledSessions]; [sessions] arrive newest first.
+ * the folders, milestones and tasks on their path, [RecentSessions] and [UnfiledSessions]; [sessions] arrive newest first;
+ * [branchOf] as [sessionNode] takes it.
  */
-fun foldersTree(structure: SessionFolders, sessions: List<ClaudeSession>, filter: ((ClaudeSession) -> Boolean)?): DefaultMutableTreeNode {
+fun foldersTree(
+    structure: SessionFolders, sessions: List<ClaudeSession>, branchOf: (Path) -> String?, filter: ((ClaudeSession) -> Boolean)?,
+): DefaultMutableTreeNode {
+    val sessionNode = { session: ClaudeSession -> sessionNode(session, branchOf) }
     val shown = filter?.let(sessions::filter) ?: sessions
     val (tasked, untasked) = shown.partition { structure.taskOf(it) != null }
     val byTask = tasked.groupBy { it.brief!!.planTask!! }
     val places = untasked.groupBy { structure.placeOf(it) }
     fun keep(item: Any, children: List<DefaultMutableTreeNode>) = if (filter != null && children.isEmpty()) null else node(item, children)
     fun planNodes(folder: Folder) = folder.plan!!.milestones.mapNotNull { m ->
-        keep(MilestoneRow(folder, m), m.tasks.mapNotNull { t -> keep(PlanTaskRow(folder, t), byTask[t.id].orEmpty().map(::sessionNode)) })
+        keep(MilestoneRow(folder, m), m.tasks.mapNotNull { t -> keep(PlanTaskRow(folder, t), byTask[t.id].orEmpty().map(sessionNode)) })
     }
     fun folderNode(folder: Folder): DefaultMutableTreeNode? {
-        val own = places[folder.id].orEmpty().map(::sessionNode)
+        val own = places[folder.id].orEmpty().map(sessionNode)
         val children = folder.folders.mapNotNull(::folderNode) +
             if (folder.plan == null) own else planNodes(folder) + listOfNotNull(own.takeIf { it.isNotEmpty() }?.let { node(NoTask(folder), it) })
         return keep(folder, children)
     }
     return node(
         null,
-        structure.folders.mapNotNull(::folderNode) + node(RecentSessions, shown.take(RECENT_COUNT).map(::sessionNode)) +
-            node(UnfiledSessions, projectNodes(places[null].orEmpty())),
+        structure.folders.mapNotNull(::folderNode) + node(RecentSessions, shown.take(RECENT_COUNT).map(sessionNode)) +
+            node(UnfiledSessions, projectNodes(places[null].orEmpty(), branchOf)),
     )
 }
 
@@ -132,7 +141,7 @@ data class FolderSummary(val sessions: Int, val urgent: Urgency?)
 
 /** The [FolderSummary] of a group node (folder, project, recent or unfiled sessions), counting the sessions below it as shown; null for a session and its children. */
 fun folderSummary(node: DefaultMutableTreeNode, urgency: (ClaudeSession) -> Urgency?): FolderSummary? = when (node.userObject) {
-    is ClaudeSession, is WorkDirRow, is AddedDir, is BriefGroup, is BriefGoal, is BriefTaskRow, is FilesGroup, is ChangedFile -> null
+    is ClaudeSession, is WorkDirRow, is AddedDir, is BranchRow, is BriefGroup, is BriefGoal, is BriefTaskRow, is FilesGroup, is ChangedFile -> null
     is Folder, is Path, RecentSessions, UnfiledSessions, is MilestoneRow, is PlanTaskRow, is NoTask -> {
         val sessions = groupSessions(node)
         FolderSummary(sessions.size, sessions.mapNotNull(urgency).minOrNull())
@@ -248,20 +257,24 @@ private fun taskDrop(structure: SessionFolders, row: PlanTaskRow, target: Defaul
 /** The name of the folder a project becomes: its directory's name. */
 fun projectName(project: Path) = (project.fileName ?: project).toString()
 
-private fun projectNodes(sessions: List<ClaudeSession>) = sessions.groupBy { it.cwd }.map { (cwd, group) -> node(cwd, group.map(::sessionNode)) }
+private fun projectNodes(sessions: List<ClaudeSession>, branchOf: (Path) -> String?) =
+    sessions.groupBy { it.cwd }.map { (cwd, group) -> node(cwd, group.map { sessionNode(it, branchOf) }) }
 
 /**
- * A session with, below it, the folder it works in, the directories added to it, its brief (goal and tasks) as a group,
- * the files it wrote other than outputs as a group, and its outputs.
+ * A session with, below it, the folder it works in, the directories added to it, each followed by the branch [branchOf]
+ * finds checked out there (none outside a repository, on a detached HEAD or before it is read), its brief (goal and
+ * tasks) as a group, the files it wrote other than outputs as a group, and its outputs.
  */
-private fun sessionNode(session: ClaudeSession): DefaultMutableTreeNode {
+private fun sessionNode(session: ClaudeSession, branchOf: (Path) -> String?): DefaultMutableTreeNode {
+    fun branch(dir: Path) = listOfNotNull(branchOf(dir)?.let { node(BranchRow(session, dir, it)) })
     val (outputs, files) = session.changedFiles.partition { it.extension.lowercase() in OUTPUT_EXTENSIONS }
     val brief = session.brief?.let {
         node(BriefGroup(session), listOfNotNull(it.goal?.let { goal -> node(BriefGoal(session, goal)) }) + it.tasks.mapIndexed { i, task -> node(BriefTaskRow(session, i, task)) })
     }
     return node(
         session,
-        listOf(node(WorkDirRow(session))) + session.addedDirs.map { node(AddedDir(session, it)) } + listOfNotNull(brief) +
+        listOf(node(WorkDirRow(session))) + branch(session.workDir) + session.addedDirs.flatMap { listOf(node(AddedDir(session, it))) + branch(it) } +
+            listOfNotNull(brief) +
             listOfNotNull(files.takeIf { it.isNotEmpty() }?.let { node(FilesGroup(session, it.size), it.map { f -> node(ChangedFile(f, session.cwd)) }) }) +
             outputs.map { node(ChangedFile(it, session.cwd)) },
     )

@@ -106,10 +106,17 @@ class PinnedRenderer(
 
 class SessionRenderer(
     private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
-    private val density: () -> Density, private val branchOf: (Path) -> String?,
+    private val density: () -> Density, private val branchOf: (Path) -> String?, private val isGone: (Path) -> Boolean,
 ) : ColoredTreeCellRenderer() {
     /** A project or folder directory as its row shows it: the path, then the branch checked out there in brackets. */
     private fun dirLabel(dir: Path) = "$dir" + (branchOf(dir)?.let { " ($it)" } ?: "")
+
+    /** A session's directory row: [dir] in [attributes] with [tooltip], or grey italic and saying so once it is gone. */
+    private fun appendDir(dir: Path, attributes: SimpleTextAttributes, tooltip: String) {
+        val gone = isGone(dir)
+        append("$dir", if (gone) SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES else attributes)
+        toolTipText = if (gone) "$tooltip (folder no longer exists)" else tooltip
+    }
 
     override fun customizeCellRenderer(
         tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean,
@@ -180,8 +187,12 @@ class SessionRenderer(
             }
             is WorkDirRow -> {
                 icon = d.grow(AllIcons.Nodes.Folder)
-                append(dirLabel(item.session.workDir))
-                toolTipText = "Works in"
+                appendDir(item.session.workDir, SimpleTextAttributes.REGULAR_ATTRIBUTES, "Works in")
+            }
+            is BranchRow -> {
+                icon = d.grow(AllIcons.Vcs.Branch)
+                append(item.branch, SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                toolTipText = "Branch checked out in ${item.dir}"
             }
             is BriefGroup -> {
                 icon = d.grow(AllIcons.Actions.IntentionBulb)
@@ -201,8 +212,7 @@ class SessionRenderer(
             })
             is AddedDir -> {
                 icon = d.grow(AllIcons.Nodes.Folder)
-                append(dirLabel(item.path), SimpleTextAttributes.GRAYED_ATTRIBUTES)
-                toolTipText = "Added directory"
+                appendDir(item.path, SimpleTextAttributes.GRAYED_ATTRIBUTES, "Added directory")
             }
             is ChangedFile -> {
                 icon = FileTypeManager.getInstance().getFileTypeByFileName(item.path.fileName.toString()).icon?.let(d::grow)

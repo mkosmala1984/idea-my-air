@@ -52,7 +52,7 @@ class TreeStatesTest {
                 ClaudeSession("s1", Path.of("/rtm"), "one", Instant.ofEpochMilli(1), emptyList(), emptyList()),
             )
             val structure = SessionFolders().createFolder(null, "rtm", "rtm").assign("s1", "rtm")
-            val tree = JTree(DefaultTreeModel(foldersTree(structure, sessions, null))).apply { isRootVisible = false }
+            val tree = JTree(DefaultTreeModel(foldersTree(structure, sessions, { null }, null))).apply { isRootVisible = false }
             for (row in generateSequence(0) { it + 1 }) {
                 if (row >= tree.rowCount) break
                 tree.expandRow(row)

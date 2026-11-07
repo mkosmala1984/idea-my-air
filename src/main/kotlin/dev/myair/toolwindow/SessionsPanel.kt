@@ -55,12 +55,15 @@ import java.awt.Component
 import java.awt.Point
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
+import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.nio.file.Path
+import kotlin.io.path.exists
 import java.time.Instant
 import javax.swing.DropMode
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.SwingUtilities
 import javax.swing.ToolTipManager
 import javax.swing.Timer
 import javax.swing.event.DocumentEvent
@@ -76,6 +79,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     /** The tree hides sessions whose last message is this many days old or older; 0 hides none. */
     private var maxAgeDays = PropertiesComponent.getInstance().getInt(MAX_AGE_DAYS, 0)
     private var density = PropertiesComponent.getInstance().getValue(DENSITY)?.let(Density::valueOf) ?: Density.COMPACT
+    /** A single click on a session's row opens it, as a double-click does. */
+    private var singleClick = PropertiesComponent.getInstance().getBoolean(SINGLE_CLICK)
     /** The tree shows only the sessions of [windowRoot] ([inWorkTree]); kept per project, so each window has its own. */
     private var workTreeOnly = PropertiesComponent.getInstance(project).getBoolean(WORK_TREE_ONLY)
     /** The work tree this window's project lies in, read off the EDT once; null until read and outside a repository. */
@@ -89,13 +94,16 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private var rendering = false
     /** The branch checked out in each project and folder directory the tree shows, read off the EDT by [readBranches]. */
     private var branches: Map<Path, String?> = emptyMap()
+
+    /** The directories of [branches] that do not exist, read with them. */
+    private var gone: Set<Path> = emptySet()
     /** The number of [readBranches] calls; only the latest read lands. */
     private var branchReads = 0
     private val tree = DropLineTree().apply {
         isRootVisible = false
         // Double-click opens a session, so it must not also expand its changed files.
         toggleClickCount = 0
-        cellRenderer = SessionRenderer({ service.live[it.id] }, ::isSettled, ::isUnread, ::density) { branches[it] }
+        cellRenderer = SessionRenderer({ service.live[it.id] }, ::isSettled, ::isUnread, ::density, branches::get) { it in gone }
         allowSpinner()
         dropMode = DropMode.ON_OR_INSERT
         // The room above the first row the design leaves.
@@ -247,10 +255,18 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val withPrompt = ActionManager.getInstance().getAction("dev.myair.NewSessionWithPrompt")
         val newSession = ActionManager.getInstance().getAction("dev.myair.NewClaudeSession")
         val newSessionInWorktree = ActionManager.getInstance().getAction("dev.myair.NewClaudeSessionInWorktree")
+        val clickToOpen = object : ToggleAction("Open Sessions with Single Click"), DumbAware {
+            override fun getActionUpdateThread() = ActionUpdateThread.EDT
+            override fun isSelected(e: AnActionEvent) = singleClick
+            override fun setSelected(e: AnActionEvent, state: Boolean) {
+                singleClick = state
+                PropertiesComponent.getInstance().setValue(SINGLE_CLICK, state)
+            }
+        }
         val options = DefaultActionGroup("View Options", true).apply {
             templatePresentation.icon = AllIcons.Actions.Properties
             addAll(
-                mode, showAll, Separator.create("Hide Sessions Older Than"),
+                mode, showAll, clickToOpen, Separator.create("Hide Sessions Older Than"),
                 MaxAge(3), MaxAge(7), MaxAge(14), MaxAge(30), Separator.create("Density"),
                 *Density.entries.map(::DensityOption).toTypedArray(), Separator.getInstance(),
                 FontSize("Increase Font Size") { it + 1 }, FontSize("Decrease Font Size") { it - 1 }, FontSize("Reset Font Size") { 0 },
@@ -282,6 +298,12 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         toolbar = top
         onOpen(tree, tree.trailer, ::openSelected)
         onOpen(pinned, pinned.trailer) { pinned.selectedValue?.let { ClaudeSessionOpener.open(project, it) } != null }
+        onClick(tree, tree.trailer, { tree.getRowForLocation(it.x, it.y) >= 0 }) {
+            tree.selectionPaths?.singleOrNull()?.let { sessionOf((it.lastPathComponent as DefaultMutableTreeNode).userObject) }
+        }
+        onClick(pinned, pinned.trailer, { p -> pinned.locationToIndex(p).let { it >= 0 && pinned.getCellBounds(it, it).contains(p) } }) {
+            pinned.selectedValuesList.singleOrNull()
+        }
         // Ages change with time alone, while the service notifies only on changes; with [maxAgeDays] they also drop sessions.
         val ages = Timer(60_000) {
             updateTree()
@@ -380,6 +402,21 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         })
     }
 
+    /**
+     * While [singleClick] is on, a plain left click on a row of [component] ([onRow]) opens the session [selected] gives
+     * for the selection the click made; a click with a modifier extends the selection and a click on a [trailer] button
+     * runs it, so neither opens.
+     */
+    private fun onClick(component: JComponent, trailer: SessionTrailer, onRow: (Point) -> Boolean, selected: () -> ClaudeSession?) {
+        component.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent) {
+                if (!singleClick || e.clickCount != 1 || !SwingUtilities.isLeftMouseButton(e) || e.modifiersEx != 0) return
+                if (trailer.isButton(e.point) || !onRow(e.point)) return
+                selected()?.let { ClaudeSessionOpener.open(project, it) }
+            }
+        })
+    }
+
     /** Rebuilt on every change, since a status change reorders it; the selection follows the session ids. */
     private fun renderPinned() {
         val selected = pinned.selectedValuesList.map { it.id }.toSet()
@@ -396,8 +433,9 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     }
 
     /**
-     * Reads the branch of every directory a project or folder row shows, off the EDT, and repaints when one changed.
-     * Runs with every refresh of the tree, so a checkout shows within the minute of [updateTree]'s timer.
+     * Reads the branch of every directory a project, folder or session row shows and which of them are gone, off the
+     * EDT, and rebuilds the tree when either changed, since a session's directories have [BranchRow]s of their own. Runs
+     * with every refresh of the tree, so a checkout or a removal shows within the minute of [updateTree]'s timer.
      */
     private fun readBranches() {
         val dirs = (tree.model.root as DefaultMutableTreeNode).depthFirstEnumeration().toList().flatMap {
@@ -412,10 +450,12 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val read = ++branchReads
         ApplicationManager.getApplication().executeOnPooledThread {
             val found = dirs.associateWith(Git::headBranch)
+            val missing = dirs.filterNot { it.exists() }.toSet()
             ApplicationManager.getApplication().invokeLater {
-                if (read == branchReads && found != branches) {
+                if (read == branchReads && (found != branches || missing != gone)) {
                     branches = found
-                    tree.repaint()
+                    gone = missing
+                    render()
                 }
             }
         }
@@ -454,16 +494,25 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
 
     private fun openSelected(): Boolean {
         val path = tree.selectionPath ?: return false
-        when (val item = (path.lastPathComponent as DefaultMutableTreeNode).userObject) {
-            is ClaudeSession -> ClaudeSessionOpener.open(project, item)
-            is BriefGoal -> ClaudeSessionOpener.open(project, item.session)
-            is BriefTaskRow -> ClaudeSessionOpener.open(project, item.session)
-            is AddedDir -> ClaudeSessionOpener.open(project, item.session)
-            is WorkDirRow -> ClaudeSessionOpener.open(project, item.session)
-            is ChangedFile -> openFile(project, item.path)
+        val item = (path.lastPathComponent as DefaultMutableTreeNode).userObject
+        val session = sessionOf(item)
+        when {
+            session != null -> ClaudeSessionOpener.open(project, session)
+            item is ChangedFile -> openFile(project, item.path)
             else -> if (tree.isExpanded(path)) tree.collapsePath(path) else tree.expandPath(path)
         }
         return true
+    }
+
+    /** The session a row opens: a session's own, or that of a row about it other than a file; null for any other row. */
+    private fun sessionOf(item: Any?): ClaudeSession? = when (item) {
+        is ClaudeSession -> item
+        is BriefGoal -> item.session
+        is BriefTaskRow -> item.session
+        is AddedDir -> item.session
+        is WorkDirRow -> item.session
+        is BranchRow -> item.session
+        else -> null
     }
 
     /** The narrowed tree keeps its own state, so turning the filter off brings back the tree as it was. */
@@ -506,8 +555,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             tree.model = DefaultTreeModel(
                 when {
                     error != null -> DefaultMutableTreeNode()
-                    foldersMode -> foldersTree(service.folders, treeSessions(), filter)
-                    else -> projectsTree(filter?.let(treeSessions()::filter) ?: treeSessions())
+                    foldersMode -> foldersTree(service.folders, treeSessions(), branches::get, filter)
+                    else -> projectsTree(filter?.let(treeSessions()::filter) ?: treeSessions(), branches::get)
                 },
             )
             if (query.isNotEmpty()) TreeUtil.expandAll(tree) else state().applyTo(tree)
@@ -524,6 +573,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         private const val TREE_STATE = "dev.myair.treeState"
         private const val WORK_TREE_ONLY = "dev.myair.thisWorkTree"
         private const val DENSITY = "dev.myair.density"
+        private const val SINGLE_CLICK = "dev.myair.singleClick"
         private const val TOOLBAR_CARD = "toolbar"
         private const val SEARCH_CARD = "search"
         private const val LOADING = "Loading sessions..."
