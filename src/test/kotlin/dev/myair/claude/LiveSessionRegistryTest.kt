@@ -58,6 +58,11 @@ class LiveSessionRegistryTest {
     }
 
     @Test
+    fun `a file deleted between the listing and its read counts as a process gone`() {
+        assertEquals(null, LiveSessionRegistry(dir) { _, _ -> true }.entry(dir.resolve("9.json")))
+    }
+
+    @Test
     fun `liveness check matches the current process by its FILETIME start and rejects another start time`() {
         val self = ProcessHandle.current()
         val fileTime = (self.info().startInstant().get().toEpochMilli() + 11_644_473_600_000L) * 10_000

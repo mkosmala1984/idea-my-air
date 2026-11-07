@@ -1,6 +1,7 @@
 package dev.myair.claude
 
 import com.google.gson.JsonParser
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.io.path.listDirectoryEntries
@@ -32,13 +33,18 @@ class LiveSessionRegistry(
     private val dir: Path,
     private val isSameProcess: (pid: Long, procStart: Long) -> Boolean = ::isSameProcess,
 ) {
-    fun read(): Map<String, LiveSession> = dir.listDirectoryEntries("*.json").mapNotNull { file ->
-        val o = JsonParser.parseString(file.readText()).asJsonObject
+    fun read(): Map<String, LiveSession> = dir.listDirectoryEntries("*.json").mapNotNull(::entry).toMap()
+
+    /** The entry [file] holds, or null when its process is gone or has not reported a status yet. */
+    internal fun entry(file: Path): Pair<String, LiveSession>? {
+        // A `claude` that exits between the listing and this read has deleted its file: the process is gone.
+        val text = try { file.readText() } catch (_: NoSuchFileException) { return null }
+        val o = JsonParser.parseString(text).asJsonObject
         val pid = o["pid"].asLong
         val procStart = checkNotNull(o["procStart"]) { "no procStart in $file" }.asString.toLong()
-        if (!isSameProcess(pid, procStart)) return@mapNotNull null
+        if (!isSameProcess(pid, procStart)) return null
         // A starting `claude` writes its file once without a status, then again with `status` and `statusUpdatedAt`.
-        val since = o["statusUpdatedAt"]?.asLong ?: return@mapNotNull null
+        val since = o["statusUpdatedAt"]?.asLong ?: return null
         val status = when (val s = checkNotNull(o["status"]) { "no status in $file" }.asString) {
             // `shell`: running a shell command; claude's own session list shows it as working, like `busy`.
             "busy", "shell" -> SessionStatus.WORKING
@@ -47,8 +53,8 @@ class LiveSessionRegistry(
             else -> error("unknown session status '$s' in $file")
         }
         val entrypoint = checkNotNull(o["entrypoint"]) { "no entrypoint in $file" }.asString
-        o["sessionId"].asString to LiveSession(pid, entrypoint, status, o["waitingFor"]?.asString, Instant.ofEpochMilli(since))
-    }.toMap()
+        return o["sessionId"].asString to LiveSession(pid, entrypoint, status, o["waitingFor"]?.asString, Instant.ofEpochMilli(since))
+    }
 
     companion object {
         /** Milliseconds between the Windows FILETIME epoch (1601-01-01) and the Unix epoch. */
