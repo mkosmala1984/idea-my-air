@@ -42,6 +42,7 @@ fun SessionFolders.treeJson(): String {
     fun node(folder: Folder, prefix: String): Map<String, Any?> = linkedMapOf(
         "path" to prefix + folder.name,
         "dirs" to folder.dirs,
+        "workdir" to folder.workdir,
         "plan" to folder.plan?.let { "${progress(it.tasks())} tasks done" },
         "sessions" to folder.items.map { it.id },
         "folders" to folder.folders.map { node(it, "$prefix${folder.name}/") },
@@ -81,6 +82,7 @@ private fun SessionFolders.planMap(folder: Folder, sessions: List<ClaudeSession>
     return linkedMapOf(
         "folder" to pathOf(folder.id),
         "dirs" to folder.dirs,
+        "workdir" to folder.workdir,
         "description" to plan.description,
         "milestones" to plan.milestones.map { m ->
             linkedMapOf(

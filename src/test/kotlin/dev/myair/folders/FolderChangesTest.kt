@@ -1,7 +1,11 @@
 package dev.myair.folders
 
 import org.junit.jupiter.api.Test
+import com.google.gson.Gson
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
+import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -42,6 +46,18 @@ class FolderChangesTest {
         assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","dirs":["/app"]}]""", result) }
         assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","dirs":"/app"}]""") }
         assertThrows<IllegalArgumentException> { apply("""[{"op":"create","path":"x","project":"/app"}]""") }
+    }
+
+    @Test
+    fun `set_workdir sets, replaces and clears an existing directory, as Path spells it`(@TempDir dir: Path) {
+        fun json(path: Any) = Gson().toJson(path.toString())
+        val set = apply("""[{"op":"set_workdir","path":"rtm","dir":${json("$dir${File.separator}")}},{"op":"set_workdir","path":"testflo","dir":${json(dir)}}]""")
+        assertEquals(dir.toString(), set.findByPath("rtm")!!.workdir)
+        assertEquals(dir.toString(), set.findByPath("testflo")!!.workdir)
+        assertNull(apply("""[{"op":"set_workdir","path":"rtm","dir":null}]""", set).findByPath("rtm")!!.workdir)
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"set_workdir","path":"rtm","dir":${json(dir.resolve("gone"))}}]""") }
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"set_workdir","path":"nope","dir":null}]""") }
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"set_workdir","path":"rtm"}]""") }
     }
 
     @Test

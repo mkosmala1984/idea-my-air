@@ -20,6 +20,7 @@ import dev.myair.folders.FolderChanges
 import dev.myair.folders.PlanChanges
 import dev.myair.folders.SessionFolders
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.store.Preset
 import dev.myair.store.PresetStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -89,15 +90,22 @@ class FoldersMcpToolset : McpToolset {
         @McpDescription("Only with worktree: a new branch of this name off base, checked out in the worktree.") branch: String? = null,
         @McpDescription("A plan task id such as T12: the session is filed in that task's plan folder and gets the plan as context.") plan_task: String? = null,
         @McpDescription("The name of a session configuration of the user; the other arguments replace its fields.") preset: String? = null,
+        @McpDescription(
+            "A folder path such as rtm/fixes: the session is filed there and, without dir, runs in the working directory or " +
+                "bound directory of that folder or the nearest folder above it having either.",
+        )
+        folder: String? = null,
     ): String {
         val project = currentCoroutineContext().project
-        val (start, plan, running) = onEdt { service ->
+        val (start, plan, folderId, running) = onEdt { service ->
             val saved = if (preset == null) emptyList()
             else PresetStore.INSTANCE.read().getOrElse { throw IllegalArgumentException("Cannot read ${PresetStore.INSTANCE.file}: ${it.message}") }
-            val start = sessionStartPreset(saved, preset, dir, model, effort, add_dirs, worktree, base)
+            val filed = folder?.let { requireNotNull(service.folders.findByPath(it)) { "no folder '$it'" } }
+            val folderDir = filed?.let { requireNotNull(service.folders.startFolder(it.id)?.startDir) { "no folder at or above '$folder' has a working or bound directory" } }
+            val start = sessionStartPreset(saved, preset, dir ?: folderDir, model, effort, add_dirs, worktree, base)
             require(branch == null || start.worktree) { "branch without worktree" }
             val plan = plan_task?.let { service.folders.requireTask(it) }?.let { (folder, task) -> PlanStart(folder.id, task.id) }
-            Triple(start, plan, runningDirs())
+            Started(start, plan, filed?.id ?: plan?.folderId, runningDirs())
         }
         val sessionProject = start.dir(projectBase(project))
         val args = expected {
@@ -110,7 +118,7 @@ class FoldersMcpToolset : McpToolset {
         val cwd = if (repo == null) sessionProject else withContext(Dispatchers.IO) { expected { createWorktree(repo, checkNotNull(start.base), branch, id, running) } }
         withContext(Dispatchers.EDT) {
             repo?.let { rememberBase(it, checkNotNull(start.base)) }
-            ClaudeSessionOpener.startNew(project, sessionProject, cwd, id, args, plan)
+            ClaudeSessionOpener.startNew(project, sessionProject, cwd, id, args, plan, folderId)
         }
         return startedJson(id, cwd, sessionProject)
     }
@@ -118,7 +126,9 @@ class FoldersMcpToolset : McpToolset {
     @McpTool
     @McpDescription(
         "The user's folder tree in their order:each folder's path, the directories bound to it (empty for most), plan (for a " +
-            "plan folder how many of its tasks are done, else null; read it with my_air_plan_get), the ids of sessions the user filed " +
+            "plan folder how many of its tasks are done, else null; read it with my_air_plan_get), workdir (where new sessions " +
+            "started from it or a subfolder run, unless a nearer folder has one or a bound directory; it holds no sessions; " +
+            "else null), the ids of sessions the user filed " +
             "directly in it (sessions whose brief names it show there too but are not listed), and its subfolders. A bound folder also holds every session run in a bound directory or a directory " +
             "below it (worktrees included) not filed in another folder; the most specific binding wins.",
     )
@@ -139,6 +149,8 @@ class FoldersMcpToolset : McpToolset {
         "its bound folder), " +
         "{\"op\":\"add_plan\",\"path\":\"rtm/my-air\"} (makes an existing folder a plan folder), " +
         "{\"op\":\"bind\",\"path\":\"rtm/my-air\",\"dir\":\"E:\\\\dev\\\\my-air-web\"}, {\"op\":\"unbind\",\"dir\":\"E:\\\\dev\\\\my-air-web\"}, " +
+        "{\"op\":\"set_workdir\",\"path\":\"rtm/fixes\",\"dir\":\"E:\\\\dev\\\\rtm\"} (an existing directory new sessions started from " +
+        "the folder or below run in, holding no sessions; any number of folders may share one; dir null clears it), " +
         "{\"op\":\"rename\",\"path\":\"rtm/fixes\",\"name\":\"bugs\"}, " +
         "{\"op\":\"move\",\"path\":\"rtm/fixes\",\"to\":\"testflo\",\"index\":0} (to null is the top level; index optional, default last), " +
         "{\"op\":\"delete\",\"path\":\"rtm/fixes\"} (its sessions go to their brief's or project's folder, else become unfiled; a plan in it is deleted too), " +
@@ -243,3 +255,5 @@ class FoldersMcpToolset : McpToolset {
         block(service, service.folders)
     }
 }
+
+private data class Started(val start: Preset, val plan: PlanStart?, val folderId: String?, val running: List<Path>)

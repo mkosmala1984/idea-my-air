@@ -4,7 +4,9 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
+import java.nio.file.Path
 import java.util.UUID
+import kotlin.io.path.isDirectory
 
 /**
  * An agent's change list: a JSON array of `{"op": ...}` objects addressing folders by path, applied in order, each on
@@ -18,6 +20,7 @@ object FolderChanges {
         "add_plan" to setOf("path"),
         "bind" to setOf("path", "dir"),
         "unbind" to setOf("dir"),
+        "set_workdir" to setOf("path", "dir"),
         "rename" to setOf("path", "name"),
         "move" to setOf("path", "to", "index"),
         "delete" to setOf("path"),
@@ -81,6 +84,12 @@ object FolderChanges {
                 val dir = change.string("dir")
                 require(folders.all().any { dir in it.dirs }) { "'$dir' is bound to no folder" }
                 folders.unbind(dir)
+            }
+            "set_workdir" -> {
+                require(change.has("dir")) { "'dir' is missing (null clears the working directory)" }
+                val dir = if (change.get("dir").isJsonNull) null else Path.of(change.string("dir"))
+                require(dir == null || dir.isDirectory()) { "'$dir' is not a directory" }
+                folders.setWorkdir(folders.at(change.string("path")).id, dir?.toString())
             }
             "rename" -> folders.rename(folders.at(change.string("path")).id, change.string("name"))
             "move" -> {

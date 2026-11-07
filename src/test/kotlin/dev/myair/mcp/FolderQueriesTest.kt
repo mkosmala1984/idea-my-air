@@ -14,6 +14,7 @@ import java.nio.file.Path
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class FolderQueriesTest {
     private val zone = ZoneId.of("Europe/Warsaw")
@@ -71,6 +72,13 @@ class FolderQueriesTest {
         assertEquals("rtm/testflo", JsonParser.parseString(page.toJson(bound, zone)).asJsonObject.getAsJsonArray("sessions")[0].asJsonObject["folder"].asString)
         val folder = JsonParser.parseString(bound.treeJson()).asJsonArray[0].asJsonObject.getAsJsonArray("folders")[1].asJsonObject
         assertEquals(Path.of("/testflo").toString(), folder["dirs"].asJsonArray.single().asString)
+    }
+
+    @Test
+    fun `the tree json names each folder's working directory, null when unset`() {
+        val tree = JsonParser.parseString(structure.setWorkdir("fixes", "/work").treeJson()).asJsonArray[0].asJsonObject
+        assertTrue(tree["workdir"].isJsonNull)
+        assertEquals("/work", tree.getAsJsonArray("folders").map { it.asJsonObject }.single { it["path"].asString.endsWith("fixes") }["workdir"].asString)
     }
 
     @Test

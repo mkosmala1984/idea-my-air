@@ -21,7 +21,7 @@ fun appendedSystemPrompt(briefs: Boolean, filing: Boolean): String = listOfNotNu
         "the user's Claude Code sessions (by date, words in the title or project, folder), for example an earlier session to " +
         "continue from; my_air_folders_get reads the folders the user files sessions in, my_air_folders_apply changes them " +
         "only after the user approved the change, and my_air_history_list with my_air_history_restore undo such changes; " +
-        "my_air_session_start starts a new session in a tab, only when the user asks for one.",
+        "my_air_session_start starts a new session in a tab, only when the user asks for one; folder files it there and picks its directory.",
     "A project the user plans has one or more plan folders with milestones and tasks: at the start call my_air_plan_get with " +
         "the working directory, and when it returns plans, tell the user which task fits the request or propose a new one" +
         (if (briefs) ", and name that task as plan_task in my_air_set_brief." else ".") +
