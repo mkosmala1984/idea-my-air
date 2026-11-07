@@ -59,6 +59,15 @@ class ClaudeSessionScannerTest {
     }
 
     @Test
+    fun `a session continued under a new id is hidden while its successor is scanned, kept when it is not`() {
+        write("old", user("\"prompt\""), """{"type":"continued-in","timestamp":"2026-10-24T10:01:00Z","sessionId":"old","continuedInSessionId":"new"}""")
+        val scanner = ClaudeSessionScanner(dir)
+        assertEquals(listOf("old"), scanner.scan().map { it.id })
+        write("new", user("\"prompt\"", at = "2026-10-24T10:02:00Z"))
+        assertEquals(listOf("new"), scanner.scan().map { it.id })
+    }
+
+    @Test
     fun `last ai title wins when there is no custom title`() {
         val s = parse(write("s1",
             """{"type":"ai-title","aiTitle":"Old","sessionId":"s1"}""",

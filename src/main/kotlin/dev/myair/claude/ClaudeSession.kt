@@ -18,14 +18,14 @@ import java.time.Instant
  * it currently offers, sorted, without those waiting for a sign-in ([mcpServers] of the tool names).
  * [workDir]: where it works now, as its latest environment snapshot says; it follows `cd` into subfolders and
  * `EnterWorktree` into another work tree, while [cwd] stays where it started. [startBranch]: the branch checked out
- * when it started, null when none was.
+ * when it started, null when none was. [continuedIn]: the session `/bg` continued this one in, under a new id.
  */
 data class ClaudeSession(
     val id: String, val cwd: Path, val title: String, val lastMessage: Instant, val changedFiles: List<Path>, val prompts: List<String>,
     val brief: Brief? = null, val project: Path = cwd, val desktop: Boolean = false, val addedDirs: List<Path> = emptyList(),
     val model: String? = null, val effort: String? = null, val artifacts: List<Artifact> = emptyList(),
     val background: List<BackgroundTask> = emptyList(), val skills: List<String> = emptyList(), val mcpServers: List<String> = emptyList(),
-    val workDir: Path = cwd, val startBranch: String? = null,
+    val workDir: Path = cwd, val startBranch: String? = null, val continuedIn: String? = null,
 ) {
     /**
      * Case-insensitive substring match on the title, the cwd, [startBranch] or [branch], the branch checked out where it

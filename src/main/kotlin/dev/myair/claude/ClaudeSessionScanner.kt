@@ -44,7 +44,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         val files = projectsDir.listDirectoryEntries().filter { it.isDirectory() }
             .flatMap { dir -> dir.listDirectoryEntries().filter { it.extension == "jsonl" } }
         if (cache.keys.retainAll(files.toSet())) unsaved = true
-        val sessions = files.mapNotNull { file ->
+        val merged = files.mapNotNull { file ->
             val size = Files.size(file)
             // A file shorter than what was already read has been rewritten: start over.
             val known = cache[file]?.takeIf { size >= it.offset }
@@ -56,7 +56,9 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             // `claude --resume` from another folder, as after EnterWorktree, copies the transcript into that folder's
             // project directory and writes on in one of the copies: the one with the latest message, else the longest, is the session.
             .groupBy { it.first.id }.values.map { copies -> copies.maxWith(compareBy({ it.first.lastMessage }, { it.second })).first }
-            .sortedByDescending { it.lastMessage }
+        val ids = merged.mapTo(HashSet()) { it.id }
+        // `/bg` continues a session under a new id: the old transcript is the new session's past.
+        val sessions = merged.filter { it.continuedIn !in ids }.sortedByDescending { it.lastMessage }
         // Live sessions append every second; after a crash, a minute of lines is cheap to read again.
         if (saved != null && System.currentTimeMillis() - savedAt >= SAVE_INTERVAL_MS) save()
         return sessions
@@ -160,13 +162,13 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 effort = messages.effort, artifacts = artifacts.values.toList(), background = background.values.toList(), skills = env.skills,
                 mcpServers = mcpServers(env.mcpTools),
                 // A transcript without an environment snapshot comes from a `claude` that wrote none: it works where it started.
-                workDir = env.workDir?.let(Path::of) ?: cwd, startBranch = c.startBranch,
+                workDir = env.workDir?.let(Path::of) ?: cwd, startBranch = c.startBranch, continuedIn = c.continuedIn,
             )
         }
 
         companion object {
             val EMPTY = Transcript(
-                0, Conversation(null, null, null, null, emptyList(), emptyList()), Messages(null, null, null),
+                0, Conversation(null, null, null, null, emptyList(), emptyList(), null), Messages(null, null, null),
                 Environment(null, emptyList(), emptyList(), emptyList()), emptyMap(), emptyMap(), emptyMap(), null,
             )
         }
@@ -174,15 +176,16 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
 
     /**
      * The titles, the folder the session started in and the branch checked out there, its first [PROMPTS] human
-     * prompts and the files it wrote, first touch first.
+     * prompts, the files it wrote, first touch first, and the session `/bg` continued it in under a new id.
      */
     data class Conversation(
         val customTitle: String?, val aiTitle: String?, val cwd: String?, val startBranch: String?, val prompts: List<String>,
-        val changedFiles: List<String>,
+        val changedFiles: List<String>, val continuedIn: String?,
     ) {
         internal fun next(line: Line): Conversation = when {
             line.text.startsWith(CUSTOM_TITLE) -> copy(customTitle = line.json["customTitle"].asString)
             line.text.startsWith(AI_TITLE) -> copy(aiTitle = line.json["aiTitle"].asString)
+            line.text.startsWith(CONTINUED_IN) -> copy(continuedIn = line.json["continuedInSessionId"].asString)
             ASSISTANT in line && EDIT_TOOL_USE.containsMatchIn(line.text) -> copy(changedFiles = (changedFiles + editedFiles(line.json)).distinct())
             (cwd == null || prompts.size < PROMPTS) && CWD in line && line.main -> {
                 val o = line.json
@@ -260,6 +263,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
     companion object {
         private const val CUSTOM_TITLE = "{\"type\":\"custom-title\""
         private const val AI_TITLE = "{\"type\":\"ai-title\""
+        private const val CONTINUED_IN = "{\"type\":\"continued-in\""
         private const val CWD = "\"cwd\":"
 
         /** Human prompts kept per session: enough for an agent to judge what the session was about. */
