@@ -61,7 +61,8 @@ val NEEDS_INPUT_AMBER = JBColor(0xF2A50C, 0xF2C55C)
 /** An amber disc with an exclamation mark: a session waiting for input. */
 val NEEDS_INPUT_ICON: Icon = IconLoader.getIcon("/icons/needsInput.svg", SessionStatus::class.java)
 
-private val CLAUDE_ORANGE = Color(0xD97757)
+/** Claude's orange, as [WORKING_ICON] paints its rays. */
+val CLAUDE_ORANGE = Color(0xD97757)
 
 /** One frame of [WORKING_ICON]: eight half-rays of the asterisk fading around the circle, the brightest at [step] × 45°. */
 private class WorkingFrame(private val step: Int) : Icon {

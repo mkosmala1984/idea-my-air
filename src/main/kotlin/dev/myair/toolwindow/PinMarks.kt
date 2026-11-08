@@ -7,9 +7,11 @@ import com.intellij.openapi.actionSystem.KeepPopupOnPerform
 import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.project.DumbAware
 import com.intellij.ui.components.JBList
+import com.intellij.ui.list.ListCellBackgroundSupplier
 import dev.myair.claude.ClaudeSession
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.Pins
+import java.awt.Color
 import java.awt.Graphics
 import javax.swing.Icon
 
@@ -48,8 +50,11 @@ class PinsToggle(private val mark: Mark, private val service: ClaudeSessionsServ
     }
 }
 
-class TrailerList : JBList<ClaudeSession>() {
+/** The pinned list; [tint] gives a row's background under the renderer, as the list UI asks for it when the row is neither selected nor hovered. */
+class TrailerList(private val tint: (ClaudeSession) -> Color?) : JBList<ClaudeSession>(), ListCellBackgroundSupplier<ClaudeSession> {
     lateinit var trailer: SessionTrailer
+
+    override fun getCellBackground(value: ClaudeSession, row: Int) = tint(value)
 
     override fun paintComponent(g: Graphics) {
         super.paintComponent(g)

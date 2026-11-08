@@ -23,9 +23,10 @@ import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.DoubleClickListener
 import com.intellij.ui.InplaceButton
-import com.intellij.ui.OnePixelSplitter
+import com.intellij.ui.JBColor
 import com.intellij.ui.PopupHandler
 import com.intellij.ui.ScrollPaneFactory
+import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.SearchTextField
 import com.intellij.ui.hover.ListHoverListener
 import com.intellij.ui.render.RenderingUtil
@@ -44,12 +45,14 @@ import dev.myair.actions.SameSettingsAction
 import dev.myair.actions.SaveAsPresetAction
 import dev.myair.actions.ShowChangesVsBaseAction
 import dev.myair.claude.ClaudeSession
+import dev.myair.claude.SessionStatus
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.projectBase
 import dev.myair.folders.Folder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.pinnedSessions
 import java.awt.BorderLayout
+import java.awt.Dimension
 import java.awt.CardLayout
 import java.awt.Component
 import java.awt.Point
@@ -63,6 +66,9 @@ import java.time.Instant
 import javax.swing.DropMode
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.ScrollPaneConstants
+import kotlin.math.max
+import kotlin.math.min
 import javax.swing.SwingUtilities
 import javax.swing.ToolTipManager
 import javax.swing.Timer
@@ -109,10 +115,25 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         // The room above the first row the design leaves.
         border = JBUI.Borders.emptyTop(4)
     }
-    private val pinned = TrailerList().apply {
-        cellRenderer = PinnedRenderer({ service.live[it.id] }, ::isSettled, ::isUnread, ::density)
+    private val pinned: TrailerList = TrailerList { s -> NEEDS_INPUT_TINT.takeIf { service.live[s.id]?.status == SessionStatus.NEEDS_INPUT } }.apply {
+        cellRenderer = PinnedRenderer({ service.live[it.id] }, ::isSettled, ::isUnread, service::branchOf, ::pinnedLayout) { repaint() }
         allowSpinner()
     }
+    /** The pinned list's rows for the font and [density]; set by [applyFontSize]. */
+    private lateinit var pinnedLayout: PinnedLayout
+    /** The pinned list as high as its rows, up to [PINNED_MAX_SHARE] of the panel, scrolling beyond; hidden when loaded and empty. */
+    private val pinnedPane = object : JBScrollPane(pinned) {
+        override fun getPreferredSize(): Dimension {
+            // The list's own height counts its insets; before the first load it shows its empty text in one row.
+            val height = if (service.loaded) pinned.preferredSize.height else pinned.fixedCellHeight
+            val max = max(pinned.fixedCellHeight, ((parent?.height ?: 0) * PINNED_MAX_SHARE).toInt())
+            return Dimension(0, min(height, max) + insets.top + insets.bottom)
+        }
+    }.apply {
+        horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+        border = JBUI.Borders.customLineBottom(JBColor.border())
+    }
+    private val lists = JPanel(BorderLayout())
     private val trailerButtons = listOf(SETTLE, PIN).map { mark ->
         TrailerButton(mark.icon, { it.id in mark.marked(service.pins) }) { session ->
             service.updatePins { mark.change(it, listOf(session.id), session.id !in mark.marked(it)) }
@@ -146,14 +167,14 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             // a null hover background means hover painting is off.
             { row ->
                 if (pinned.isSelectedIndex(row)) RenderingUtil.getSelectionBackground(pinned)
-                else RenderingUtil.getHoverBackground(pinned).takeIf { ListHoverListener.getHoveredIndex(pinned) == row } ?: RenderingUtil.getBackground(pinned)
+                else RenderingUtil.getHoverBackground(pinned).takeIf { ListHoverListener.getHoveredIndex(pinned) == row }
+                    ?: pinned.getCellBackground(pinned.model.getElementAt(row), row) ?: RenderingUtil.getBackground(pinned)
             },
-            trailerButtons, ::density,
+            trailerButtons, ::density, { pinnedLayout.firstLine(it) },
         )
-        setContent(OnePixelSplitter(true, "dev.myair.pinnedSplitter", 0.25f).apply {
-            firstComponent = ScrollPaneFactory.createScrollPane(pinned)
-            secondComponent = ScrollPaneFactory.createScrollPane(tree)
-        })
+        lists.add(pinnedPane, BorderLayout.NORTH)
+        lists.add(ScrollPaneFactory.createScrollPane(tree), BorderLayout.CENTER)
+        setContent(lists)
         applyFontSize()
         val refresh = object : DumbAwareAction("Refresh", null, AllIcons.Actions.Refresh) {
             override fun actionPerformed(e: AnActionEvent) = service.refresh()
@@ -348,7 +369,16 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         tree.font = font
         pinned.font = font
         tree.rowHeight = JBUI.scale(density.rowHeight) + tree.getFontMetrics(font).height - tree.getFontMetrics(base).height
-        pinned.fixedCellHeight = tree.rowHeight
+        pinnedLayout = PinnedLayout(font, density, pinned::getFontMetrics)
+        pinned.fixedCellHeight = pinnedLayout.height
+        fitPinned()
+    }
+
+    /** Lays the panel out again for [pinnedPane]'s height; the scroll pane is a validate root, so the panel above it is revalidated. */
+    private fun fitPinned() {
+        pinnedPane.isVisible = !service.loaded || pinned.model.size > 0
+        lists.revalidate()
+        lists.repaint()
     }
 
     /** Sets [density] to [option] and lays both lists out anew. */
@@ -426,6 +456,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val items = pinnedSessions(shownSessions(), service.live, service.pins)
         pinned.setListData(items.toTypedArray())
         pinned.selectedIndices = items.indices.filter { items[it].id in selected }.toIntArray()
+        fitPinned()
     }
 
     /** Statuses alone only repaint, which keeps expansion and selection; anything else rebuilds the model. */
@@ -575,6 +606,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         private const val TREE_STATE = "dev.myair.treeState"
         private const val WORK_TREE_ONLY = "dev.myair.thisWorkTree"
         private const val DENSITY = "dev.myair.density"
+        private const val PINNED_MAX_SHARE = 0.4
         private const val SINGLE_CLICK = "dev.myair.singleClick"
         private const val TOOLBAR_CARD = "toolbar"
         private const val SEARCH_CARD = "search"
