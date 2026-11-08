@@ -42,9 +42,11 @@ data class PlanStart(val folderId: String, val taskId: String?)
 /**
  * The plan session [sessionId] works in, with its task when known: the task its brief names ([session], null before a scan
  * found it), else [start]'s task, else no task in the plan folder the session shows in (for a new session, the one it is
- * filed in). Null outside every plan.
+ * filed in). Null outside every plan. A plan's manager ([managed], its plan folder's id) works in that plan, on no task,
+ * wherever it was moved and whatever task its brief names.
  */
-fun sessionPlan(structure: SessionFolders, sessionId: String, session: ClaudeSession?, start: PlanStart?): Pair<Folder, PlanTask?>? {
+fun sessionPlan(structure: SessionFolders, sessionId: String, session: ClaudeSession?, start: PlanStart?, managed: String? = null): Pair<Folder, PlanTask?>? {
+    managed?.let { return checkNotNull(structure.find(it)) { "no plan folder $it for its manager $sessionId" } to null }
     (session?.let(structure::taskOf) ?: start?.taskId?.let(structure::findTask))?.let { return it }
     val place = session?.let(structure::placeOf) ?: structure.folderOf(sessionId)
     return place?.let(structure::planFolderAt)?.let { it to null }

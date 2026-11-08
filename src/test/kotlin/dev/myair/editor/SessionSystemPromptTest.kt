@@ -77,6 +77,13 @@ class SessionSystemPromptTest {
     }
 
     @Test
+    fun `a plan's manager works in its plan on no task, wherever it is filed and whatever task its brief names`() {
+        val moved = structure.assign("m", "x")
+        assertEquals("b" to null, sessionPlan(moved, "m", session("m", "T2"), PlanStart("b", null), managed = "b")?.let { it.first.id to it.second?.id })
+        assertEquals("b" to null, sessionPlan(structure, "m", null, null, managed = "b")?.let { it.first.id to it.second?.id })
+    }
+
+    @Test
     fun `the plan prompt carries names, the path and descriptions as written, but no status`() {
         val folder = structure.find("a")!!
         val task = structure.findTask("T2")!!.second
