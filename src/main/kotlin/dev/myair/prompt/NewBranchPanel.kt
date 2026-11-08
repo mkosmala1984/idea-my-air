@@ -26,16 +26,16 @@ import javax.swing.JPanel
 /**
  * Names a new branch off [base] in the composer's look: the task, or the Jira key, in the card, Suggest letting Haiku
  * name the branch from it into the bar below, where the name may also be typed. Enter in the task suggests, Enter in
- * the name or the send button gives the name to [chosen].
+ * the name or the send button gives [chosen] the name and the task, the session's first message (null when blank).
  */
-private class NewBranchPanel(private val dir: Path, base: String, private val chosen: (String) -> Unit) : JPanel(VerticalLayout(0)) {
+private class NewBranchPanel(private val dir: Path, base: String, private val chosen: (String, String?) -> Unit) : JPanel(VerticalLayout(0)) {
     val task = JBTextArea(3, 60).apply {
         font = JBUI.Fonts.label().biggerOn(1f)
         lineWrap = true
         wrapStyleWord = true
         isOpaque = false
         border = JBUI.Borders.empty()
-        emptyText.text = "TR-1234, or what the branch is for; Enter suggests a name"
+        emptyText.text = "The session's first message, or TR-1234; Enter suggests a branch name"
     }
     private val branchField = JBTextField().apply {
         isOpaque = false
@@ -103,7 +103,7 @@ private class NewBranchPanel(private val dir: Path, base: String, private val ch
     private fun create() {
         val branch = branchField.text.trim()
         if (branch.isEmpty()) return show("Name the branch, or let Suggest name it from the task")
-        chosen(branch)
+        chosen(branch, task.text.trim().ifEmpty { null })
     }
 
     private fun show(message: String?) {
@@ -114,10 +114,10 @@ private class NewBranchPanel(private val dir: Path, base: String, private val ch
     }
 }
 
-/** [NewBranchPanel] in a popup centred in the project's window; [chosen] gets the name and the popup closes. */
-fun showNewBranchPopup(project: Project, dir: Path, base: String, chosen: (String) -> Unit) {
+/** [NewBranchPanel] in a popup centred in the project's window; [chosen] gets the name and the first message, and the popup closes. */
+fun showNewBranchPopup(project: Project, dir: Path, base: String, chosen: (String, String?) -> Unit) {
     lateinit var popup: JBPopup
-    val panel = NewBranchPanel(dir, base) { popup.closeOk(null); chosen(it) }
+    val panel = NewBranchPanel(dir, base) { branch, prompt -> popup.closeOk(null); chosen(branch, prompt) }
     popup = JBPopupFactory.getInstance().createComponentPopupBuilder(panel, panel.task)
         .setRequestFocus(true).setResizable(true).setMovable(true).setCancelOnClickOutside(true)
         .createPopup()
