@@ -77,7 +77,9 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
         open = open?.takeIf { it.edit.current(view.folder.plan!!) != null }
         val sessions = view.milestones.flatMap { m -> m.tasks.flatMap { it.sessions } }
         val now = Instant.now()
-        val shown = listOf(view, open?.edit, sessions.map { Triple(service.live[it.id]?.status, it.id in service.unread, shortAge(it.lastMessage, now)) })
+        // What the panel shows, not whole sessions: a working session's transcript changes them on every refresh.
+        val shown = listOf(view.folder.plan, open?.edit, view.milestones.map { m -> m.tasks.map { t -> t.sessions.map { it.id } } },
+            sessions.map { listOf(it.title, service.live[it.id]?.status, it.id in service.unread, shortAge(it.lastMessage, now)) })
         if (!force && shown == rendered && !focusOpen) return
         rendered = shown
         val focused = open?.component?.isFocusOwner == true
