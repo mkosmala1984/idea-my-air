@@ -3,7 +3,10 @@ package dev.myair.service
 import dev.myair.claude.ClaudeSession
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.BasicFileAttributeView
+import java.nio.file.attribute.FileTime
 import java.time.Instant
 import kotlin.io.path.createDirectories
 import kotlin.io.path.name
@@ -48,5 +51,18 @@ class SessionProjectsTest {
         val app = repo(root.resolve("app"), worktree)
         app.resolve(".git/worktrees/gone").createDirectories().resolve("index").writeText("")
         assertEquals(listOf(app, app), inProjects(listOf(session(app), session(worktree))).map { it.project })
+    }
+
+    @Test
+    fun `worktrees come newest first by when git made their admin directory`() {
+        val old = root.resolve("w/old")
+        val new = root.resolve("w/new")
+        val app = repo(root.resolve("app"), old, new)
+        fun created(name: String, at: String) = Instant.parse(at).also {
+            Files.getFileAttributeView(app.resolve(".git/worktrees/$name"), BasicFileAttributeView::class.java).setTimes(null, null, FileTime.from(it))
+        }
+        val oldAt = created("old", "2026-01-01T00:00:00Z")
+        val newAt = created("new", "2026-02-01T00:00:00Z")
+        assertEquals(listOf(LinkedWorktree(new, newAt), LinkedWorktree(old, oldAt)), gitWorktrees(app))
     }
 }
