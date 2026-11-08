@@ -38,6 +38,7 @@ class TrailerButton(val icon: Icon, val on: (ClaudeSession) -> Boolean, val togg
  * The right end of each session row in [component]: the age of its last message, replaced by [buttons] while the pointer
  * is over the row; of each group row, its [summary]. It is painted over the rows, since a tree cell renderer is only as wide as its text, and covers a title
  * running underneath it with the row's [background]. The buttons' icons are as large as the [density]'s. The component calls [paint] after painting itself.
+ * A session row paints within its [band], the first line of a row of several; the whole row counts for the hover.
  */
 class SessionTrailer(
     private val component: JComponent,
@@ -48,6 +49,7 @@ class SessionTrailer(
     private val background: (row: Int) -> Color,
     private val buttons: List<TrailerButton>,
     private val density: () -> Density,
+    private val band: (Rectangle) -> Rectangle = { it },
 ) : MouseAdapter() {
     private var pointer: Point? = null
 
@@ -104,7 +106,7 @@ class SessionTrailer(
 
     private fun buttonAt(p: Point): Pair<TrailerButton, ClaudeSession>? {
         val row = hoveredRow(p) ?: return null
-        val index = buttonRects(bounds(row)!!).indexOfFirst { it.contains(p) }
+        val index = buttonRects(band(bounds(row)!!)).indexOfFirst { it.contains(p) }
         return if (index < 0) null else buttons[index] to session(row)!!
     }
 
@@ -117,7 +119,8 @@ class SessionTrailer(
         return buttons.indices.map { Rectangle(left + it * size, r.y + (r.height - size) / 2, size, size) }
     }
 
-    private fun paintRow(g: Graphics2D, row: Int, r: Rectangle, session: ClaudeSession) {
+    private fun paintRow(g: Graphics2D, row: Int, whole: Rectangle, session: ClaudeSession) {
+        val r = band(whole)
         val hovered = pointer?.let(::hoveredRow) == row
         if (hovered) {
             val rects = buttonRects(r)

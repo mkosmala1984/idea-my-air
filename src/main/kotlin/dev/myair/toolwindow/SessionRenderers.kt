@@ -2,7 +2,6 @@ package dev.myair.toolwindow
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.fileTypes.FileTypeManager
-import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.ColoredTreeCellRenderer
 import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
@@ -24,7 +23,6 @@ import dev.myair.folders.progress
 import dev.myair.folders.startFolder
 import java.nio.file.Path
 import javax.swing.Icon
-import javax.swing.JList
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
 
@@ -76,34 +74,33 @@ enum class Density(val rowHeight: Int, val iconSize: Int, val iconTextGap: Int) 
     fun grow(icon: Icon): Icon = IconUtil.scale(icon, null, iconSize / 16f)
 }
 
+/** A session's title: grey italic when settled, grey without a process, bold when unread. */
+fun titleAttributes(live: LiveSession?, settled: Boolean, unread: Boolean): SimpleTextAttributes = when {
+    settled -> SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES
+    live == null -> SimpleTextAttributes.GRAYED_ATTRIBUTES
+    unread -> SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
+    else -> SimpleTextAttributes.REGULAR_ATTRIBUTES
+}
+
+/** [tooltipLines] as the HTML of a row's tooltip; null when there are none. */
+fun sessionTooltip(session: ClaudeSession, live: LiveSession?, unread: Boolean, settled: Boolean, project: Path?): String? =
+    tooltipLines(session, live, unread, settled, project).takeIf { it.isNotEmpty() }?.joinToString("<br>", "<html>", "</html>") { StringUtil.escapeXmlEntities(it) }
+
 /**
- * A session's row in the tree and in the pinned list: its status as one [sessionIcon], title and task count; [SessionTrailer]
+ * A session's row in the tree: its status as one [sessionIcon], title and task count; [SessionTrailer]
  * adds the age. [projectInRow] names the session's project after the count; [project] names it in the tooltip instead.
  */
 private fun SimpleColoredComponent.appendSession(
     item: ClaudeSession, live: LiveSession?, settled: Boolean, unread: Boolean, project: Path?, projectInRow: Boolean, density: Density,
 ) {
     iconTextGap = JBUI.scale(density.iconTextGap)
-    append(item.title, when {
-        settled -> SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES
-        live == null -> SimpleTextAttributes.GRAYED_ATTRIBUTES
-        unread -> SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
-        else -> SimpleTextAttributes.REGULAR_ATTRIBUTES
-    })
-    toolTipText = tooltipLines(item, live, unread, settled, project).takeIf { it.isNotEmpty() }?.joinToString("<br>", "<html>", "</html>") { StringUtil.escapeXmlEntities(it) }
+    append(item.title, titleAttributes(live, settled, unread))
+    toolTipText = sessionTooltip(item, live, unread, settled, project)
     icon = density.grow(sessionIcon(live?.status, unread))
     briefCount(item.brief)?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
     if (projectInRow) append("  ${item.cwd.fileName ?: item.cwd}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
 }
 
-/** Sessions from every project, so each row names its project; a row without a process is there because it is pinned. */
-class PinnedRenderer(
-    private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
-    private val density: () -> Density,
-) : ColoredListCellRenderer<ClaudeSession>() {
-    override fun customizeCellRenderer(list: JList<out ClaudeSession>, value: ClaudeSession, index: Int, selected: Boolean, hasFocus: Boolean) =
-        appendSession(value, liveOf(value), settled(value), unread(value), project = null, projectInRow = true, density())
-}
 
 class SessionRenderer(
     private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
