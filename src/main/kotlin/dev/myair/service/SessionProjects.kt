@@ -25,7 +25,7 @@ fun inProjects(sessions: List<ClaudeSession>): List<ClaudeSession> {
 data class LinkedWorktree(val path: Path, val created: Instant)
 
 /**
- * The linked worktrees of the main checkout [root], as git keeps them, newest first: `.git/worktrees/<name>/gitdir` names
+ * The linked worktrees of the main checkout [root], as git keeps them, in no order: `.git/worktrees/<name>/gitdir` names
  * the worktree's `.git` file (relative to the admin directory with `--relative-paths`), and the admin directory's creation time is when `git worktree add` made it (git records no
  * date). A directory that is no repository, or is itself a linked worktree (`.git` is a file), has none. An admin
  * directory without `gitdir` (a worktree half removed, or still being added) is none either: `git worktree list` skips it.
@@ -35,7 +35,6 @@ fun gitWorktrees(root: Path): List<LinkedWorktree> {
     if (!admin.isDirectory()) return emptyList()
     return admin.listDirectoryEntries().filter { it.resolve("gitdir").exists() }
         .map { LinkedWorktree(worktreeOf(it), it.readAttributes<BasicFileAttributes>().creationTime().toInstant()) }
-        .sortedByDescending { it.created }
 }
 
 /** The worktree the admin directory [admin] keeps, from the `.git` file its `gitdir` names. */

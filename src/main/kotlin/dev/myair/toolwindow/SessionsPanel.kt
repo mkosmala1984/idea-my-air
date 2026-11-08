@@ -105,7 +105,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     /** The linked worktrees of every directory a folder is bound to, newest first, read with [branches]. */
     private var worktrees: Map<Path, List<WorktreeRow>> = emptyMap()
 
-    /** The directories of [branches] and [worktrees] that do not exist, read with them. */
+    /** The directories of [branches] that do not exist, read with them. */
     private var gone: Set<Path> = emptySet()
     /** The number of [readBranches] calls; only the latest read lands. */
     private var branchReads = 0
@@ -471,9 +471,10 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     }
 
     /**
-     * Reads the branch of every directory a project, folder or session row shows, the linked worktrees of every bound
-     * directory (of all folders, as a filter may hide some), and which of them are gone, off the EDT, and rebuilds the tree
-     * when any changed, since a session's directories have [BranchRow]s of their own. Runs
+     * Reads the branch of every directory a project, folder or session row shows and which of them are gone, then the
+     * linked worktrees of every bound directory (of all folders, as a filter may hide some), off the EDT, and rebuilds the
+     * tree when either changed, since a session's directories have [BranchRow]s of their own. The two land apart, so a
+     * worktree whose files cannot be read (it throws) leaves the branches current. Runs
      * with every refresh of the tree, so a checkout or a removal shows within the minute of [updateTree]'s timer.
      */
     private fun readBranches() {
@@ -486,20 +487,25 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 else -> emptyList()
             }
         }.toSet()
-        val bound = service.folders.folders.flatMap { it.subtree() }.flatMap { it.dirs }.map(Path::of).toSet()
+        val bound = service.folders.all().flatMap { it.dirs }.map(Path::of).toSet()
         val read = ++branchReads
+        fun land(changed: () -> Boolean, apply: () -> Unit) = ApplicationManager.getApplication().invokeLater {
+            if (read == branchReads && changed()) {
+                apply()
+                render()
+            }
+        }
         ApplicationManager.getApplication().executeOnPooledThread {
             val found = dirs.associateWith(Git::headBranch)
-            val trees = bound.associateWith { root -> gitWorktrees(root).map { WorktreeRow(it.path, root, Git.headBranch(it.path), it.created) } }
-            val missing = (dirs + trees.values.flatten().map { it.path }).filterNot { it.exists() }.toSet()
-            ApplicationManager.getApplication().invokeLater {
-                if (read == branchReads && (found != branches || trees != worktrees || missing != gone)) {
-                    branches = found
-                    worktrees = trees
-                    gone = missing
-                    render()
-                }
+            val missing = dirs.filterNot { it.exists() }.toSet()
+            land({ found != branches || missing != gone }) {
+                branches = found
+                gone = missing
             }
+            val trees = bound.associateWith { root ->
+                gitWorktrees(root).map { WorktreeRow(it.path, root, Git.headBranch(it.path), it.created, !it.path.exists()) }
+            }
+            land({ trees != worktrees }) { worktrees = trees }
         }
     }
 

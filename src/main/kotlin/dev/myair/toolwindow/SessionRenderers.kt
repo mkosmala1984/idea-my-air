@@ -180,11 +180,10 @@ class SessionRenderer(
             }
             is WorktreeRow -> {
                 icon = d.grow(AllIcons.Vcs.Branch)
-                val gone = isGone(item.path)
-                append("${item.path.fileName ?: item.path}", if (gone) SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
+                append("${item.path.fileName ?: item.path}", if (item.gone) SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
                 item.branch?.let { append("  ($it)", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
                 val created = item.created.atZone(ZoneId.systemDefault()).format(WORKTREE_CREATED)
-                toolTipText = "<html>${StringUtil.escapeXmlEntities(item.path.toString())}<br>Created $created" + (if (gone) "<br>Folder no longer exists" else "") + "</html>"
+                toolTipText = "<html>${StringUtil.escapeXmlEntities(item.path.toString())}<br>Created $created" + (if (item.gone) "<br>Folder no longer exists" else "") + "</html>"
             }
             is Path -> {
                 icon = projectIcon(item, projectName(item), d.iconSize)

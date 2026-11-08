@@ -5,6 +5,7 @@ import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
+import dev.myair.claude.isAtOrUnder
 import dev.myair.folders.Folder
 import dev.myair.folders.Milestone
 import dev.myair.folders.PlanTask
@@ -91,9 +92,9 @@ class WorktreesGroup(val folder: Folder) {
 
 /**
  * A linked worktree at [path] of the main checkout [root], with the [branch] checked out there (null when detached), made
- * at [created]; it holds the sessions working in it.
+ * at [created], [gone] once its folder is; it holds the sessions working in it.
  */
-data class WorktreeRow(val path: Path, val root: Path, val branch: String?, val created: Instant) {
+data class WorktreeRow(val path: Path, val root: Path, val branch: String?, val created: Instant, val gone: Boolean) {
     override fun toString() = "worktree $path"
 }
 
@@ -105,7 +106,8 @@ fun projectsTree(sessions: List<ClaudeSession>, branchOf: (Path) -> String?) = n
  * [SessionFolders.placeOf]), then [RecentSessions] and [UnfiledSessions] last. A plan folder holds, after its subfolders,
  * its milestones with their tasks, each task the sessions whose brief names it, then [NoTask] with its other sessions
  * when there are any. A folder bound to directories [worktreesOf] finds linked worktrees of holds, after its subfolders, a
- * [WorktreesGroup] of them all newest first, each with the sessions whose work dir or cwd lies in it, wherever they are
+ * [WorktreesGroup] of them all newest first, each with the sessions whose work dir or cwd lies in it (as text, as
+ * [SessionFolders.projectFolder] tells), wherever they are
  * filed, so they show there and in their own place. Sessions filed but absent from [sessions] are not shown. A [filter] keeps the sessions it accepts,
  * the folders, milestones, tasks and worktrees on their path, [RecentSessions] and [UnfiledSessions]; [sessions] arrive newest first;
  * [branchOf] as [sessionNode] takes it.
@@ -127,7 +129,7 @@ fun foldersTree(
         val rows = folder.dirs.flatMap { worktreesOf(Path.of(it)) }.sortedByDescending { it.created }
         if (rows.isEmpty()) return null
         return keep(WorktreesGroup(folder), rows.mapNotNull { row ->
-            keep(row, shown.filter { listOf(it.workDir, it.cwd).any { dir -> dir.startsWith(row.path) } }.map(sessionNode))
+            keep(row, shown.filter { listOf(it.workDir, it.cwd).any { dir -> dir.isAtOrUnder(row.path.toString()) } }.map(sessionNode))
         })
     }
     fun folderNode(folder: Folder): DefaultMutableTreeNode? {

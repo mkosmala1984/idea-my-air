@@ -408,11 +408,11 @@ class GitTest {
     }
 
     @Test
-    fun `worktrees git adds are listed newest first, each with the branch checked out there`() {
+    fun `worktrees git adds are dated in the order git made them, each with the branch checked out there`() {
         val repo = init("repo")
         git(repo, "worktree", "add", "-b", "older", dir.resolve("a").toString())
         git(repo, "worktree", "add", "--detach", dir.resolve("b").toString())
-        val listed = gitWorktrees(repo)
+        val listed = gitWorktrees(repo).sortedByDescending { it.created }
         assertEquals(listOf(dir.resolve("b"), dir.resolve("a")), listed.map { it.path.toRealPath() })
         assertEquals(listOf(null, "older"), listed.map { Git.headBranch(it.path) })
     }

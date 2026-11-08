@@ -356,7 +356,7 @@ class SessionTreeTest {
     private val bySession = listOf(inApp("a1", appX, 2), inApp("a2", Path.of("/app"), 1))
     private val app = SessionFolders().createFolder(null, "app", "app", listOf(Path.of("/app").toString()))
     private val appWorktrees: (Path) -> List<WorktreeRow> = {
-        if (it == Path.of("/app")) listOf(WorktreeRow(appX, Path.of("/app"), "feat", Instant.ofEpochMilli(1)), WorktreeRow(wY, Path.of("/app"), null, Instant.ofEpochMilli(2))) else emptyList()
+        if (it == Path.of("/app")) listOf(WorktreeRow(appX, Path.of("/app"), "feat", Instant.ofEpochMilli(1), false), WorktreeRow(wY, Path.of("/app"), null, Instant.ofEpochMilli(2), false)) else emptyList()
     }
 
     @Test
@@ -374,7 +374,7 @@ class SessionTreeTest {
     fun `a folder bound to two repositories merges their worktrees newest first`() {
         val two = SessionFolders().createFolder(null, "app", "app", listOf(Path.of("/app").toString(), Path.of("/lib").toString()))
         val lib = Path.of("/l/z")
-        val worktrees: (Path) -> List<WorktreeRow> = { if (it == Path.of("/lib")) listOf(WorktreeRow(lib, Path.of("/lib"), "main", Instant.ofEpochMilli(3))) else appWorktrees(it) }
+        val worktrees: (Path) -> List<WorktreeRow> = { if (it == Path.of("/lib")) listOf(WorktreeRow(lib, Path.of("/lib"), "main", Instant.ofEpochMilli(3), false)) else appWorktrees(it) }
         assertEquals("app(worktrees app(worktree $lib, worktree $wY, worktree $appX(a1)), a1, a2), recent(a1, a2), sessions", shape(foldersTree(two, bySession, NO_BRANCH, worktrees, null)))
     }
 
@@ -403,5 +403,11 @@ class SessionTreeTest {
         assertEquals(Path.of("/app"), nodeProject(row))
         assertEquals(Path.of("/app"), nodeProject(TreePath(arrayOf(root, folder))))
         assertNull(nodeDir(TreePath(arrayOf(root, folder, group))))
+    }
+
+    @Test
+    fun `a worktree holds the sessions under it as text, as a bound folder does, so another case is another directory`() {
+        val upper = listOf(inApp("a3", Path.of("/APP/.claude/worktrees/x"), 3))
+        assertEquals("app(worktrees app(worktree $wY, worktree $appX), a3), recent(a3), sessions", shape(foldersTree(app, upper, NO_BRANCH, appWorktrees, null)))
     }
 }

@@ -54,7 +54,7 @@ class SessionProjectsTest {
     }
 
     @Test
-    fun `worktrees come newest first by when git made their admin directory`() {
+    fun `a worktree is dated by when git made its admin directory`() {
         val old = root.resolve("w/old")
         val new = root.resolve("w/new")
         val app = repo(root.resolve("app"), old, new)
@@ -63,6 +63,6 @@ class SessionProjectsTest {
         }
         val oldAt = created("old", "2026-01-01T00:00:00Z")
         val newAt = created("new", "2026-02-01T00:00:00Z")
-        assertEquals(listOf(LinkedWorktree(new, newAt), LinkedWorktree(old, oldAt)), gitWorktrees(app))
+        assertEquals(setOf(LinkedWorktree(new, newAt), LinkedWorktree(old, oldAt)), gitWorktrees(app).toSet())
     }
 }
