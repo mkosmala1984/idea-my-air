@@ -13,8 +13,9 @@ import com.sun.jna.platform.win32.WinUser
 import com.sun.jna.ptr.IntByReference
 import com.sun.jna.win32.StdCallLibrary
 import com.sun.jna.win32.W32APIOptions
-import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.editor.SessionTerminals
+import dev.myair.planview.sessionFileOf
+import dev.myair.planview.tabFileOf
 import dev.myair.store.OpenTab
 import java.nio.file.Path
 
@@ -29,17 +30,17 @@ object SessionHosts {
     private const val AIR_TAB_CLASS = "com.intellij.air.thread.view.AgentThreadViewVirtualFile"
 
     /**
-     * The tab showing [sessionId], or the tab of a session whose process runs on without one ([SessionTerminals.detached]):
-     * [focus] reopens that, and the new tab shows the same process.
+     * The tab showing [sessionId] (a plan tab for its manager), or the tab of a session whose process runs on without one
+     * ([SessionTerminals.detached]): [focus] reopens that, and the new tab shows the same process.
      */
     fun findTab(sessionId: String): SessionTab? = ProjectManager.getInstance().openProjects.firstNotNullOfOrNull { project ->
         FileEditorManager.getInstance(project).openFiles.firstOrNull { sessionId in sessionIds(it).orEmpty() }?.let { SessionTab(project, it) }
-    } ?: SessionTerminals.getInstance().detached().firstOrNull { (_, file) -> file.sessionId == sessionId }?.let { (project, file) -> SessionTab(project, file) }
+    } ?: SessionTerminals.getInstance().detached().firstOrNull { (_, file) -> file.sessionId == sessionId }?.let { (project, file) -> SessionTab(project, tabFileOf(file)) }
 
     /** Every session tab in this IDE, and every detached session, which another IDE opens here too, for the other IDEs to see. */
     fun openTabs(): List<OpenTab> = ProjectManager.getInstance().openProjects.flatMap { project ->
         FileEditorManager.getInstance(project).openFiles.mapNotNull { file ->
-            sessionIds(file)?.let { OpenTab(it, (file as? ClaudeSessionVirtualFile)?.title ?: file.presentableName, project.name) }
+            sessionIds(file)?.let { OpenTab(it, sessionFileOf(file)?.title ?: file.presentableName, project.name) }
         }
     } + SessionTerminals.getInstance().detached().map { (project, file) -> OpenTab(listOf(file.sessionId), file.title, project.name) }
 
@@ -52,12 +53,9 @@ object SessionHosts {
         FileEditorManager.getInstance(tab.project).openFile(tab.file, true)
     }
 
-    /** Null for a file that is not a session tab. */
-    private fun sessionIds(file: VirtualFile): List<String>? = when {
-        file is ClaudeSessionVirtualFile -> listOf(file.sessionId)
-        file.javaClass.name == AIR_TAB_CLASS -> listOfNotNull(airId(file, "getThreadId"), airId(file, "getSessionId")).distinct()
-        else -> null
-    }
+    /** Null for a file that is not a session tab, nor a plan tab with a manager. */
+    private fun sessionIds(file: VirtualFile): List<String>? = sessionFileOf(file)?.let { listOf(it.sessionId) }
+        ?: if (file.javaClass.name == AIR_TAB_CLASS) listOfNotNull(airId(file, "getThreadId"), airId(file, "getSessionId")).distinct() else null
 
     private fun airId(file: VirtualFile, getter: String) = file.javaClass.getMethod(getter).invoke(file) as String?
 

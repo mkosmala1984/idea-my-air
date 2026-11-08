@@ -11,7 +11,8 @@ import dev.myair.MyAirSettings
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.ProjectManager
 import dev.myair.actions.Git
-import dev.myair.editor.ClaudeSessionVirtualFile
+import dev.myair.planview.PlanFiles
+import dev.myair.planview.shownSessionFiles
 import dev.myair.editor.SessionTerminals
 import java.time.Instant
 import dev.myair.editor.projectBase
@@ -190,6 +191,8 @@ class ClaudeSessionsService : Disposable {
     private fun retargetTabs() {
         val titles = sessions.associate { it.id to it.title }
         val switched = retargetOpenTabs(live, titles, unread, sessions.associate { it.id to it.workDir }, state.heads)
+        // A plan's manager follows its tab, so the next open resumes what the tab showed last.
+        if (switched.isNotEmpty()) PlanFiles.getInstance().store.update { switched.fold(it) { managers, (from, to) -> managers.moveSession(from, to) } }
         if (switched.isNotEmpty() && foldersError == null) {
             updateFolders(ChangeSource.AUTO) { switched.fold(it) { folders, (from, to) -> folders.carryOver(from, to, titles.keys) } }
         }
@@ -213,7 +216,7 @@ class ClaudeSessionsService : Disposable {
  */
 private fun tabHeads(sessions: List<ClaudeSession>): Map<Path, Git.Head?> {
     val projects = ProjectManager.getInstance().openProjects.toList()
-    val tabs = projects.flatMap { FileEditorManager.getInstance(it).openFiles.filterIsInstance<ClaudeSessionVirtualFile>() } +
+    val tabs = projects.flatMap { shownSessionFiles(FileEditorManager.getInstance(it)) } +
         SessionTerminals.getInstance().detached().map { it.second }
     val dirs = sessions.flatMap { listOf(it.cwd, it.workDir, it.project) } + tabs.flatMap { listOf(it.cwd, it.project) } + projects.map(::projectBase)
     return dirs.distinct().associateWith(Git::head)

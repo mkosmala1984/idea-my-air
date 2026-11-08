@@ -11,6 +11,8 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.concurrency.ThreadingAssertions
 import dev.myair.editor.ClaudeSessionVirtualFile
+import dev.myair.planview.sessionFileOf
+import dev.myair.planview.tabFileOf
 
 /** [selected] when it is a session tab, else [last] while [isOpen]: a file opened beside a session keeps it active. */
 internal fun <T> activeTab(selected: T?, last: T?, isOpen: (T) -> Boolean): T? = selected ?: last?.takeIf(isOpen)
@@ -62,7 +64,7 @@ class ActiveSession(private val project: Project) : Disposable {
     private fun update() {
         ThreadingAssertions.assertEventDispatchThread()
         val editors = FileEditorManager.getInstance(project)
-        tab = activeTab(editors.selectedFiles.firstOrNull() as? ClaudeSessionVirtualFile, tab) { editors.isFileOpen(it) }
+        tab = activeTab(sessionFileOf(editors.selectedFiles.firstOrNull()), tab) { editors.isFileOpen(tabFileOf(it)) }
         val session = service.sessions.firstOrNull { it.id == tab?.sessionId }
         val shown = listOf(tab, tab?.sessionId, session, session?.let { service.heads[it.workDir] }, session?.let { service.live[it.id] }, baseGeneration)
         if (shown == notified) return

@@ -6,11 +6,12 @@ import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import dev.myair.claude.shownBy
 import dev.myair.actions.Git
-import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.editor.SessionTerminals
 import dev.myair.editor.TabMark
 import dev.myair.editor.projectBase
 import dev.myair.editor.tabMark
+import dev.myair.planview.shownSessionFiles
+import dev.myair.planview.tabFileOf
 import dev.myair.tabs.TabsSync
 import java.nio.file.Path
 
@@ -31,7 +32,7 @@ fun retarget(sessionId: String, title: String, pid: Long?, job: String?, live: M
 }
 
 /**
- * Points every open session tab, and every detached session ([SessionTerminals.detached]), at the session its process shows now, with that session's title, status, [unread] and
+ * Points every open session tab and plan tab's manager, and every detached session ([SessionTerminals.detached]), at the session its process shows now, with that session's title, status, [unread] and
  * [TabMark] (from where it works, [workDirs], else where the tab started, and the work trees [heads] holds), and publishes
  * the tabs to the other IDEs when a session or title changed. Returns the session switches, from to to.
  */
@@ -43,7 +44,7 @@ fun retargetOpenTabs(
     for (project in ProjectManager.getInstance().openProjects) {
         val editors = FileEditorManagerEx.getInstanceEx(project)
         val base = projectBase(project)
-        val open = editors.openFiles.filterIsInstance<ClaudeSessionVirtualFile>()
+        val open = shownSessionFiles(editors)
         for (file in open + SessionTerminals.getInstance().detached().filter { it.first == project }.map { it.second }) {
             // By pid or job rather than session id: another process may run the same session ("Open Anyway").
             val (sessionId, title, status) = retarget(file.sessionId, file.title, file.pid, file.job, live, titles)
@@ -58,7 +59,7 @@ fun retargetOpenTabs(
             file.status = status
             file.unread = isUnread
             file.mark = mark
-            if (file in open) editors.updateFilePresentation(file)
+            if (file in open) editors.updateFilePresentation(tabFileOf(file))
         }
     }
     if (changed) TabsSync.getInstance().publish()

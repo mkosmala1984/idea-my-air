@@ -89,7 +89,7 @@ fun managerStart(existing: PlanManager?, newId: String, cwd: Path, project: Path
  */
 @Service(Service.Level.APP)
 class PlanFiles {
-    private val store = PlanManagerStore(Homes.myAir.resolve("plan-managers.json"))
+    val store = PlanManagerStore(Homes.myAir.resolve("plan-managers.json"))
     private val files = ConcurrentHashMap<String, PlanVirtualFile>()
     private val managers = ConcurrentHashMap<String, ClaudeSessionVirtualFile>()
 

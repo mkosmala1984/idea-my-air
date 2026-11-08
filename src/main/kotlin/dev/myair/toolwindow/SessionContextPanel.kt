@@ -66,6 +66,7 @@ import kotlin.io.path.name
 import dev.myair.service.ActiveSession
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.LatestRead
+import dev.myair.planview.tabFileOf
 import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import java.awt.BorderLayout
 import java.awt.Cursor
@@ -391,7 +392,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     /** Selects the shown session's tab and types [command] into its prompt, to be completed and sent by hand. */
     private fun pasteCommand(command: String) {
         val tab = checkNotNull(active.tab) { "skills shown without a session tab" }
-        val pane = FileEditorManager.getInstance(project).openFile(tab, true).filterIsInstance<SessionPaneHost>().single().pane
+        val pane = FileEditorManager.getInstance(project).openFile(tabFileOf(tab), true).filterIsInstance<SessionPaneHost>().single().pane
         if (!pane.type(command)) Messages.showInfoMessage(project, "The session's tab does not run claude.", "Paste Skill Command")
     }
 
@@ -457,7 +458,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 // The tab is read at the click: the pane is not rebuilt when only the tab showing the session changes.
                 addMouseListener(object : MouseAdapter() {
                     override fun mouseClicked(event: MouseEvent) {
-                        FileEditorManager.getInstance(project).openFile(checkNotNull(active.tab), true)
+                        FileEditorManager.getInstance(project).openFile(tabFileOf(checkNotNull(active.tab)), true)
                     }
                 })
             }.customize(UnscaledGaps(bottom = 6)) // The text cell's default gaps without the top one, flush with the card's top.
