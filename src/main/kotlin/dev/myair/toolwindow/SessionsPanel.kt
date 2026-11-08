@@ -588,7 +588,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             tree.model = DefaultTreeModel(
                 when {
                     error != null -> DefaultMutableTreeNode()
-                    foldersMode -> foldersTree(service.folders, treeSessions(), branches::get, filter)
+                    foldersMode -> foldersTree(service.folders, treeSessions(), branches::get, { emptyList() }, filter)
                     else -> projectsTree(filter?.let(treeSessions()::filter) ?: treeSessions(), branches::get)
                 },
             )

@@ -38,7 +38,7 @@ class UnscannedSessionsTest {
         val folders = SessionFolders().createFolder(null, "tm", "tenant-migration").createFolder("tm", "v", "verifier").assign("a", "v")
         val sessions = withUnscanned(scanned, unscannedSessions(scanned, mapOf("a" to live("/rtm", 9))))
         assertEquals(listOf("a", "old"), sessions.map { it.id })
-        val verifier = foldersTree(folders, sessions, { null }, null).getChildAt(0).getChildAt(0) as DefaultMutableTreeNode
+        val verifier = foldersTree(folders, sessions, { null }, { emptyList() }, null).getChildAt(0).getChildAt(0) as DefaultMutableTreeNode
         assertEquals("v", verifier.userObject.toString())
         assertEquals("a", ((verifier.getChildAt(0) as DefaultMutableTreeNode).userObject as ClaudeSession).id)
     }

@@ -11,6 +11,7 @@ import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.startFolder
 import java.nio.file.Path
+import java.time.Instant
 import java.util.UUID
 import kotlin.io.path.extension
 import javax.swing.tree.DefaultMutableTreeNode
@@ -83,6 +84,16 @@ object RecentSessions {
 
 const val RECENT_COUNT = 10
 
+/** The group of [folder]'s linked worktrees, after its subfolders: a view, like [RecentSessions], that takes no drop. */
+class WorktreesGroup(val folder: Folder) {
+    override fun toString() = "worktrees ${folder.id}"
+}
+
+/** A linked worktree at [path] with the [branch] checked out there (null when detached), made at [created]; it holds the sessions working in it. */
+data class WorktreeRow(val path: Path, val branch: String?, val created: Instant) {
+    override fun toString() = "worktree $path"
+}
+
 /** Projects mode: projects ordered by their most recent session; [sessions] arrive newest first; [branchOf] as [sessionNode] takes it. */
 fun projectsTree(sessions: List<ClaudeSession>, branchOf: (Path) -> String?) = node(null, projectNodes(sessions, branchOf))
 
@@ -90,12 +101,15 @@ fun projectsTree(sessions: List<ClaudeSession>, branchOf: (Path) -> String?) = n
  * Folders mode: the user's folders in their order, each with its subfolders and then its sessions newest first (see
  * [SessionFolders.placeOf]), then [RecentSessions] and [UnfiledSessions] last. A plan folder holds, after its subfolders,
  * its milestones with their tasks, each task the sessions whose brief names it, then [NoTask] with its other sessions
- * when there are any. Sessions filed but absent from [sessions] are not shown. A [filter] keeps the sessions it accepts,
- * the folders, milestones and tasks on their path, [RecentSessions] and [UnfiledSessions]; [sessions] arrive newest first;
+ * when there are any. A folder bound to directories [worktreesOf] finds linked worktrees of holds, after its subfolders, a
+ * [WorktreesGroup] of them all newest first, each with the sessions whose work dir or cwd lies in it, wherever they are
+ * filed, so they show there and in their own place. Sessions filed but absent from [sessions] are not shown. A [filter] keeps the sessions it accepts,
+ * the folders, milestones, tasks and worktrees on their path, [RecentSessions] and [UnfiledSessions]; [sessions] arrive newest first;
  * [branchOf] as [sessionNode] takes it.
  */
 fun foldersTree(
-    structure: SessionFolders, sessions: List<ClaudeSession>, branchOf: (Path) -> String?, filter: ((ClaudeSession) -> Boolean)?,
+    structure: SessionFolders, sessions: List<ClaudeSession>, branchOf: (Path) -> String?, worktreesOf: (Path) -> List<WorktreeRow>,
+    filter: ((ClaudeSession) -> Boolean)?,
 ): DefaultMutableTreeNode {
     val sessionNode = { session: ClaudeSession -> sessionNode(session, branchOf) }
     val shown = filter?.let(sessions::filter) ?: sessions
@@ -106,9 +120,16 @@ fun foldersTree(
     fun planNodes(folder: Folder) = folder.plan!!.milestones.mapNotNull { m ->
         keep(MilestoneRow(folder, m), m.tasks.mapNotNull { t -> keep(PlanTaskRow(folder, t), byTask[t.id].orEmpty().map(sessionNode)) })
     }
+    fun worktreesNode(folder: Folder): DefaultMutableTreeNode? {
+        val rows = folder.dirs.flatMap { worktreesOf(Path.of(it)) }.sortedByDescending { it.created }
+        if (rows.isEmpty()) return null
+        return keep(WorktreesGroup(folder), rows.mapNotNull { row ->
+            keep(row, shown.filter { listOf(it.workDir, it.cwd).any { dir -> dir.startsWith(row.path) } }.map(sessionNode))
+        })
+    }
     fun folderNode(folder: Folder): DefaultMutableTreeNode? {
         val own = places[folder.id].orEmpty().map(sessionNode)
-        val children = folder.folders.mapNotNull(::folderNode) +
+        val children = folder.folders.mapNotNull(::folderNode) + listOfNotNull(worktreesNode(folder)) +
             if (folder.plan == null) own else planNodes(folder) + listOfNotNull(own.takeIf { it.isNotEmpty() }?.let { node(NoTask(folder), it) })
         return keep(folder, children)
     }
@@ -140,11 +161,14 @@ fun urgencyOf(live: LiveSession?, unread: Boolean): Urgency? = when (live?.statu
 /** What a group row shows on its right: how many sessions it holds and the most urgent of them. */
 data class FolderSummary(val sessions: Int, val urgent: Urgency?)
 
-/** The [FolderSummary] of a group node (folder, project, recent or unfiled sessions), counting the sessions below it as shown; null for a session and its children. */
+/**
+ * The [FolderSummary] of a group node (folder, project, worktree, recent or unfiled sessions), counting the sessions below it
+ * as shown, a session under both its folder and a worktree once; null for a session and its children.
+ */
 fun folderSummary(node: DefaultMutableTreeNode, urgency: (ClaudeSession) -> Urgency?): FolderSummary? = when (node.userObject) {
     is ClaudeSession, is WorkDirRow, is AddedDir, is BranchRow, is BriefGroup, is BriefGoal, is BriefTaskRow, is FilesGroup, is ChangedFile -> null
-    is Folder, is Path, RecentSessions, UnfiledSessions, is MilestoneRow, is PlanTaskRow, is NoTask -> {
-        val sessions = groupSessions(node)
+    is Folder, is Path, RecentSessions, UnfiledSessions, is MilestoneRow, is PlanTaskRow, is NoTask, is WorktreesGroup, is WorktreeRow -> {
+        val sessions = groupSessions(node).distinctBy { it.id }
         FolderSummary(sessions.size, sessions.mapNotNull(urgency).minOrNull())
     }
     else -> error("Unexpected tree node ${node.userObject}")
@@ -161,11 +185,12 @@ fun targetFolder(path: TreePath): String? = path.path.map { (it as DefaultMutabl
 
 /**
  * The directory a session started from the node at [path] runs in: a project row's, or for a folder or a row of its plan
- * the working directory or first bound directory of it or the nearest folder above it having either ([startFolder]);
- * null for any other node.
+ * the working directory or first bound directory of it or the nearest folder above it having either ([startFolder]); a
+ * worktree row's directory, so a session started there keeps its branch; null for any other node.
  */
 fun nodeDir(path: TreePath): Path? = when (val item = (path.lastPathComponent as DefaultMutableTreeNode).userObject) {
     is Path -> item
+    is WorktreeRow -> item.path
     is Folder, is MilestoneRow, is PlanTaskRow, is NoTask -> startFolder(path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>())?.startDir?.let(Path::of)
     else -> null
 }
@@ -184,13 +209,13 @@ class Drop(val change: (SessionFolders) -> SessionFolders, val path: TreePath, v
  * milestone or task, which only a brief puts it under. A plan folder does not go into another. [childIndex] is JTree's: -1 drops onto the node, otherwise between its children.
  * Sessions land in the folder of whatever they are dropped on or into, and that folder is what the drop shows; under
  * [UnfiledSessions] they stay there ([SessionFolders.unfile]), whatever their project or brief say. A folder goes into a folder or the top level, before the folder it is dropped in front of, or after the last one;
- * the drop shows that spot, not the pointer's, since sessions, [RecentSessions] and [UnfiledSessions] always follow the folders. Nothing drops on or into [RecentSessions]. A project
+ * the drop shows that spot, not the pointer's, since sessions, [RecentSessions] and [UnfiledSessions] always follow the folders. Nothing drops on or into [RecentSessions] or a [WorktreesGroup]. A project
  * lands the same way, as a new folder named after its directory and bound to it.
  */
 fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, childIndex: Int): Drop? {
     val target = path.lastPathComponent as DefaultMutableTreeNode
-    // Recent sessions are a view of the others: nothing is filed into it.
-    if (path.path.any { (it as DefaultMutableTreeNode).userObject == RecentSessions }) return null
+    // Recent sessions and worktrees are views of the others: nothing is filed into them.
+    if (path.path.any { (it as DefaultMutableTreeNode).userObject.let { item -> item == RecentSessions || item is WorktreesGroup } }) return null
     when (val row = dragged.singleOrNull()) {
         is MilestoneRow -> return milestoneDrop(structure, row, target, path, childIndex)
         is PlanTaskRow -> return taskDrop(structure, row, target, path, childIndex)
