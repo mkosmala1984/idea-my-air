@@ -53,9 +53,10 @@ fun sessionPlan(structure: SessionFolders, sessionId: String, session: ClaudeSes
 /**
  * What a session in a plan adds to its system prompt (`--append-system-prompt-file`, so Markdown keeps its lines): the
  * plan's name, path and description, and the task's and its milestone's. Only these, which rarely change: claude keeps a
- * session's prompt until it compacts, so statuses and next steps here would go stale.
+ * session's prompt until it compacts, so statuses and next steps here would go stale. [manager]: the session is the plan's
+ * manager ([dev.myair.planview.PlanFiles]), shown beside the plan in its tab.
  */
-fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, briefs: Boolean): String {
+fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, briefs: Boolean, manager: Boolean = false): String {
     val plan = checkNotNull(folder.plan) { "folder ${folder.id} has no plan" }
     val path = structure.pathOf(folder.id)
     return buildString {
@@ -63,12 +64,19 @@ fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, brief
         append("This session works in the plan \"${folder.name}\" (folder path \"$path\", the plan argument of my_air_plan_apply). ")
         append("Below are its descriptions as of the session's start; read current statuses and next steps with my_air_plan_get.\n")
         plan.description?.let { append("\n$it\n") }
-        if (task == null) return@buildString
-        val milestone = plan.milestones.first { task in it.tasks }
-        append("\n## Task ${task.id}: ${task.title}\n\n")
-        append("This session works on task ${task.id}" + (if (briefs) "; name it as plan_task in my_air_set_brief." else ".") + "\n")
-        task.description?.let { append("\n$it\n") }
-        append("\n## Milestone ${milestone.id}: ${milestone.title}\n")
-        milestone.description?.let { append("\n$it\n") }
+        if (task != null) {
+            val milestone = plan.milestones.first { task in it.tasks }
+            append("\n## Task ${task.id}: ${task.title}\n\n")
+            append("This session works on task ${task.id}" + (if (briefs) "; name it as plan_task in my_air_set_brief." else ".") + "\n")
+            task.description?.let { append("\n$it\n") }
+            append("\n## Milestone ${milestone.id}: ${milestone.title}\n")
+            milestone.description?.let { append("\n$it\n") }
+        }
+        if (manager) {
+            append("\n## Managing the plan\n\n")
+            append("This session manages this plan: the user sees the plan beside this session, in the same tab, and asks it to ")
+            append("reorganise the plan. Change the plan with my_air_plan_apply; the view shows each change as it lands. ")
+            append("Add and edit milestones and tasks freely, but delete or move them only after the user agreed.\n")
+        }
     }
 }

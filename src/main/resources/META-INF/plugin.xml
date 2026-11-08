@@ -25,6 +25,9 @@
     <fileEditorProvider implementation="dev.myair.editor.ClaudeSessionEditorProvider"/>
     <virtualFileSystem key="myair-session" implementationClass="dev.myair.editor.ClaudeSessionFileSystem"/>
     <fileIconProvider order="first" implementation="dev.myair.editor.ClaudeSessionFileIconProvider"/>
+    <virtualFileSystem key="myair-plan" implementationClass="dev.myair.planview.PlanFileSystem"/>
+    <fileIconProvider order="first" implementation="dev.myair.planview.PlanFileIconProvider"/>
+    <editorTabTitleProvider implementation="dev.myair.planview.PlanTabTitleProvider"/>
     <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>
     <editorTabTitleProvider implementation="dev.myair.editor.ClaudeSessionTabTitleProvider"/>
     <editorTabColorProvider implementation="dev.myair.editor.ClaudeSessionTabColorProvider"/>

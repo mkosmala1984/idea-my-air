@@ -22,6 +22,7 @@ import dev.myair.claude.shownBy
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.planview.PlanFiles
 import dev.myair.store.Homes
 import dev.myair.store.PromptFiles
 import dev.myair.tabs.TabsSync
@@ -174,7 +175,7 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
         file.job = job
         // claude refuses or forks a `--resume` of a session a job runs; `attach` opens the job itself, with its own prompt.
         val promptFile = if (job != null) null else sessionPlan(folders, file.sessionId, service.sessions.firstOrNull { it.id == file.sessionId }, file.planStart)
-            ?.let { (folder, task) -> PromptFiles.write(Homes.myAir.resolve("prompts"), planPrompt(folders, folder, task, settings.briefs)) }
+            ?.let { (folder, task) -> PromptFiles.write(Homes.myAir.resolve("prompts"), planPrompt(folders, folder, task, settings.briefs, manager = PlanFiles.getInstance().planOf(file) != null)) }
         val command = if (job != null) listOf(claude.path, "attach", job)
         else listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(settings.briefs, settings.fileSessions)) +
             (if (settings.briefs) listOf("--settings", writeBriefReminderSettings(Homes.myAir.resolve("hooks")).toString()) else emptyList()) +

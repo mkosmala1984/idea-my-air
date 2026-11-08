@@ -24,10 +24,12 @@ fun parseSessionTabPath(path: String): SessionTabRef {
 }
 
 /** `claude` resumes a session it has a transcript of; one closed before its first message has none and starts again under its id. */
-fun restartArgs(sessionId: String, claudeHome: Path): List<String> {
+fun restartArgs(sessionId: String, claudeHome: Path) = listOf(if (hasTranscript(sessionId, claudeHome)) "--resume" else "--session-id", sessionId)
+
+/** A project directory under [claudeHome] holds a transcript of [sessionId]. */
+fun hasTranscript(sessionId: String, claudeHome: Path): Boolean {
     val projects = claudeHome.resolve("projects")
-    val known = projects.isDirectory() && projects.listDirectoryEntries().any { it.resolve("$sessionId.jsonl").exists() }
-    return listOf(if (known) "--resume" else "--session-id", sessionId)
+    return projects.isDirectory() && projects.listDirectoryEntries().any { it.resolve("$sessionId.jsonl").exists() }
 }
 
 private fun encode(path: Path) = URLEncoder.encode(path.toString(), Charsets.UTF_8)

@@ -86,4 +86,14 @@ class SessionSystemPromptTest {
         assertFalse("plan_task" in planPrompt(structure, folder, task, briefs = false))
         assertFalse("Task" in planPrompt(structure, structure.find("b")!!, null, briefs = true))
     }
+
+    @Test
+    fun `a plan's manager is told it manages the plan`() {
+        val folder = structure.find("a")!!
+        val manager = planPrompt(structure, folder, null, briefs = true, manager = true)
+        listOf("manages this plan", "my_air_plan_apply", "beside", "agreed").forEach { assertTrue(it in manager, it) }
+        // The plan's path is the plan argument of my_air_plan_apply for every session, so only the manager section is checked.
+        assertFalse("manages this plan" in planPrompt(structure, folder, null, briefs = true, manager = false))
+        assertTrue(manager.startsWith(planPrompt(structure, folder, null, briefs = true)))
+    }
 }
