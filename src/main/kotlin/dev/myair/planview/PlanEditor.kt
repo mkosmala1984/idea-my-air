@@ -4,6 +4,7 @@ import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorPolicy
 import com.intellij.openapi.fileEditor.FileEditorProvider
 import com.intellij.openapi.fileEditor.FileEditorState
+import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
@@ -34,8 +35,8 @@ class PlanEditorProvider : FileEditorProvider, DumbAware {
 
 /**
  * A plan tab: the plan ([PlanPanel]) beside the terminal of its manager session. The manager starts once the service has
- * read the folders and the plan is there; a plan gone (deleted while open, or before a restored tab was first shown) leaves
- * only a notice, its manager's process ended.
+ * read the folders and the plan is there; a plan gone (its folder deleted or its plan removed while open, or before a
+ * restored tab was first shown) leaves only a notice, its manager's process ended.
  */
 class PlanEditor(private val project: Project, private val file: PlanVirtualFile) : UserDataHolderBase(), FileEditor, SessionPaneHost {
     private val service = ClaudeSessionsService.getInstance()
@@ -46,7 +47,11 @@ class PlanEditor(private val project: Project, private val file: PlanVirtualFile
     private var manager: ClaudeSessionVirtualFile? = null
     override var pane: SessionPane? = null
         private set
-    private var gone = false
+    /** The plan went while this editor was open; it stays a notice, as [PlanOpener] replaces it with a new editor. */
+    var gone = false
+        private set
+    // The tab's title shown, the plan's name; null until the view first shows, when the platform reads it anyway.
+    private var title: String? = null
 
     init {
         service.subscribe(this, ::update)
@@ -61,6 +66,8 @@ class PlanEditor(private val project: Project, private val file: PlanVirtualFile
             return
         }
         val view = planViewOf(service.folders, file.folderId, service.sessions, manager?.sessionId) ?: return planGone()
+        if (title != null && title != view.folder.name) presentationChanged()
+        title = view.folder.name
         panel?.let { return it.show(view) }
         val panel = PlanPanel(project, file.folderId, this).also { panel = it }
         // Files a new manager in the plan folder, which notifies the service's listeners, this editor among them, now.
@@ -80,11 +87,15 @@ class PlanEditor(private val project: Project, private val file: PlanVirtualFile
         gone = true
         show(notice("This plan no longer exists."))
         manager?.let(SessionTerminals.getInstance()::close)
-        PlanFiles.getInstance().forget(file.folderId)
+        PlanFiles.getInstance().forgetManager(file.folderId)
         pane?.let(Disposer::dispose)
         pane = null
+        // Titled "Plan" once its folder is gone; Remove Plan keeps the folder's name.
+        if (title != null) presentationChanged()
         active.tabFileChanged()
     }
+
+    private fun presentationChanged() = FileEditorManagerEx.getInstanceEx(project).updateFilePresentation(file)
 
     private fun show(component: JComponent) {
         root.removeAll()

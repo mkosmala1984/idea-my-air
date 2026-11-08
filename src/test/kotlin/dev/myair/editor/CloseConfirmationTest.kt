@@ -66,6 +66,18 @@ class CloseConfirmationTest {
     }
 
     @Test
+    fun `removing a plan names its working manager`() {
+        assertEquals(
+            Confirmation(
+                "Remove Plan with Running Claude Session?",
+                "'Manage release' is still running. Removing the plan ends it.",
+                "Remove Plan", "Keep Plan",
+            ),
+            confirmation(Closing.REMOVE_PLAN, listOf("Manage release")),
+        )
+    }
+
+    @Test
     fun `nothing to ask about is a bug of the caller`() {
         assertThrows<IllegalArgumentException> { confirmation(Closing.EXIT, emptyList()) }
     }

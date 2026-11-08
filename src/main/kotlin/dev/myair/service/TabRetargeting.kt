@@ -32,9 +32,10 @@ fun retarget(sessionId: String, title: String, pid: Long?, job: String?, live: M
 }
 
 /**
- * Points every open session tab and plan tab's manager, and every detached session ([SessionTerminals.detached]), at the session its process shows now, with that session's title, status, [unread] and
- * [TabMark] (from where it works, [workDirs], else where the tab started, and the work trees [heads] holds), and publishes
- * the tabs to the other IDEs when a session or title changed. Returns the session switches, from to to.
+ * Points every open session tab and plan tab's manager, and every detached session ([SessionTerminals.detached]), at the
+ * session its process shows now, with that session's title, status, [unread] and [TabMark] (from where it works,
+ * [workDirs], else where the tab started, and the work trees [heads] holds), and publishes the tabs to the other IDEs when
+ * a session or title changed. Returns the session switches, from to to.
  */
 fun retargetOpenTabs(
     live: Map<String, LiveSession>, titles: Map<String, String>, unread: Set<String>, workDirs: Map<String, Path>, heads: Map<Path, Git.Head?>,

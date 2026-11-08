@@ -150,13 +150,15 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
      * The titles of the sessions that ending the processes of [project] (with a tab or detached), or all when null, would
      * interrupt ([interrupts]), read from [ClaudeSessionsService]'s last refresh. A job outlives its views, so ending one interrupts nothing.
      */
-    fun interrupted(project: Project?): List<String> {
+    fun interrupted(project: Project?): List<String> =
+        runtimes.filter { project == null || it.value.project == project }.keys.filter(::wouldInterrupt).map { it.title }
+
+    /** Whether ending [file]'s process now would interrupt its session ([interrupts]), as [interrupted] tells. */
+    fun wouldInterrupt(file: ClaudeSessionVirtualFile): Boolean {
         ThreadingAssertions.assertEventDispatchThread()
         val service = ClaudeSessionsService.getInstance()
-        val sessions = service.sessions.associateBy { it.id }
-        return runtimes.filter { project == null || it.value.project == project }.keys
-            .filter { file -> jobOf(file) == null && activity(file, service.live, sessions).let { (status, tasks) -> interrupts(status, tasks) } }
-            .map { it.title }
+        return file in runtimes && jobOf(file) == null &&
+            activity(file, service.live, service.sessions.associateBy { it.id }).let { (status, tasks) -> interrupts(status, tasks) }
     }
 
     /** [file]'s registry status ([shownBy]) and the number of its own background tasks still running ([runningTasks]). */

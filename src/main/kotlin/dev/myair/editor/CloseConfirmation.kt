@@ -14,11 +14,13 @@ import dev.myair.claude.SessionStatus
 fun interrupts(status: SessionStatus?, runningTasks: Int): Boolean =
     status == SessionStatus.WORKING || status == SessionStatus.NEEDS_INPUT || runningTasks > 0
 
-/** What ends the sessions: their project closing, or the IDE exiting or restarting. */
+/** What ends the sessions: their project closing, the IDE exiting or restarting, or the plan a manager manages going. */
 enum class Closing(val title: String, val ends: String, val ok: String, val cancel: String) {
     PROJECT("Close Project", "Closing the project", "Close Project", "Keep Open"),
     EXIT("Exit IDE", "Exiting", "End Sessions and Exit", "Keep IDE Open"),
     RESTART("Restart IDE", "Restarting", "End Sessions and Restart", "Keep IDE Open"),
+    REMOVE_PLAN("Remove Plan", "Removing the plan", "Remove Plan", "Keep Plan"),
+    DELETE_FOLDER("Delete Folder", "Deleting the folder", "Delete Folder", "Keep Folder"),
 }
 
 /** The question asked before [Closing] ends sessions; [ok] goes on. */
@@ -47,8 +49,10 @@ class ExitConfirmation : ApplicationListener {
 }
 
 /** Whether [closing] may go on: nothing of [project] (of every project when null) would be interrupted, or the user says so. */
-private fun confirmed(project: Project?, closing: Closing): Boolean {
-    val titles = SessionTerminals.getInstance().interrupted(project)
+private fun confirmed(project: Project?, closing: Closing) = confirmed(project, closing, SessionTerminals.getInstance().interrupted(project))
+
+/** Whether [closing] may end the sessions titled [titles] that it would interrupt: there are none, or the user says so. */
+fun confirmed(project: Project?, closing: Closing, titles: List<String>): Boolean {
     if (titles.isEmpty()) return true
     val (title, message, ok, cancel) = confirmation(closing, titles)
     return Messages.showOkCancelDialog(project, message, title, ok, cancel, Messages.getWarningIcon()) == Messages.OK

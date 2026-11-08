@@ -37,11 +37,11 @@ class PlanViewTest {
     }
 
     @Test
-    fun `a task lists the sessions whose brief names it, newest first as given`() {
+    fun `a task lists the sessions whose brief names it, in the order given`() {
         val s1 = session("s1", "T2")
         val s2 = session("s2", "T2")
-        val view = planViewOf(structure, "f", listOf(s1, session("s3", null), s2), null)!!
-        assertEquals(listOf(s1, s2), view.milestones[0].tasks[0].sessions)
+        val view = planViewOf(structure, "f", listOf(s2, session("s3", null), s1), null)!!
+        assertEquals(listOf(s2, s1), view.milestones[0].tasks[0].sessions)
         assertEquals(emptyList(), view.milestones[0].tasks[1].sessions)
     }
 

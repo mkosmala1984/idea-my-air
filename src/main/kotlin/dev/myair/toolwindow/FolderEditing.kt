@@ -16,7 +16,11 @@ import dev.myair.folders.Plan
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
+import dev.myair.editor.Closing
 import dev.myair.editor.PlanStart
+import dev.myair.editor.SessionTerminals
+import dev.myair.editor.confirmed
+import dev.myair.planview.PlanFiles
 import dev.myair.service.ClaudeSessionsService
 import java.nio.file.Path
 import java.util.UUID
@@ -93,7 +97,7 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
                     (if (count > 0) "\n$count session(s) filed there go back to their project's folder or \"sessions\"." else "") +
                     (if (dirs.isNotEmpty()) "\nThe other sessions of ${dirs.joinToString()}, and those whose brief names a folder deleted, go back to \"sessions\"." else "") +
                     (if (plans.isNotEmpty()) "\nIts plan with ${plans.sumOf { it.tasks().size }} task(s) is deleted too." else "")
-                if (confirm(project, message, "Delete Folder")) update { it.delete(item.id) }
+                if (confirm(project, message, "Delete Folder") && managersConfirmed(item.subtree(), Closing.DELETE_FOLDER)) update { it.delete(item.id) }
             }
             is MilestoneRow -> deleteMilestone(project, item.milestone)
             is PlanTaskRow -> deleteTask(project, item.task)
@@ -105,7 +109,17 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
 
     fun canAddPlan() = selectedFolder()?.let { service.folders.canAddPlan(it.id) } == true
 
-    fun removePlan() = update { it.removePlan(selectedFolder()!!.id) }
+    fun removePlan() {
+        val folder = selectedFolder()!!
+        if (managersConfirmed(sequenceOf(folder), Closing.REMOVE_PLAN)) update { it.removePlan(folder.id) }
+    }
+
+    /** Whether [closing] may end the managers of this IDE that the plans of [folders] have and that work now, asking when one does. */
+    private fun managersConfirmed(folders: Sequence<Folder>, closing: Closing): Boolean {
+        val files = PlanFiles.getInstance()
+        val working = folders.filter { it.plan != null }.mapNotNull { files.manager(it.id) }.filter(SessionTerminals.getInstance()::wouldInterrupt)
+        return confirmed(project, closing, working.map { it.title }.toList())
+    }
 
     fun canRemovePlan() = selectedFolder()?.plan?.milestones?.isEmpty() == true
 

@@ -11,7 +11,7 @@ enum class ChangeSource {
     /** A tree action or drop. */
     UI,
 
-    /** A `/clear` carrying its folder over. */
+    /** The plugin filing a session by itself: a `/clear` carrying its folder over, a plan's new manager. */
     AUTO,
 
     /** An agent's change list. */

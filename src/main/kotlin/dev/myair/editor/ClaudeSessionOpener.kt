@@ -9,6 +9,7 @@ import dev.myair.claude.LiveSession
 import dev.myair.folders.ChangeSource
 import dev.myair.planview.PlanFiles
 import dev.myair.planview.PlanOpener
+import dev.myair.planview.managedPlanFolder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
 import dev.myair.tabs.HostWindow
@@ -39,7 +40,7 @@ object ClaudeSessionOpener {
         if (TabsSync.getInstance().focusElsewhere(session.id)) return
         val service = ClaudeSessionsService.getInstance()
         // A manager has no tab of its own: its plan's tab shows its terminal.
-        val planFolder = PlanFiles.getInstance().store.read().folderOf(session.id)?.takeIf { id -> service.folders.all().any { it.id == id && it.plan != null } }
+        val planFolder = managedPlanFolder(PlanFiles.getInstance().store.read(), service.folders, session.id)
         if (planFolder != null) return PlanOpener.open(project, planFolder)
         val live = service.live[session.id]
         // A background job runs without a window of its own; the tab attaches to it rather than starting a second process.

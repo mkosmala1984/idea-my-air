@@ -29,8 +29,8 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * The tab of the plan of folder [folderId]. One instance per plan per IDE ([PlanFiles.file]): a [LightVirtualFile] compares
- * by identity, so a plan open in a window is focused rather than opened twice.
+ * The tab of the plan of folder [folderId]. One instance per folder per IDE, for its lifetime ([PlanFiles.file]): a
+ * [LightVirtualFile] compares by identity, so a plan open in a window is focused rather than opened twice.
  */
 class PlanVirtualFile(val folderId: String) : LightVirtualFile("Plan", FileTypes.PLAIN_TEXT, ""), EditorHistoryManager.OptionallyIncluded {
     init {
@@ -83,9 +83,9 @@ fun managerStart(existing: PlanManager?, newId: String, cwd: Path, project: Path
 }
 
 /**
- * The tab file of each plan and the file of its manager session, one pair per plan per IDE. The manager's file is never
- * opened as a tab: the plan tab shows its terminal, and `SessionTerminals` keys processes by file identity, so a reopened
- * plan tab finds the same file and binds a detached process again.
+ * The tab file of each plan folder and the file of its manager session, one of each per folder per IDE. The manager's
+ * file is never opened as a tab: the plan tab shows its terminal, and `SessionTerminals` keys processes by file identity,
+ * so a reopened plan tab finds the same file and binds a detached process again.
  */
 @Service(Service.Level.APP)
 class PlanFiles {
@@ -99,8 +99,9 @@ class PlanFiles {
 
     /**
      * The manager session's file of plan [folder], kept while `SessionTerminals` has its process, else built again from its
-     * entry in the store (a new session when there is none, filed in the plan folder so the tree shows it under `no task`). A new manager runs where
-     * sessions started from the folder do, else in [ideProject]'s directory; an entry keeps the directories it was stored with.
+     * entry in the store (a new session when there is none, filed in the plan folder so the tree shows it under `no task`).
+     * A new manager runs where sessions started from the folder do, else in [ideProject]'s directory; an entry keeps the
+     * directories it was stored with.
      */
     fun startManager(folder: Folder, structure: SessionFolders, ideProject: Project): ClaudeSessionVirtualFile {
         ThreadingAssertions.assertEventDispatchThread()
@@ -115,7 +116,7 @@ class PlanFiles {
             args = start
             stored.prune(structure.all().map { it.id }.toSet()).set(folder.id, manager)
         }.byFolder.getValue(folder.id)
-        if (manager.session == newId) ClaudeSessionsService.getInstance().updateFolders(ChangeSource.UI) { it.assign(newId, folder.id) }
+        if (manager.session == newId) ClaudeSessionsService.getInstance().updateFolders(ChangeSource.AUTO) { it.assign(newId, folder.id) }
         val file = ClaudeSessionVirtualFile(manager.session, manager.cwd, manager.project, NEW_SESSION_TITLE, args, planStart = PlanStart(folder.id, null))
         managers[folder.id] = file
         return file
@@ -124,9 +125,11 @@ class PlanFiles {
     /** The plan whose manager [file] is; null for a session tab's file. */
     fun planOf(file: ClaudeSessionVirtualFile): PlanVirtualFile? = managers.entries.firstOrNull { it.value === file }?.key?.let(::file)
 
-    /** Drops the plan's tab file and its manager's, for a plan deleted. */
-    fun forget(folderId: String) {
-        files.remove(folderId)
+    /**
+     * Drops the manager's file of a plan gone. The tab file stays for the IDE's lifetime, so a plan that comes back (a
+     * history restore, Add Plan again) is opened in the same tab rather than beside the one left showing it gone.
+     */
+    fun forgetManager(folderId: String) {
         managers.remove(folderId)
     }
 
