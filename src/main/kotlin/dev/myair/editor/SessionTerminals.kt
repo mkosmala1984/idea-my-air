@@ -54,10 +54,10 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
     }
 
     /**
-     * [session] is null while the process starts; [owner] the editor showing it, null while detached since [detachedAt].
+     * [session] is null while the process starts; [owner] the pane showing it, null while detached since [detachedAt].
      * [ended]: the process exited by itself while a tab showed it, which keeps showing the ended terminal until it closes.
      */
-    private class Runtime(val promptFile: Path?, var project: Project, var owner: ClaudeSessionEditor?) {
+    private class Runtime(val promptFile: Path?, var project: Project, var owner: SessionPane?) {
         var session: TransferableTerminalSession? = null
         var detachedAt: Instant? = null
         var watch: Job? = null
@@ -69,28 +69,28 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
     /** Whether this run already said that a closed tab leaves its session working. */
     private var hinted = false
 
-    /** Shows [file]'s process in [editor], starting it on first use; the editor that showed it before gets [ClaudeSessionEditor.showElsewhere]. */
-    fun attach(file: ClaudeSessionVirtualFile, editor: ClaudeSessionEditor, project: Project) {
+    /** Shows [file]'s process in [pane], starting it on first use; the pane that showed it before gets [SessionPane.showElsewhere]. */
+    fun attach(file: ClaudeSessionVirtualFile, pane: SessionPane, project: Project) {
         ThreadingAssertions.assertEventDispatchThread()
         val runtime = runtimes[file]
-        if (runtime == null) return start(file, editor, project)
+        if (runtime == null) return start(file, pane, project)
         val previous = runtime.owner
-        runtime.owner = editor
+        runtime.owner = pane
         runtime.project = project
         runtime.detachedAt = null
-        if (previous != null && previous != editor) previous.showElsewhere()
+        if (previous != null && previous != pane) previous.showElsewhere()
         // Still starting: the view goes to the owner once the process is there.
         val session = runtime.session ?: return
-        editor.show(session.bind(project))
+        pane.show(session.bind(project))
     }
 
-    /** [editor] closes: its process ends, runs on detached or is left to the tab now showing it ([releaseOf]). */
-    fun release(file: ClaudeSessionVirtualFile, editor: ClaudeSessionEditor) {
+    /** [pane] closes: its process ends, runs on detached or is left to the pane now showing it ([releaseOf]). */
+    fun release(file: ClaudeSessionVirtualFile, pane: SessionPane) {
         val runtime = runtimes[file] ?: return
         val started = runtime.session.let { it != null && it.sessionState.value != TerminalViewSessionState.NotStarted }
         val reopening = file.getUserData(FileEditorManagerKeys.CLOSING_TO_REOPEN) == true
         val job = jobOf(file) != null
-        when (releaseOf(runtime.owner == editor, started, runtime.ended, MyAirSettings.getInstance().keepDetached, reopening, job)) {
+        when (releaseOf(runtime.owner == pane, started, runtime.ended, MyAirSettings.getInstance().keepDetached, reopening, job)) {
             Release.IGNORE -> return
             Release.CLOSE -> return close(file)
             Release.DETACH -> {}
@@ -164,7 +164,7 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
         runtimes.filterValues { it.project == project }.keys.forEach(::close)
     }
 
-    private fun start(file: ClaudeSessionVirtualFile, editor: ClaudeSessionEditor, project: Project) {
+    private fun start(file: ClaudeSessionVirtualFile, pane: SessionPane, project: Project) {
         val claude = claudeExecutable()
         val settings = MyAirSettings.getInstance()
         val service = ClaudeSessionsService.getInstance()
@@ -189,7 +189,7 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
             .processType(TerminalProcessType.NON_SHELL)
             .emulatorType(TerminalEmulatorType.Ghostty)
             .build()
-        val runtime = Runtime(promptFile, project, editor)
+        val runtime = Runtime(promptFile, project, pane)
         runtimes[file] = runtime
         scope.launch(Dispatchers.EDT) {
             val session = TransferableTerminalSessionFactory.getInstance().create(project, options, null, deferSessionStartUntilUiShown = true)

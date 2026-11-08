@@ -16,7 +16,7 @@ import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.Cell
 import com.intellij.ui.dsl.builder.selected
 import com.intellij.ui.components.JBCheckBox
-import dev.myair.editor.ClaudeSessionEditor
+import dev.myair.editor.SessionPaneHost
 import com.intellij.ui.dsl.builder.bindText
 import dev.myair.actions.PresetsEditor
 import dev.myair.service.ClaudeSessionsService
@@ -133,7 +133,7 @@ class MyAirConfigurable : BoundConfigurable("My Air") {
         onApply { ClaudeSessionsService.getInstance().refresh() }
         onApply {
             ProjectManager.getInstance().openProjects.flatMap { FileEditorManager.getInstance(it).allEditors.asList() }
-                .filterIsInstance<ClaudeSessionEditor>().forEach { it.component.revalidate() }
+                .filterIsInstance<SessionPaneHost>().forEach { it.pane.component.revalidate() }
         }
     }
 }

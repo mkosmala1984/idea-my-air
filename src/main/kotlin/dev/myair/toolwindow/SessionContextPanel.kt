@@ -6,7 +6,7 @@ import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.ui.InplaceButton
-import dev.myair.editor.ClaudeSessionEditor
+import dev.myair.editor.SessionPaneHost
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.sessionIcon
 import com.intellij.openapi.Disposable
@@ -391,8 +391,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     /** Selects the shown session's tab and types [command] into its prompt, to be completed and sent by hand. */
     private fun pasteCommand(command: String) {
         val tab = checkNotNull(active.tab) { "skills shown without a session tab" }
-        val editor = FileEditorManager.getInstance(project).openFile(tab, true).filterIsInstance<ClaudeSessionEditor>().single()
-        if (!editor.type(command)) Messages.showInfoMessage(project, "The session's tab does not run claude.", "Paste Skill Command")
+        val pane = FileEditorManager.getInstance(project).openFile(tab, true).filterIsInstance<SessionPaneHost>().single().pane
+        if (!pane.type(command)) Messages.showInfoMessage(project, "The session's tab does not run claude.", "Paste Skill Command")
     }
 
     /** Opens or closes the skill [key], reading its files off the EDT. */
