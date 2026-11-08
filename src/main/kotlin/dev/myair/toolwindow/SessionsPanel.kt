@@ -249,8 +249,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         PopupHandler.installPopupMenu(
             tree,
             DefaultActionGroup(
-                NewSessionInDirAction("New Claude Session", false, selectedDir, editing::selectedPlanStart) { editing.selectedFolder()?.id },
-                NewSessionInDirAction("New Claude Session in Worktree...", true, { selectedDir().takeUnless { selectedItem() is WorktreeRow } }, editing::selectedPlanStart) { editing.selectedFolder()?.id },
+                NewSessionInDirAction("New Claude Session", false, selectedDir, { tree.selectionPaths?.singleOrNull()?.let(::nodeProject) }, editing::selectedPlanStart) { editing.selectedFolder()?.id },
+                NewSessionInDirAction("New Claude Session in Worktree...", true, { selectedDir().takeUnless { selectedItem() is WorktreeRow } }, selectedDir, editing::selectedPlanStart) { editing.selectedFolder()?.id },
                 openInIdeaAction(selectedOpenDir), openInTerminalAction(selectedOpenDir), Separator.getInstance(),
                 pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree),
                 Separator.getInstance(), newFolder, rename, delete, Separator.getInstance(), *planActions.toTypedArray(),
@@ -490,7 +490,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val read = ++branchReads
         ApplicationManager.getApplication().executeOnPooledThread {
             val found = dirs.associateWith(Git::headBranch)
-            val trees = bound.associateWith { root -> gitWorktrees(root).map { WorktreeRow(it.path, Git.headBranch(it.path), it.created) } }
+            val trees = bound.associateWith { root -> gitWorktrees(root).map { WorktreeRow(it.path, root, Git.headBranch(it.path), it.created) } }
             val missing = (dirs + trees.values.flatten().map { it.path }).filterNot { it.exists() }.toSet()
             ApplicationManager.getApplication().invokeLater {
                 if (read == branchReads && (found != branches || trees != worktrees || missing != gone)) {

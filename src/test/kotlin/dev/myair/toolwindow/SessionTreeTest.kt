@@ -356,7 +356,7 @@ class SessionTreeTest {
     private val bySession = listOf(inApp("a1", appX, 2), inApp("a2", Path.of("/app"), 1))
     private val app = SessionFolders().createFolder(null, "app", "app", listOf(Path.of("/app").toString()))
     private val appWorktrees: (Path) -> List<WorktreeRow> = {
-        if (it == Path.of("/app")) listOf(WorktreeRow(appX, "feat", Instant.ofEpochMilli(1)), WorktreeRow(wY, null, Instant.ofEpochMilli(2))) else emptyList()
+        if (it == Path.of("/app")) listOf(WorktreeRow(appX, Path.of("/app"), "feat", Instant.ofEpochMilli(1)), WorktreeRow(wY, Path.of("/app"), null, Instant.ofEpochMilli(2))) else emptyList()
     }
 
     @Test
@@ -374,7 +374,7 @@ class SessionTreeTest {
     fun `a folder bound to two repositories merges their worktrees newest first`() {
         val two = SessionFolders().createFolder(null, "app", "app", listOf(Path.of("/app").toString(), Path.of("/lib").toString()))
         val lib = Path.of("/l/z")
-        val worktrees: (Path) -> List<WorktreeRow> = { if (it == Path.of("/lib")) listOf(WorktreeRow(lib, "main", Instant.ofEpochMilli(3))) else appWorktrees(it) }
+        val worktrees: (Path) -> List<WorktreeRow> = { if (it == Path.of("/lib")) listOf(WorktreeRow(lib, Path.of("/lib"), "main", Instant.ofEpochMilli(3))) else appWorktrees(it) }
         assertEquals("app(worktrees app(worktree $lib, worktree $wY, worktree $appX(a1)), a1, a2), recent(a1, a2), sessions", shape(foldersTree(two, bySession, NO_BRANCH, worktrees, null)))
     }
 
@@ -391,7 +391,7 @@ class SessionTreeTest {
     }
 
     @Test
-    fun `nothing drops into the worktrees group, and a worktree row starts sessions in its directory`() {
+    fun `nothing drops into the worktrees group, and a worktree row starts sessions in its directory, of its main checkout's project`() {
         val root = foldersTree(app, bySession, NO_BRANCH, appWorktrees, null)
         val folder = root.getChildAt(0) as DefaultMutableTreeNode
         val group = folder.getChildAt(0) as DefaultMutableTreeNode
@@ -400,6 +400,8 @@ class SessionTreeTest {
         assertNull(dropChange(app, listOf(bySession[1]), TreePath(arrayOf(root, folder, group)), 0))
         assertEquals(appX, nodeDir(row))
         assertEquals(appX, openDir(row))
+        assertEquals(Path.of("/app"), nodeProject(row))
+        assertEquals(Path.of("/app"), nodeProject(TreePath(arrayOf(root, folder))))
         assertNull(nodeDir(TreePath(arrayOf(root, folder, group))))
     }
 }

@@ -89,8 +89,11 @@ class WorktreesGroup(val folder: Folder) {
     override fun toString() = "worktrees ${folder.id}"
 }
 
-/** A linked worktree at [path] with the [branch] checked out there (null when detached), made at [created]; it holds the sessions working in it. */
-data class WorktreeRow(val path: Path, val branch: String?, val created: Instant) {
+/**
+ * A linked worktree at [path] of the main checkout [root], with the [branch] checked out there (null when detached), made
+ * at [created]; it holds the sessions working in it.
+ */
+data class WorktreeRow(val path: Path, val root: Path, val branch: String?, val created: Instant) {
     override fun toString() = "worktree $path"
 }
 
@@ -194,6 +197,9 @@ fun nodeDir(path: TreePath): Path? = when (val item = (path.lastPathComponent as
     is Folder, is MilestoneRow, is PlanTaskRow, is NoTask -> startFolder(path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>())?.startDir?.let(Path::of)
     else -> null
 }
+
+/** The project of a session started from the node at [path]: a worktree row's main checkout, as other worktree starts give it, else [nodeDir]. */
+fun nodeProject(path: TreePath): Path? = ((path.lastPathComponent as DefaultMutableTreeNode).userObject as? WorktreeRow)?.root ?: nodeDir(path)
 
 /** The directory to open from the node at [path]: a session's own cwd, else [nodeDir]. */
 fun openDir(path: TreePath): Path? = ((path.lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession)?.cwd ?: nodeDir(path)

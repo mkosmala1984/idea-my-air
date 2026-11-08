@@ -18,15 +18,16 @@ class NewClaudeSessionAction : DumbAwareAction() {
 }
 
 /**
- * On a project's or folder's menu: a session in [dir], the selected node's directory, shown only where it has one; in
- * [plan], the selected plan row's plan and task, when there is one; filed in [folder], the selected folder, when it is one.
+ * On a project's, folder's or worktree's menu: a session in [dir], the selected node's directory, shown only where it has
+ * one, of the project [home] (a worktree's main checkout, else [dir]); in [plan], the selected plan row's plan and task, when there is one; filed in [folder], the selected folder, when it is one.
  */
 class NewSessionInDirAction(
-    text: String, inWorktree: Boolean, private val dir: () -> Path?, private val plan: () -> PlanStart?, private val folder: () -> String?,
+    text: String, inWorktree: Boolean, private val dir: () -> Path?, private val home: () -> Path?, private val plan: () -> PlanStart?,
+    private val folder: () -> String?,
 ) : DumbAwareAction(text, null, if (inWorktree) AllIcons.Vcs.Branch else AllIcons.General.Add) {
     private val start: (AnActionEvent, Path, PlanStart?, String?) -> Unit =
         if (inWorktree) { e, dir, plan, folderId -> startInWorktree(e.project!!, dir, null, emptyList(), popupPoint(e), plan, askBranch = true, folderId = folderId) }
-        else { e, dir, plan, folderId -> ClaudeSessionOpener.startNew(e.project!!, dir, plan = plan, folderId = folderId) }
+        else { e, dir, plan, folderId -> ClaudeSessionOpener.startNew(e.project!!, home()!!, dir, plan = plan, folderId = folderId) }
 
     override fun getActionUpdateThread() = ActionUpdateThread.EDT
     override fun update(e: AnActionEvent) {

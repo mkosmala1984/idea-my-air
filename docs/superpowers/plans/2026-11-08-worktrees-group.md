@@ -38,9 +38,9 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
+| 1 | done | `479456b` |
+| 2 | done | `5259660` |
+| 3 | done | `242f394` |
 
 ### Task 1: Worktrees with their creation time
 
@@ -51,7 +51,7 @@
 **Interfaces:**
 - Produces: `data class LinkedWorktree(val path: Path, val created: Instant)`; `fun gitWorktrees(root: Path): List<LinkedWorktree>` sorted by `created` descending. `inProjects` uses `.path`.
 
-- [ ] **Step 1: Write the failing test** in `SessionProjectsTest`, reusing `repo(...)`:
+- [x] **Step 1: Write the failing test** in `SessionProjectsTest`, reusing `repo(...)`:
 
 ```kotlin
 @Test
@@ -68,10 +68,10 @@ fun `worktrees come newest first by when git made their admin directory`() {
 }
 ```
 
-- [ ] **Step 2:** `./gradlew test --tests dev.myair.service.SessionProjectsTest` → FAIL (unresolved `LinkedWorktree`).
-- [ ] **Step 3: Implement.** Map each admin dir having `gitdir` to `LinkedWorktree(Path.of(gitdir text).parent, readAttributes<BasicFileAttributes>(admin).creationTime().toInstant())`, `sortedByDescending { it.created }`; update the KDoc; `inProjects` maps `.path`.
-- [ ] **Step 4:** same command → PASS (all four tests).
-- [ ] **Step 5: Commit** `Read when each linked worktree was made` with trailers `Plan-Task: 1/3` and `Plan: docs/superpowers/plans/2026-11-08-worktrees-group.md`.
+- [x] **Step 2:** `./gradlew test --tests dev.myair.service.SessionProjectsTest` → FAIL (unresolved `LinkedWorktree`).
+- [x] **Step 3: Implement.** Map each admin dir having `gitdir` to `LinkedWorktree(Path.of(gitdir text).parent, readAttributes<BasicFileAttributes>(admin).creationTime().toInstant())`, `sortedByDescending { it.created }`; update the KDoc; `inProjects` maps `.path`.
+- [x] **Step 4:** same command → PASS (all four tests).
+- [x] **Step 5: Commit** `Read when each linked worktree was made` with trailers `Plan-Task: 1/3` and `Plan: docs/superpowers/plans/2026-11-08-worktrees-group.md`.
 
 ### Task 2: Worktrees group in the Folders tree
 
@@ -89,7 +89,7 @@ fun `worktrees come newest first by when git made their admin directory`() {
 
 Behaviour of `folderNode(folder)`: children are subfolders, then — when `folder.dirs.flatMap { worktreesOf(Path.of(it)) }` is non-empty — `WorktreesGroup(folder)` holding those rows sorted by `created` descending, each holding (as `sessionNode`) every session of `shown` whose `workDir` or `cwd` `startsWith` its path, wherever it is filed; then the folder's own sessions / plan nodes as today. Under a filter, a row with no session is dropped and the group with no row (use `keep`). `folderSummary`: `WorktreesGroup`, `WorktreeRow` are groups; the count is `sessions.distinctBy { it.id }.size`. `dropChange`: return null when `path` contains a `WorktreesGroup` (next to the `RecentSessions` check).
 
-- [ ] **Step 1: Write the failing tests**, structure `SessionFolders().createFolder(null, "app", "app", listOf("/app"))`, sessions `a1` cwd `/app/.claude/worktrees/x`, `a2` cwd `/app`, `worktreesOf = { if (it == Path.of("/app")) listOf(WorktreeRow(Path.of("/app/.claude/worktrees/x"), "feat", Instant.ofEpochMilli(1)), WorktreeRow(Path.of("/w/y"), null, Instant.ofEpochMilli(2))) else emptyList() }`:
+- [x] **Step 1: Write the failing tests**, structure `SessionFolders().createFolder(null, "app", "app", listOf("/app"))`, sessions `a1` cwd `/app/.claude/worktrees/x`, `a2` cwd `/app`, `worktreesOf = { if (it == Path.of("/app")) listOf(WorktreeRow(Path.of("/app/.claude/worktrees/x"), "feat", Instant.ofEpochMilli(1)), WorktreeRow(Path.of("/w/y"), null, Instant.ofEpochMilli(2))) else emptyList() }`:
   - `a bound folder lists its worktrees newest first, each with the sessions working in it, which also stay in the folder` → `shape` equals `"app(worktrees app(worktree ${Path.of("/w/y")}, worktree ${Path.of("/app/.claude/worktrees/x")}(a1)), a1, a2), recent(a1, a2), sessions"` (adjust ids/time so a1 is newest).
   - `a folder without worktrees has no worktrees group` → existing `structure` with `NO_WORKTREES` gives the unchanged shape of the first test.
   - `a folder bound to two repositories merges their worktrees newest first` → two dirs, rows interleave by `created`.
@@ -97,10 +97,10 @@ Behaviour of `folderNode(folder)`: children are subfolders, then — when `folde
   - `a session shown in its folder and its worktree counts once` → `folderSummary(appNode) { null }!!.sessions == 2`.
   - `nothing drops into the worktrees group` → `dropChange(structure, listOf(a2), pathToWorktreeRow, -1)` is null and to the group is null.
   - `a worktree row starts sessions in its directory` → `nodeDir(pathToWorktreeRow) == Path.of("/app/.claude/worktrees/x")`.
-- [ ] **Step 2:** `./gradlew test --tests dev.myair.toolwindow.SessionTreeTest` → FAIL (compile).
-- [ ] **Step 3: Implement** the interfaces above in `SessionTree.kt`; update `foldersTree`'s KDoc.
-- [ ] **Step 4:** same command → PASS, then `./gradlew test` → PASS.
-- [ ] **Step 5: Commit** `List a bound folder's worktrees in the tree` with `Plan-Task: 2/3` and `Plan:` trailers.
+- [x] **Step 2:** `./gradlew test --tests dev.myair.toolwindow.SessionTreeTest` → FAIL (compile).
+- [x] **Step 3: Implement** the interfaces above in `SessionTree.kt`; update `foldersTree`'s KDoc.
+- [x] **Step 4:** same command → PASS, then `./gradlew test` → PASS.
+- [x] **Step 5: Commit** `List a bound folder's worktrees in the tree` with `Plan-Task: 2/3` and `Plan:` trailers.
 
 ### Task 3: Panel reads worktrees, renders rows, menu on a worktree
 
@@ -112,9 +112,9 @@ Behaviour of `folderNode(folder)`: children are subfolders, then — when `folde
 **Interfaces:**
 - Consumes: `gitWorktrees` (Task 1), `WorktreesGroup`, `WorktreeRow`, new `foldersTree` parameter (Task 2).
 
-- [ ] **Step 1: Read them off the EDT.** In `readBranches`, capture on the EDT `val bound = service.folders.folders.flatMap { it.subtree() }.flatMap { it.dirs }.map(Path::of).toSet()`; in the pooled task compute `val trees = bound.associateWith { gitWorktrees(it).map { w -> WorktreeRow(w.path, Git.headBranch(w.path), w.created) } }` and add every worktree path to the existence check feeding `gone`. A new field `worktrees: Map<Path, List<WorktreeRow>>` joins the "changed → render" comparison. `render` passes `{ worktrees[it].orEmpty() }` to `foldersTree`.
-- [ ] **Step 2: Render.** `WorktreesGroup` → `d.grow(AllIcons.Nodes.Folder)`, text `Worktrees` in `GRAY_ITALIC_ATTRIBUTES`, as `recent`. `WorktreeRow` → `d.grow(AllIcons.Vcs.Branch)`, `append(path.fileName)` (grey italic when `isGone(path)`), then `"  (${branch})"` grayed when `branch != null`; tooltip `"<path>\nCreated <created, local date-time>"` plus ` (folder no longer exists)` when gone. Session rows under a `WorktreeRow` render as under `recent` (`projectInRow = true`) so the project shows.
-- [ ] **Step 3: Menu.** "New Claude Session" needs nothing (Task 2's `nodeDir`). Give "New Claude Session in Worktree..." a dir provider that returns null when the selected node's `userObject is WorktreeRow`, so it is hidden there.
-- [ ] **Step 4: Verify.** `./gradlew test buildPlugin` → BUILD SUCCESSFUL. Then the sandbox (`env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daemon runIde`), Folders mode, folder bound to `E:/dev/projects/my-air` after `git worktree add` of two trees a minute apart: group shows both, newer on top, branch in brackets; one session started from a worktree row (New Claude Session) runs with `git -C <worktree> branch --show-current` unchanged and appears under the folder and under the row; delete one worktree's directory → row grey italic, New Claude Session disabled. Record in the commit message what was checked.
-- [ ] **Step 5: Update `CLAUDE.md`** (Folders/plan folders paragraph) with the group, ordering by admin-dir creation time, duplication, refused drops, the menu.
-- [ ] **Step 6: Commit** `Show worktrees under their bound folder and start sessions there` with `Plan-Task: 3/3` and `Plan:` trailers.
+- [x] **Step 1: Read them off the EDT.** In `readBranches`, capture on the EDT `val bound = service.folders.folders.flatMap { it.subtree() }.flatMap { it.dirs }.map(Path::of).toSet()`; in the pooled task compute `val trees = bound.associateWith { gitWorktrees(it).map { w -> WorktreeRow(w.path, Git.headBranch(w.path), w.created) } }` and add every worktree path to the existence check feeding `gone`. A new field `worktrees: Map<Path, List<WorktreeRow>>` joins the "changed → render" comparison. `render` passes `{ worktrees[it].orEmpty() }` to `foldersTree`.
+- [x] **Step 2: Render.** `WorktreesGroup` → `d.grow(AllIcons.Nodes.Folder)`, text `Worktrees` in `GRAY_ITALIC_ATTRIBUTES`, as `recent`. `WorktreeRow` → `d.grow(AllIcons.Vcs.Branch)`, `append(path.fileName)` (grey italic when `isGone(path)`), then `"  (${branch})"` grayed when `branch != null`; tooltip `"<path>\nCreated <created, local date-time>"` plus ` (folder no longer exists)` when gone. Session rows under a `WorktreeRow` render as under `recent` (`projectInRow = true`) so the project shows.
+- [x] **Step 3: Menu.** "New Claude Session" needs nothing (Task 2's `nodeDir`). Give "New Claude Session in Worktree..." a dir provider that returns null when the selected node's `userObject is WorktreeRow`, so it is hidden there.
+- [ ] **Step 4: Verify.** (tests and build done; sandbox UI not checked by hand) `./gradlew test buildPlugin` → BUILD SUCCESSFUL. Then the sandbox (`env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daemon runIde`), Folders mode, folder bound to `E:/dev/projects/my-air` after `git worktree add` of two trees a minute apart: group shows both, newer on top, branch in brackets; one session started from a worktree row (New Claude Session) runs with `git -C <worktree> branch --show-current` unchanged and appears under the folder and under the row; delete one worktree's directory → row grey italic, New Claude Session disabled. Record in the commit message what was checked.
+- [x] **Step 5: Update `CLAUDE.md`** (Folders/plan folders paragraph) with the group, ordering by admin-dir creation time, duplication, refused drops, the menu.
+- [x] **Step 6: Commit** `Show worktrees under their bound folder and start sessions there` with `Plan-Task: 3/3` and `Plan:` trailers.

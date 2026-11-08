@@ -416,4 +416,11 @@ class GitTest {
         assertEquals(listOf(dir.resolve("b"), dir.resolve("a")), listed.map { it.path.toRealPath() })
         assertEquals(listOf(null, "older"), listed.map { Git.headBranch(it.path) })
     }
+
+    @Test
+    fun `a worktree git records by a relative path is found where it lies`() {
+        val repo = init("repo")
+        git(repo, "worktree", "add", "--relative-paths", "-b", "rel", dir.resolve("rel").toString())
+        assertEquals(listOf(dir.resolve("rel").toRealPath()), gitWorktrees(repo).map { it.path.toRealPath() })
+    }
 }
