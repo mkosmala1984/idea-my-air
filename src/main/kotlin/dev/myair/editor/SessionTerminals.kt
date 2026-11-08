@@ -115,6 +115,12 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
         runtime.promptFile?.deleteIfExists()
     }
 
+    /** [file] has a process here, running, detached or ended in the tab that shows it. */
+    fun runs(file: ClaudeSessionVirtualFile): Boolean {
+        ThreadingAssertions.assertEventDispatchThread()
+        return file in runtimes
+    }
+
     /** Sessions whose process runs without a tab, with the project it last showed in. */
     fun detached(): List<Pair<Project, ClaudeSessionVirtualFile>> =
         runtimes.filter { it.value.owner == null && it.value.detachedAt != null }.map { it.value.project to it.key }

@@ -13,6 +13,7 @@ import com.intellij.testFramework.LightVirtualFile
 import com.intellij.util.concurrency.ThreadingAssertions
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.editor.PlanStart
+import dev.myair.editor.SessionTerminals
 import dev.myair.editor.hasTranscript
 import dev.myair.editor.projectBase
 import dev.myair.folders.ChangeSource
@@ -97,13 +98,14 @@ class PlanFiles {
     fun manager(folderId: String): ClaudeSessionVirtualFile? = managers[folderId]
 
     /**
-     * The manager session's file of plan [folder], built on its first start in this IDE from its entry in the store (a new
-     * session when there is none, filed in the plan folder so the tree shows it under `no task`). A new manager runs where
+     * The manager session's file of plan [folder], kept while `SessionTerminals` has its process, else built again from its
+     * entry in the store (a new session when there is none, filed in the plan folder so the tree shows it under `no task`). A new manager runs where
      * sessions started from the folder do, else in [ideProject]'s directory; an entry keeps the directories it was stored with.
      */
     fun startManager(folder: Folder, structure: SessionFolders, ideProject: Project): ClaudeSessionVirtualFile {
         ThreadingAssertions.assertEventDispatchThread()
-        managers[folder.id]?.let { return it }
+        // Identity matters only while a process runs; once it is gone, the store's entry decides the session and its args.
+        managers[folder.id]?.takeIf(SessionTerminals.getInstance()::runs)?.let { return it }
         checkNotNull(folder.plan) { "folder ${folder.id} has no plan" }
         val cwd = structure.startFolder(folder.id)?.startDir?.let(Path::of) ?: projectBase(ideProject)
         val newId = UUID.randomUUID().toString()
