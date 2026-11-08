@@ -36,6 +36,7 @@ import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.StatusText
 import com.intellij.util.ui.tree.TreeUtil
 import com.intellij.openapi.application.ApplicationManager
+import dev.myair.planview.PlanOpener
 import dev.myair.actions.Git
 import dev.myair.actions.NewSessionInDirAction
 import dev.myair.actions.openInIdeaAction
@@ -227,6 +228,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         delete.registerCustomShortcutSet(CommonShortcuts.getDelete(), tree)
         fun on(test: (Any?) -> Boolean) = { foldersMode && test(editing.selected()) }
         val planActions = listOf(
+            FolderAction("Open Plan", AllIcons.Nodes.Target, on { editing.selectedPlanFolder() != null }, { true }) { PlanOpener.open(project, editing.selectedPlanFolder()!!.id) },
             FolderAction("New Plan...", AllIcons.Nodes.Target, ::foldersMode, { canEditFolders() && editing.canNewPlan() }, editing::newPlan),
             FolderAction("Make Folder a Plan", null, on { it is Folder && editing.canAddPlan() }, ::canEditFolders, editing::addPlan),
             FolderAction("Remove Plan", null, on { it is Folder && it.plan != null }, { canEditFolders() && editing.canRemovePlan() }, editing::removePlan),

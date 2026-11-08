@@ -1,6 +1,7 @@
 package dev.myair.toolwindow
 
 import com.intellij.markdown.utils.convertMarkdownToHtml
+import dev.myair.planview.PlanOpener
 import dev.myair.store.Homes
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
@@ -259,7 +260,11 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
         plan?.let {
             card("Plan") {
-                row { comment("${it.path} › ${it.milestone.id} ${it.milestone.title}").shrinkable() }
+                row {
+                    val folder = it.folderId
+                    link(it.path) { PlanOpener.open(project, folder) }.shrinkable()
+                    comment("› ${it.milestone.id} ${it.milestone.title}")
+                }
                 row {
                     icon(it.task.status.icon)
                     label("${it.task.id} ${it.task.title}").bold().shrinkable()

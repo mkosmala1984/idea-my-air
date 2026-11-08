@@ -164,13 +164,13 @@ fun durationText(duration: Duration): String {
 fun fileLabel(path: Path, cwd: Path) = if (path.startsWith(cwd)) cwd.relativize(path).toString() else path.toString()
 
 /** The plan task a session's brief names: the plan folder's [path], its [milestone], the [task], and the [others] naming it, newest first. */
-data class PlanContext(val path: String, val milestone: Milestone, val task: PlanTask, val others: List<ClaudeSession>)
+data class PlanContext(val folderId: String, val path: String, val milestone: Milestone, val task: PlanTask, val others: List<ClaudeSession>)
 
 /** [session]'s [PlanContext], or null when its brief names no task that exists; [sessions] arrive newest first. */
 fun planContextOf(session: ClaudeSession, structure: SessionFolders, sessions: List<ClaudeSession>): PlanContext? {
     val (folder, task) = structure.taskOf(session) ?: return null
     return PlanContext(
-        structure.pathOf(folder.id), folder.plan!!.milestones.first { task in it.tasks }, task,
+        folder.id, structure.pathOf(folder.id), folder.plan!!.milestones.first { task in it.tasks }, task,
         sessions.filter { it.id != session.id && it.brief?.planTask == task.id },
     )
 }
