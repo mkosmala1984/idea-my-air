@@ -19,9 +19,9 @@ import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlin.io.path.isDirectory
 
-/** What embeds a [SessionPane]: a session tab, or a plan tab showing its manager session. */
+/** What embeds a [SessionPane]: a session tab, or a plan tab showing its manager session (none while loading or once its plan is gone). */
 interface SessionPaneHost {
-    val pane: SessionPane
+    val pane: SessionPane?
 }
 
 /** The grid of the editor a reworked terminal shows now: its output, or the alternate buffer of a fullscreen program like `claude`. */

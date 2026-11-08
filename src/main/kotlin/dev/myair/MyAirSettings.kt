@@ -133,7 +133,7 @@ class MyAirConfigurable : BoundConfigurable("My Air") {
         onApply { ClaudeSessionsService.getInstance().refresh() }
         onApply {
             ProjectManager.getInstance().openProjects.flatMap { FileEditorManager.getInstance(it).allEditors.asList() }
-                .filterIsInstance<SessionPaneHost>().forEach { it.pane.component.revalidate() }
+                .filterIsInstance<SessionPaneHost>().forEach { it.pane?.component?.revalidate() }
         }
     }
 }

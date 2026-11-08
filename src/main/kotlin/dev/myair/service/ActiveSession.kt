@@ -61,6 +61,9 @@ class ActiveSession(private val project: Project) : Disposable {
         update()
     }
 
+    /** Reads the selected tab again: a plan tab's manager file comes and goes with its editor, which no tab event announces. */
+    fun tabFileChanged() = update()
+
     private fun update() {
         ThreadingAssertions.assertEventDispatchThread()
         val editors = FileEditorManager.getInstance(project)

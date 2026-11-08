@@ -11,8 +11,10 @@ import com.intellij.openapi.ui.InputValidatorEx
 import com.intellij.openapi.ui.Messages
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.Folder
+import dev.myair.folders.Milestone
 import dev.myair.folders.Plan
 import dev.myair.folders.PlanStatus
+import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
 import dev.myair.editor.PlanStart
 import dev.myair.service.ClaudeSessionsService
@@ -91,16 +93,10 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
                     (if (count > 0) "\n$count session(s) filed there go back to their project's folder or \"sessions\"." else "") +
                     (if (dirs.isNotEmpty()) "\nThe other sessions of ${dirs.joinToString()}, and those whose brief names a folder deleted, go back to \"sessions\"." else "") +
                     (if (plans.isNotEmpty()) "\nIts plan with ${plans.sumOf { it.tasks().size }} task(s) is deleted too." else "")
-                if (confirm(message, "Delete Folder")) update { it.delete(item.id) }
+                if (confirm(project, message, "Delete Folder")) update { it.delete(item.id) }
             }
-            is MilestoneRow -> {
-                val open = item.milestone.tasks.filterNot { it.status.closed }
-                if (open.isNotEmpty()) Messages.showErrorDialog(project, "Close or move its open tasks first: ${open.joinToString { it.id }}.", "Delete Milestone")
-                else if (confirm("Delete milestone ${item.milestone.id} \"${item.milestone.title}\" with ${item.milestone.tasks.size} closed task(s)?", "Delete Milestone")) {
-                    update { it.deletePlanItem(item.milestone.id) }
-                }
-            }
-            is PlanTaskRow -> if (confirm("Delete task ${item.task.id} \"${item.task.title}\"? Sessions naming it go back to the folder they are filed in or bound to.", "Delete Task")) update { it.deletePlanItem(item.task.id) }
+            is MilestoneRow -> deleteMilestone(project, item.milestone)
+            is PlanTaskRow -> deleteTask(project, item.task)
             else -> error("nothing to delete in $item")
         }
     }
@@ -193,8 +189,6 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
 
     private fun update(change: (SessionFolders) -> SessionFolders) = service.updateFolders(ChangeSource.UI, change)
 
-    private fun confirm(message: String, title: String) = Messages.showYesNoDialog(project, message, title, Messages.getQuestionIcon()) == Messages.YES
-
     /** A trimmed non-blank text, or null when cancelled. */
     private fun askText(title: String, label: String, initial: String): String? {
         val validator = object : InputValidatorEx {
@@ -216,6 +210,24 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
         return Messages.showInputDialog(project, "Name:", title, null, initial, validator)?.trim()
     }
 }
+
+/** Deletes [milestone] after the user confirms; one with open tasks is refused, naming them. */
+fun deleteMilestone(project: Project, milestone: Milestone) {
+    val open = milestone.tasks.filterNot { it.status.closed }
+    if (open.isNotEmpty()) Messages.showErrorDialog(project, "Close or move its open tasks first: ${open.joinToString { it.id }}.", "Delete Milestone")
+    else if (confirm(project, "Delete milestone ${milestone.id} \"${milestone.title}\" with ${milestone.tasks.size} closed task(s)?", "Delete Milestone")) {
+        ClaudeSessionsService.getInstance().updateFolders(ChangeSource.UI) { it.deletePlanItem(milestone.id) }
+    }
+}
+
+/** Deletes [task] after the user confirms. */
+fun deleteTask(project: Project, task: PlanTask) {
+    if (confirm(project, "Delete task ${task.id} \"${task.title}\"? Sessions naming it go back to the folder they are filed in or bound to.", "Delete Task")) {
+        ClaudeSessionsService.getInstance().updateFolders(ChangeSource.UI) { it.deletePlanItem(task.id) }
+    }
+}
+
+private fun confirm(project: Project, message: String, title: String) = Messages.showYesNoDialog(project, message, title, Messages.getQuestionIcon()) == Messages.YES
 
 /** A folder action, shown in Folders mode only. */
 class FolderAction(text: String, icon: Icon?, private val visible: () -> Boolean, private val enabled: () -> Boolean, private val run: () -> Unit) :

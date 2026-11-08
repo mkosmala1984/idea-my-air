@@ -392,7 +392,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     /** Selects the shown session's tab and types [command] into its prompt, to be completed and sent by hand. */
     private fun pasteCommand(command: String) {
         val tab = checkNotNull(active.tab) { "skills shown without a session tab" }
-        val pane = FileEditorManager.getInstance(project).openFile(tabFileOf(tab), true).filterIsInstance<SessionPaneHost>().single().pane
+        val host = FileEditorManager.getInstance(project).openFile(tabFileOf(tab), true).filterIsInstance<SessionPaneHost>().single()
+        val pane = checkNotNull(host.pane) { "the tab of session ${tab.sessionId} shows no terminal" }
         if (!pane.type(command)) Messages.showInfoMessage(project, "The session's tab does not run claude.", "Paste Skill Command")
     }
 
