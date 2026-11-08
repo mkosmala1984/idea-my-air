@@ -1,5 +1,6 @@
 package dev.myair.actions
 
+import dev.myair.service.gitWorktrees
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.assertThrows
@@ -404,5 +405,15 @@ class GitTest {
     fun `state of a broken repository fails with git's message`() {
         val broken = dir.resolve("broken").createDirectories().also { it.resolve(".git").writeText("gitdir: nowhere\n") }
         assertContains(assertThrows<IllegalStateException> { Git.state(broken) }.message!!, "not a git repository")
+    }
+
+    @Test
+    fun `worktrees git adds are listed newest first, each with the branch checked out there`() {
+        val repo = init("repo")
+        git(repo, "worktree", "add", "-b", "older", dir.resolve("a").toString())
+        git(repo, "worktree", "add", "--detach", dir.resolve("b").toString())
+        val listed = gitWorktrees(repo)
+        assertEquals(listOf(dir.resolve("b"), dir.resolve("a")), listed.map { it.path.toRealPath() })
+        assertEquals(listOf(null, "older"), listed.map { Git.headBranch(it.path) })
     }
 }

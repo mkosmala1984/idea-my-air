@@ -22,6 +22,8 @@ import dev.myair.folders.PlanStatus
 import dev.myair.folders.progress
 import dev.myair.folders.startFolder
 import java.nio.file.Path
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.swing.Icon
 import javax.swing.JTree
 import javax.swing.tree.DefaultMutableTreeNode
@@ -172,6 +174,18 @@ class SessionRenderer(
                 icon = d.grow(AllIcons.Vcs.History)
                 append(item.toString(), SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
             }
+            is WorktreesGroup -> {
+                icon = d.grow(AllIcons.Nodes.Folder)
+                append("Worktrees", SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES)
+            }
+            is WorktreeRow -> {
+                icon = d.grow(AllIcons.Vcs.Branch)
+                val gone = isGone(item.path)
+                append("${item.path.fileName ?: item.path}", if (gone) SimpleTextAttributes.GRAY_ITALIC_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
+                item.branch?.let { append("  ($it)", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
+                val created = item.created.atZone(ZoneId.systemDefault()).format(WORKTREE_CREATED)
+                toolTipText = "<html>${StringUtil.escapeXmlEntities(item.path.toString())}<br>Created $created" + (if (gone) "<br>Folder no longer exists" else "") + "</html>"
+            }
             is Path -> {
                 icon = projectIcon(item, projectName(item), d.iconSize)
                 append(projectName(item))
@@ -222,6 +236,8 @@ class SessionRenderer(
         }
     }
 }
+
+private val WORKTREE_CREATED = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
 /** Markdown descriptions as HTML; one renderer paints every row on every repaint, so each text is converted once. */
 private val descriptionHtml = HashMap<String, String>()

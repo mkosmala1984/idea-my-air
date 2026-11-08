@@ -50,6 +50,7 @@ import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.projectBase
 import dev.myair.folders.Folder
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.service.gitWorktrees
 import dev.myair.store.pinnedSessions
 import java.awt.BorderLayout
 import java.awt.Dimension
@@ -101,7 +102,10 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     /** The branch checked out in each project and folder directory the tree shows, read off the EDT by [readBranches]. */
     private var branches: Map<Path, String?> = emptyMap()
 
-    /** The directories of [branches] that do not exist, read with them. */
+    /** The linked worktrees of every directory a folder is bound to, newest first, read with [branches]. */
+    private var worktrees: Map<Path, List<WorktreeRow>> = emptyMap()
+
+    /** The directories of [branches] and [worktrees] that do not exist, read with them. */
     private var gone: Set<Path> = emptySet()
     /** The number of [readBranches] calls; only the latest read lands. */
     private var branchReads = 0
@@ -240,12 +244,13 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         )
         val inTree = { tree.selectionPaths.orEmpty().mapNotNull { (it.lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession } }
         val selectedDir = { tree.selectionPaths?.singleOrNull()?.let(::nodeDir) }
+        val selectedItem = { (tree.selectionPaths?.singleOrNull()?.lastPathComponent as? DefaultMutableTreeNode)?.userObject }
         val selectedOpenDir = { tree.selectionPaths?.singleOrNull()?.let(::openDir) }
         PopupHandler.installPopupMenu(
             tree,
             DefaultActionGroup(
                 NewSessionInDirAction("New Claude Session", false, selectedDir, editing::selectedPlanStart) { editing.selectedFolder()?.id },
-                NewSessionInDirAction("New Claude Session in Worktree...", true, selectedDir, editing::selectedPlanStart) { editing.selectedFolder()?.id },
+                NewSessionInDirAction("New Claude Session in Worktree...", true, { selectedDir().takeUnless { selectedItem() is WorktreeRow } }, editing::selectedPlanStart) { editing.selectedFolder()?.id },
                 openInIdeaAction(selectedOpenDir), openInTerminalAction(selectedOpenDir), Separator.getInstance(),
                 pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree),
                 Separator.getInstance(), newFolder, rename, delete, Separator.getInstance(), *planActions.toTypedArray(),
@@ -466,8 +471,9 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     }
 
     /**
-     * Reads the branch of every directory a project, folder or session row shows and which of them are gone, off the
-     * EDT, and rebuilds the tree when either changed, since a session's directories have [BranchRow]s of their own. Runs
+     * Reads the branch of every directory a project, folder or session row shows, the linked worktrees of every bound
+     * directory (of all folders, as a filter may hide some), and which of them are gone, off the EDT, and rebuilds the tree
+     * when any changed, since a session's directories have [BranchRow]s of their own. Runs
      * with every refresh of the tree, so a checkout or a removal shows within the minute of [updateTree]'s timer.
      */
     private fun readBranches() {
@@ -480,13 +486,16 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 else -> emptyList()
             }
         }.toSet()
+        val bound = service.folders.folders.flatMap { it.subtree() }.flatMap { it.dirs }.map(Path::of).toSet()
         val read = ++branchReads
         ApplicationManager.getApplication().executeOnPooledThread {
             val found = dirs.associateWith(Git::headBranch)
-            val missing = dirs.filterNot { it.exists() }.toSet()
+            val trees = bound.associateWith { root -> gitWorktrees(root).map { WorktreeRow(it.path, Git.headBranch(it.path), it.created) } }
+            val missing = (dirs + trees.values.flatten().map { it.path }).filterNot { it.exists() }.toSet()
             ApplicationManager.getApplication().invokeLater {
-                if (read == branchReads && (found != branches || missing != gone)) {
+                if (read == branchReads && (found != branches || trees != worktrees || missing != gone)) {
                     branches = found
+                    worktrees = trees
                     gone = missing
                     render()
                 }
@@ -588,7 +597,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             tree.model = DefaultTreeModel(
                 when {
                     error != null -> DefaultMutableTreeNode()
-                    foldersMode -> foldersTree(service.folders, treeSessions(), branches::get, { emptyList() }, filter)
+                    foldersMode -> foldersTree(service.folders, treeSessions(), branches::get, { worktrees[it].orEmpty() }, filter)
                     else -> projectsTree(filter?.let(treeSessions()::filter) ?: treeSessions(), branches::get)
                 },
             )
