@@ -56,15 +56,18 @@ fun startInWorktree(
     branch: String? = null, askBranch: Boolean = false, folderId: String? = plan?.folderId,
 ) = background(project, "Reading branches", { Git.repo(dir) }) { repo ->
     require(branch == null || !askBranch) { "a branch named and asked for" }
-    fun create(base: String, branch: String?) {
+    fun create(base: String, branch: String?, prompt: String? = null) {
+        require(prompt == null || "--" !in args) { "a first message in args and in the branch popup" }
         val id = UUID.randomUUID().toString()
         val running = runningDirs()
+        val claudeArgs = if (prompt == null) args else args + listOf("--", prompt)
         background(project, "Creating worktree", { createWorktree(repo, base, branch, id, running) }) { path ->
             rememberBase(repo, base)
-            ClaudeSessionOpener.startNew(project, dir, path, id, args, plan, folderId)
+            ClaudeSessionOpener.startNew(project, dir, path, id, claudeArgs, plan, folderId)
         }
     }
-    fun picked(base: String) = if (askBranch) branchPopup(project, dir, base) { create(base, it) }.show(where) else create(base, branch)
+    fun picked(base: String) =
+        if (askBranch) branchPopup(project, dir, base) { branch, prompt -> create(base, branch, prompt) }.show(where) else create(base, branch)
     if (base != null) picked(base)
     else basePopup("Base Branch for New Worktree", baseChoices(repo.branches, repo.default, recentBases(repo.mainRoot)), ::picked).show(where)
 }
@@ -94,12 +97,15 @@ fun runningDirs(): List<Path> {
 fun rememberBase(repo: GitRepo, base: String) =
     PropertiesComponent.getInstance().setList(recentKey(repo.mainRoot), pushRecent(recentBases(repo.mainRoot), base, repo.branches))
 
-/** Check out [base] (null to [chosen]), or a new branch off it named in [showNewBranchPopup]. */
-private fun branchPopup(project: Project, dir: Path, base: String, chosen: (String?) -> Unit): ListPopup =
+/**
+ * Check out [base] (nulls to [chosen]), or a new branch off it named in [showNewBranchPopup], whose task [chosen] gets
+ * as the session's first message.
+ */
+private fun branchPopup(project: Project, dir: Path, base: String, chosen: (String?, String?) -> Unit): ListPopup =
     JBPopupFactory.getInstance().createListPopup(object : BaseListPopupStep<Boolean>("Worktree Branch", listOf(false, true)) {
         override fun getTextFor(value: Boolean) = if (value) "New branch off $base..." else "Check out $base"
         override fun onChosen(selectedValue: Boolean, finalChoice: Boolean): PopupStep<*>? = doFinalStep {
-            if (!selectedValue) chosen(null) else showNewBranchPopup(project, dir, base, chosen)
+            if (!selectedValue) chosen(null, null) else showNewBranchPopup(project, dir, base, chosen)
         }
     })
 
