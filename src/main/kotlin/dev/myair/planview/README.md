@@ -15,7 +15,8 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
   - `@Service(APP) class PlanFiles`, with `store`, `file(folderId)`, `manager(folderId)`, `startManager(folder, structure, ideProject)`, `planOf(file)` and `forgetManager(folderId)`.
 - `PlanOpener.kt`: `object PlanOpener`, with `open(project, folderId)`.
 - `PlanPanel.kt`: `class PlanPanel(project, folderId, parent) : JPanel, Scrollable`, with `show(view)`.
-- `PlanView.kt`: `data class TaskView`, `MilestoneView`, `PlanView`, and `fun planViewOf(structure, folderId, sessions, managerId)`.
+- `PlanView.kt`: `data class TaskView`, `MilestoneView`, `PlanView`, `Folding`, and `fun planViewOf(structure, folderId, sessions, managerId)`.
+- `MarkdownHtml.kt`: `data class MarkdownColors`, `fun markdownHtml(markdown, colors)`.
 - `PlanEdit.kt`:
   - `sealed interface PlanEdit`: `Title`, `Next`, `Description`, `NewTask`, `NewMilestone`.
   - `fun PlanEdit.apply(folderId, text)`.
@@ -61,7 +62,7 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
   - starts the manager's `claude` process when it first builds, through `SessionPane`;
   - in `planGone`, ends that process (`SessionTerminals.close`), drops the manager's file (`forgetManager`) and disposes the pane;
   - updates the tab presentation (`updateFilePresentation`) when the plan's name changes or the plan goes, and notifies `ActiveSession.tabFileChanged`.
-- `PlanPanel` writes `structure.json` through `updateFolders(ChangeSource.UI)` for edits, the milestone `done` box and task status. Its task rows start new sessions through `NewSessionInDirAction` with a `PlanStart`, and open sessions through `ClaudeSessionOpener.open`.
+- `PlanPanel` writes `structure.json` through `updateFolders(ChangeSource.UI)` for edits, the milestone's Mark Done/Reopen and the Status of a task's menu. Its task menus start new sessions through `NewSessionInDirAction` with a `PlanStart`, and open sessions through `ClaudeSessionOpener.open`.
 - `PlanOpener.open`:
   - reads `plan-managers.json`;
   - may focus another IDE (`TabsSync.focusElsewhere`, a request file);

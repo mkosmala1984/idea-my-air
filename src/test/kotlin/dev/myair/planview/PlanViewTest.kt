@@ -2,8 +2,11 @@ package dev.myair.planview
 
 import dev.myair.claude.Brief
 import dev.myair.claude.ClaudeSession
+import dev.myair.folders.Milestone
 import dev.myair.folders.Plan
 import dev.myair.folders.PlanChanges
+import dev.myair.folders.PlanStatus
+import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
@@ -49,5 +52,28 @@ class PlanViewTest {
     fun `the manager is not listed under a task`() {
         val view = planViewOf(structure, "f", listOf(session("m", "T2")), "m")!!
         assertEquals(emptyList(), view.milestones[0].tasks[0].sessions)
+    }
+
+    @Test
+    fun `milestones not done and tasks in progress or waiting start open, and a toggle flips one`() {
+        val done = Milestone("M1", "a", done = true)
+        val pending = PlanTask("T2", "b")
+        val working = PlanTask("T3", "c", status = PlanStatus.IN_PROGRESS)
+        val folding = Folding()
+        assertEquals(listOf(false, true, false, true), listOf(folding.open(done), folding.open(done.copy(done = false)), folding.open(pending), folding.open(working)))
+        val flipped = folding.toggle("M1").toggle("T2").toggle("T3")
+        assertEquals(listOf(true, true, false), listOf(flipped.open(done), flipped.open(pending), flipped.open(working)))
+        assertEquals(folding, flipped.toggle("M1").toggle("T2").toggle("T3"))
+    }
+
+    @Test
+    fun `fold all opens or folds every milestone and task, whatever their defaults`() {
+        val milestones = listOf(
+            Milestone("M1", "a", done = true, tasks = listOf(PlanTask("T2", "b"), PlanTask("T3", "c", status = PlanStatus.WAITING))),
+            Milestone("M4", "d", tasks = listOf(PlanTask("T5", "e", status = PlanStatus.DONE))),
+        )
+        val all = { f: Folding -> milestones.map(f::open) + milestones.flatMap { it.tasks }.map(f::open) }
+        assertEquals(List(5) { true }, all(Folding.all(true, milestones)))
+        assertEquals(List(5) { false }, all(Folding.all(false, milestones)))
     }
 }
