@@ -16,6 +16,8 @@ import javax.swing.tree.TreePath
  */
 class DropLineTree : SimpleTree() {
     lateinit var trailer: SessionTrailer
+    /** The rows of the active session tab's session ([paintActiveBars]). */
+    lateinit var activeRows: () -> List<Rectangle>
 
     init {
         isOpaque = true
@@ -33,6 +35,7 @@ class DropLineTree : SimpleTree() {
     override fun paintComponent(g: Graphics) {
         super.paintComponent(g)
         trailer.paint(g)
+        paintActiveBars(g, activeRows())
         val drop = drop ?: return
         g.color = JBUI.CurrentTheme.DragAndDrop.BORDER_COLOR
         if (drop.childIndex >= 0) insertLine(this, drop.path, drop.childIndex).let { g.fillRect(it.x, it.y - 1, it.width, 2) }

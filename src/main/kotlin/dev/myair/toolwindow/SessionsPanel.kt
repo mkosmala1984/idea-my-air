@@ -50,6 +50,7 @@ import dev.myair.claude.SessionStatus
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.projectBase
 import dev.myair.folders.Folder
+import dev.myair.service.ActiveSession
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.gitWorktrees
 import dev.myair.store.pinnedSessions
@@ -81,6 +82,7 @@ import javax.swing.event.TreeExpansionEvent
 import javax.swing.event.TreeExpansionListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
+import javax.swing.tree.TreePath
 
 class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : SimpleToolWindowPanel(true, true) {
     private val service = ClaudeSessionsService.getInstance()
@@ -91,6 +93,12 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private var density = PropertiesComponent.getInstance().getValue(DENSITY)?.let(Density::valueOf) ?: Density.COMPACT
     /** A single click on a session's row opens it, as a double-click does. */
     private var singleClick = PropertiesComponent.getInstance().getBoolean(SINGLE_CLICK)
+    /** The tree selects, and both lists scroll to, the session of the window's active session tab when it changes. */
+    private var followActive = PropertiesComponent.getInstance().getBoolean(FOLLOW_ACTIVE, true)
+    /** The session of this window's active session tab ([ActiveSession]); its rows carry a bar and its pinned row a tint. */
+    private var activeId: String? = null
+    /** A session [followActive] has yet to select, as the tree did not show it yet; selected by the [render] that shows it. */
+    private var pendingReveal: String? = null
     /** The tree shows only the sessions of [windowRoot] ([inWorkTree]); kept per project, so each window has its own. */
     private var workTreeOnly = PropertiesComponent.getInstance(project).getBoolean(WORK_TREE_ONLY)
     /** The work tree this window's project lies in, read off the EDT once; null until read and outside a repository. */
@@ -200,6 +208,10 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             pinned, pinned::locationToIndex, { pinned.getCellBounds(it, it) }, { pinned.model.getElementAt(it) }, { null },
             ::pinnedBackground, trailerButtons, ::density, { pinnedLayout.firstLine(it) },
         )
+        tree.activeRows = {
+            (0 until tree.rowCount).filter { sessionAt(tree.getPathForRow(it))?.id == activeId }.map(tree::getRowBounds)
+        }
+        pinned.activeRows = { activePinnedRow()?.let { listOf(pinned.getCellBounds(it, it)) }.orEmpty() }
         lists.add(JPanel(BorderLayout()).apply {
             add(pinnedPane, BorderLayout.CENTER)
             add(pinnedEdge, BorderLayout.SOUTH)
@@ -318,10 +330,19 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 PropertiesComponent.getInstance().setValue(SINGLE_CLICK, state)
             }
         }
+        val follow = object : ToggleAction("Select Session of Active Tab"), DumbAware {
+            override fun getActionUpdateThread() = ActionUpdateThread.EDT
+            override fun isSelected(e: AnActionEvent) = followActive
+            override fun setSelected(e: AnActionEvent, state: Boolean) {
+                followActive = state
+                PropertiesComponent.getInstance().setValue(FOLLOW_ACTIVE, state, true)
+                if (state) activeId?.let(::reveal)
+            }
+        }
         val options = DefaultActionGroup("View Options", true).apply {
             templatePresentation.icon = AllIcons.Actions.Properties
             addAll(
-                mode, showAll, clickToOpen, Separator.create("Hide Sessions Older Than"),
+                mode, showAll, clickToOpen, follow, Separator.create("Hide Sessions Older Than"),
                 MaxAge(3), MaxAge(7), MaxAge(14), MaxAge(30), Separator.create("Density"),
                 *Density.entries.map(::DensityOption).toTypedArray(), Separator.getInstance(),
                 FontSize("Increase Font Size") { it + 1 }, FontSize("Decrease Font Size") { it - 1 }, FontSize("Reset Font Size") { 0 },
@@ -373,6 +394,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         }
         renderPinned()
         render()
+        ActiveSession.getInstance(project).subscribe(toolWindow.disposable, ::activeChanged)
+        activeChanged()
         val base = projectBase(project)
         ApplicationManager.getApplication().executeOnPooledThread {
             val root = Git.head(base)?.root
@@ -482,6 +505,42 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         })
     }
 
+    /** Marks the session of the active session tab anew; when it is another one and [followActive] is on, [reveal]s it. */
+    private fun activeChanged() {
+        val id = ActiveSession.getInstance(project).tab?.sessionId
+        if (id != activeId) {
+            activeId = id
+            if (followActive && id != null) reveal(id)
+        }
+        tree.repaint()
+        pinned.repaint()
+    }
+
+    /**
+     * Scrolls the pinned list to session [id] and selects its first row in the tree, expanding the rows above it; a tree
+     * that shows it nowhere yet (not loaded, filtered out) selects it once a [render] does ([pendingReveal]). A selected
+     * row of it stays, so a click on one of a session's several rows does not jump to another.
+     */
+    private fun reveal(id: String) {
+        activePinnedRow()?.let(pinned::ensureIndexIsVisible)
+        pendingReveal = null
+        if (tree.selectionPaths.orEmpty().any { sessionAt(it)?.id == id }) return
+        val node = (tree.model.root as DefaultMutableTreeNode).preorderEnumeration().asSequence()
+            .firstOrNull { ((it as DefaultMutableTreeNode).userObject as? ClaudeSession)?.id == id }
+        if (node == null) {
+            pendingReveal = id
+            return
+        }
+        val path = TreePath((node as DefaultMutableTreeNode).path)
+        tree.makeVisible(path)
+        TreeUtil.selectPath(tree, path)
+    }
+
+    private fun activePinnedRow() = (0 until pinned.model.size).firstOrNull { pinned.model.getElementAt(it).id == activeId }
+
+    /** The session of a session's own row; null for any other. */
+    private fun sessionAt(path: TreePath) = (path.lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession
+
     /** Rebuilt on every change, since a status change reorders it; the selection follows the session ids. */
     private fun renderPinned() {
         val selected = pinned.selectedValuesList.map { it.id }.toSet()
@@ -564,11 +623,13 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
 
     /**
      * A pinned row's background, which its renderer paints over the list UI's, so a selected row shows none: hovered, the
-     * hover colour (null when hover painting is off), else amber when its session needs input, else the list's.
+     * hover colour (null when hover painting is off), else amber when its session needs input, else the inactive selection's
+     * when it is the active session tab's, else the list's.
      */
     private fun pinnedBackground(row: Int): Color =
         RenderingUtil.getHoverBackground(pinned).takeIf { ListHoverListener.getHoveredIndex(pinned) == row }
             ?: NEEDS_INPUT_TINT.takeIf { service.live[pinned.model.getElementAt(row).id]?.status == SessionStatus.NEEDS_INPUT }
+            ?: JBUI.CurrentTheme.List.Selection.background(false).takeIf { pinned.model.getElementAt(row).id == activeId }
             ?: RenderingUtil.getBackground(pinned)
 
     private fun isSettled(session: ClaudeSession) = session.id in service.pins.settled
@@ -648,6 +709,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         } finally {
             rendering = false
         }
+        pendingReveal?.let(::reveal)
         readBranches()
     }
 
@@ -665,6 +727,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         /** The pinned list's lower edge, its line in the middle, high enough to grab. */
         private const val EDGE = 5
         private const val SINGLE_CLICK = "dev.myair.singleClick"
+        private const val FOLLOW_ACTIVE = "dev.myair.followActiveTab"
         private const val TOOLBAR_CARD = "toolbar"
         private const val SEARCH_CARD = "search"
         private const val LOADING = "Loading sessions..."

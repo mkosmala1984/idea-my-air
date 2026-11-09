@@ -11,6 +11,7 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.Pins
 import java.awt.Graphics
+import java.awt.Rectangle
 import javax.swing.Icon
 
 /** A mark kept in [Pins], toggled from the row menus and the row buttons; [change] sets it on the ids or clears it. */
@@ -50,9 +51,12 @@ class PinsToggle(private val mark: Mark, private val service: ClaudeSessionsServ
 
 class TrailerList : JBList<ClaudeSession>() {
     lateinit var trailer: SessionTrailer
+    /** The rows of the active session tab's session ([paintActiveBars]). */
+    lateinit var activeRows: () -> List<Rectangle>
 
     override fun paintComponent(g: Graphics) {
         super.paintComponent(g)
         trailer.paint(g)
+        paintActiveBars(g, activeRows())
     }
 }

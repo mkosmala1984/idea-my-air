@@ -18,6 +18,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.dsl.builder.panel
 import dev.myair.MyAirSettings
 import dev.myair.claude.LiveSessionRegistry
+import dev.myair.service.ClaudeSessionsService
 import dev.myair.tabs.SessionHosts
 import java.beans.PropertyChangeListener
 import java.awt.BorderLayout
@@ -49,12 +50,26 @@ private class EditorGrid(view: TerminalView) : TextGrid {
  */
 class ClaudeSessionEditor(private val project: Project, private val file: ClaudeSessionVirtualFile) : UserDataHolderBase(), FileEditor {
     private val content = JPanel(BorderLayout())
+    private val header = SessionHeader { updateHeader() }
+    private val root = JPanel(BorderLayout()).apply {
+        add(header, BorderLayout.NORTH)
+        add(content, BorderLayout.CENTER)
+    }
     /** The view of the process this tab shows; null while it starts, shows elsewhere or a notice stands instead. */
     private var view: TerminalView? = null
 
     init {
         val blocker = if (file.restored) restoreBlocker() else null
         if (blocker != null) content.add(blocker) else attach()
+        ClaudeSessionsService.getInstance().subscribe(this, ::updateHeader)
+        updateHeader()
+    }
+
+    /** The session the tab shows now ([ClaudeSessionVirtualFile.sessionId] follows `/clear`); before the first scan only the file's title. */
+    private fun updateHeader() {
+        val service = ClaudeSessionsService.getInstance()
+        val session = service.listed.firstOrNull { it.id == file.sessionId }
+        header.show(if (session == null) HeaderText(file.title, file.project, null, null, null) else headerText(session, service.branchOf(session)))
     }
 
     private fun attach() = SessionTerminals.getInstance().attach(file, this, project)
@@ -108,7 +123,7 @@ class ClaudeSessionEditor(private val project: Project, private val file: Claude
         })
     }
 
-    override fun getComponent(): JComponent = content
+    override fun getComponent(): JComponent = root
     override fun getPreferredFocusedComponent(): JComponent = view?.preferredFocusableComponent ?: content
     override fun getName() = "Claude"
     override fun getFile(): VirtualFile = file
