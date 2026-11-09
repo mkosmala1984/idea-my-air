@@ -1,10 +1,17 @@
 package dev.myair.actions
 
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.time.LocalDate
 import kotlin.io.path.createDirectories
+import kotlin.io.path.exists
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 
 const val MAX_RECENT_BASES = 5
 
@@ -72,6 +79,25 @@ fun parseWorktrees(porcelain: String): List<Worktree> = porcelain.trim().split(R
         lines.firstOrNull { it.startsWith("branch refs/heads/") }?.removePrefix("branch refs/heads/"),
         lines.any { it == "locked" || it.startsWith("locked ") },
     )
+}
+
+/**
+ * Answers "Continue without using this MCP server" for [worktree] in advance: `claude` reads `.mcp.json` from its cwd
+ * and every directory above, and asks about each server not yet in `enabledMcpjsonServers` or `disabledMcpjsonServers`
+ * of the cwd's `.claude/settings.local.json`, which a new worktree lacks (gitignored) or has as copied by
+ * `.worktreeinclude`. Every such undecided server is added to `disabledMcpjsonServers`; decided ones stay as they are.
+ */
+fun declineProjectMcpServers(worktree: Path) {
+    val servers = generateSequence(worktree.toAbsolutePath()) { it.parent }.map { it.resolve(".mcp.json") }.filter { it.exists() }
+        .flatMap { JsonParser.parseString(it.readText()).asJsonObject.getAsJsonObject("mcpServers")?.keySet().orEmpty() }.toSet()
+    val file = worktree.resolve(".claude/settings.local.json")
+    val settings = if (file.exists()) JsonParser.parseString(file.readText()).asJsonObject else JsonObject()
+    fun names(key: String) = settings.getAsJsonArray(key)?.map { it.asString }.orEmpty()
+    val undecided = servers - (names("enabledMcpjsonServers") + names("disabledMcpjsonServers")).toSet()
+    if (undecided.isEmpty()) return
+    settings.add("disabledMcpjsonServers", JsonArray().apply { (names("disabledMcpjsonServers") + undecided.sorted()).forEach(::add) })
+    file.parent.createDirectories()
+    file.writeText(GsonBuilder().setPrettyPrinting().create().toJson(settings))
 }
 
 /** Copies [files], relative to [mainRoot], to the same relative paths in [worktree]. */

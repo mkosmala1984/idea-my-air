@@ -84,6 +84,7 @@ fun createWorktree(repo: GitRepo, base: String, branch: String?, id: String, run
     if (branch != null) Git.addBranchWorktree(repo.mainRoot, path, branch, base)
     else Git.addWorktree(repo.mainRoot, path, base, "worktree-$name") { tree -> running.any { it.startsWith(tree) } }
     copyIncluded(repo.mainRoot, path, Git.includedFiles(repo.mainRoot))
+    declineProjectMcpServers(path)
     return path
 }
 

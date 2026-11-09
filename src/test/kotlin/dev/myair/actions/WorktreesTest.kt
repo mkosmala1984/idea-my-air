@@ -1,10 +1,17 @@
 package dev.myair.actions
 
+import com.google.gson.JsonParser
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import java.time.LocalDate
+import kotlin.io.path.createDirectories
+import kotlin.io.path.exists
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class WorktreesTest {
     private val branches = listOf("main", "a", "b", "c", "origin/main", "origin/x")
@@ -91,5 +98,33 @@ class WorktreesTest {
     fun `contained bases stop at ten`() {
         val refs = (1..12).joinToString("\n") { "refs/heads/b$it" }
         assertEquals((1..10).map { "b$it" }, containedBases(refs, "x"))
+    }
+
+    @Test
+    fun `undecided servers of mcp json files in and above the worktree are declined, decided ones kept`(@TempDir dir: Path) {
+        dir.resolve(".mcp.json").writeText("""{"old": {"ignored": {}}, "mcpServers": {"above": {}, "on": {}}}""")
+        val worktree = dir.resolve("trees/w").createDirectories()
+        worktree.resolve(".mcp.json").writeText("""{"mcpServers": {"inside": {}, "off": {}}}""")
+        worktree.resolve(".claude").createDirectories().resolve("settings.local.json")
+            .writeText("""{"permissions": {"allow": ["Bash(git *)"]}, "enabledMcpjsonServers": ["on"], "disabledMcpjsonServers": ["off"]}""")
+        declineProjectMcpServers(worktree)
+        val settings = JsonParser.parseString(worktree.resolve(".claude/settings.local.json").readText()).asJsonObject
+        assertEquals(listOf("off", "above", "inside"), settings.getAsJsonArray("disabledMcpjsonServers").map { it.asString })
+        assertEquals(listOf("on"), settings.getAsJsonArray("enabledMcpjsonServers").map { it.asString })
+        assertEquals("Bash(git *)", settings.getAsJsonObject("permissions").getAsJsonArray("allow")[0].asString)
+    }
+
+    @Test
+    fun `a worktree without settings gets a file declining the servers above it`(@TempDir dir: Path) {
+        dir.resolve(".mcp.json").writeText("""{"mcpServers": {"dev": {}}}""")
+        val worktree = dir.resolve("w").createDirectories()
+        declineProjectMcpServers(worktree)
+        assertEquals("""{"disabledMcpjsonServers":["dev"]}""", JsonParser.parseString(worktree.resolve(".claude/settings.local.json").readText()).toString())
+    }
+
+    @Test
+    fun `without mcp json no settings file is written`(@TempDir dir: Path) {
+        declineProjectMcpServers(dir)
+        assertFalse(dir.resolve(".claude").exists())
     }
 }

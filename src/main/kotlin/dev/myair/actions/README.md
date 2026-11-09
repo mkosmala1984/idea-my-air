@@ -100,7 +100,7 @@ there by class name, so moving or renaming one means updating that file too.
 
 - Processes: `git` (in `Git`, synchronously, with stdin written on a separate future), `claude -p --model haiku --no-session-persistence` (`suggestBranchName`, so it leaves no transcript), the `plannotator review ...` command typed into a new Terminal tab.
 - Repository writes: `git worktree prune`, `git worktree add`/`remove`, new branches (`-b`, `--track`), `git config branch.<branch>.myAirBase`.
-- File system: `copyIncluded` copies `.worktreeinclude` files into the new worktree. `InstallMyAirBuildAction` schedules a plugin swap (`PluginInstaller.installAfterRestart`) and restarts the IDE.
+- File system: `copyIncluded` copies `.worktreeinclude` files into the new worktree. `declineProjectMcpServers` adds the undecided `.mcp.json` servers to its `.claude/settings.local.json` `disabledMcpjsonServers`. `InstallMyAirBuildAction` schedules a plugin swap (`PluginInstaller.installAfterRestart`) and restarts the IDE.
 - Application properties: `dev.myair.worktreeBases:<mainRoot>` (recent bases, `rememberBase`).
 - `presets.json` through `PresetStore.write` (`SaveAsPresetAction`; `PresetsEditor` edits the list the settings page saves).
 - IDE UI: popups, error dialogs, Terminal tool-window tabs (`openInTerminal`, `reviewInPlannotator`), diff windows and tabs, project open or focus (`openInIdea`, on a pooled thread), focus requests to other IDEs (`TabsSync.focusIn`).
