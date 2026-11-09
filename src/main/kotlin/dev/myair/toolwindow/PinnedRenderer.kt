@@ -11,6 +11,7 @@ import dev.myair.claude.LiveSession
 import dev.myair.editor.CLAUDE_ORANGE
 import dev.myair.editor.projectColor
 import dev.myair.editor.sessionIcon
+import java.awt.Color
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.Font
@@ -25,7 +26,7 @@ import javax.swing.ListCellRenderer
 import kotlin.math.max
 import kotlin.math.min
 
-/** The background of a pinned row whose session needs input; the list UI paints it under the renderer. */
+/** The background of a pinned row whose session needs input. */
 val NEEDS_INPUT_TINT = JBColor(0xFFF6E0, 0x3A3222)
 
 private val NEEDS_INPUT_TEXT = JBColor(0x8A5A00, 0xE3B656)
@@ -63,17 +64,19 @@ private class Line : SimpleColoredComponent() {
 /**
  * A session in the pinned list, in two lines: its [sessionIcon] and title (the age [SessionTrailer] adds), then what
  * [secondLine] chooses by its status, the project in its colour and a bar of the brief's progress while it works.
- * A needing-input row's tint comes from the list ([TrailerList]), so selection and hover still paint over it.
+ * It paints the row's [background] itself, over the list UI's, so a selected row looks as an unselected one.
  */
 class PinnedRenderer(
     private val liveOf: (ClaudeSession) -> LiveSession?, private val settled: (ClaudeSession) -> Boolean, private val unread: (ClaudeSession) -> Boolean,
-    private val branchOf: (ClaudeSession) -> String?, private val rows: () -> PinnedLayout, private val repaintList: () -> Unit,
+    private val branchOf: (ClaudeSession) -> String?, private val rows: () -> PinnedLayout, private val background: (row: Int) -> Color,
+    private val repaintList: () -> Unit,
 ) : JComponent(), ListCellRenderer<ClaudeSession> {
     private val title = Line()
     private val detail = Line()
     private var icon: Icon? = null
     private var progress: Double? = null
     private var current: PinnedLayout? = null
+    private var fill: Color? = null
 
     init {
         add(title)
@@ -82,6 +85,7 @@ class PinnedRenderer(
 
     override fun getListCellRendererComponent(list: JList<out ClaudeSession>, value: ClaudeSession, index: Int, selected: Boolean, hasFocus: Boolean): Component {
         val l = rows().also { current = it }
+        fill = background(index)
         val live = liveOf(value)
         val unread = unread(value)
         icon = l.density.grow(sessionIcon(live?.status, unread))
@@ -113,6 +117,8 @@ class PinnedRenderer(
 
     override fun paintComponent(g: Graphics) {
         val l = current!!
+        g.color = fill!!
+        g.fillRect(0, 0, width, height)
         val left = JBUI.scale(LEFT)
         val x = left + JBUI.scale(l.density.iconSize + l.density.iconTextGap)
         val width = width - x - JBUI.scale(RIGHT)

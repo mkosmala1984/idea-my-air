@@ -49,4 +49,17 @@ class PinnedLinesTest {
         assertEquals(listOf("2/5"), (secondLine(session.copy(brief = Brief("Goal", tasks)), null, null) as SecondLine.Place).rest)
         assertEquals(SecondLine.Place(project, "main", null, null), secondLine(session.copy(brief = null), live(SessionStatus.WORKING), "main"))
     }
+
+    @Test
+    fun `the list is as high as its rows, up to the dragged height, scrolling beyond`() {
+        assertEquals(90, pinnedHeight(content = 90, row = 45, max = 300, panel = 1000, treeMin = 60))
+        assertEquals(135, pinnedHeight(content = 450, row = 45, max = 135, panel = 1000, treeMin = 60))
+    }
+
+    @Test
+    fun `a dragged height keeps one row and leaves the tree its least`() {
+        assertEquals(45, pinnedHeight(content = 450, row = 45, max = 10, panel = 1000, treeMin = 60))
+        assertEquals(940, pinnedHeight(content = 2000, row = 45, max = 5000, panel = 1000, treeMin = 60))
+        assertEquals(45, pinnedHeight(content = 450, row = 45, max = 300, panel = 80, treeMin = 60))
+    }
 }

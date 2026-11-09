@@ -71,13 +71,18 @@ private fun hidden(session: ClaudeSession, at: Long, live: Map<String, LiveSessi
 
 /**
  * The list above the tree: every session with a running process, plus the ones pinned by hand, less the dismissed ones
- * still hidden. Sessions waiting for the user come first, then working ones, then pinned ones without a process;
- * [sessions] arrive newest first and keep that order within each group. A pinned id absent from [sessions] is not shown.
+ * still hidden. Sessions needing input come first, then those with a reply the user has not seen ([unread]), then the
+ * rest; [sessions] arrive newest first and keep that order within each group. A pinned id absent from [sessions] is not shown.
  */
-fun pinnedSessions(sessions: List<ClaudeSession>, live: Map<String, LiveSession>, pins: Pins): List<ClaudeSession> =
-    sessions.filter { (it.id in pins.sessions || it.id in live) && pins.dismissed[it.id]?.let { at -> hidden(it, at, live) } != true }.sortedBy {
-        live[it.id]?.status?.waitRank ?: Int.MAX_VALUE
+fun pinnedSessions(sessions: List<ClaudeSession>, live: Map<String, LiveSession>, pins: Pins, unread: Set<String>): List<ClaudeSession> {
+    fun group(s: ClaudeSession) = when {
+        live[s.id]?.status == SessionStatus.NEEDS_INPUT -> 0
+        s.id in unread -> 1
+        else -> 2
     }
+    return sessions.filter { (it.id in pins.sessions || it.id in live) && pins.dismissed[it.id]?.let { at -> hidden(it, at, live) } != true }
+        .sortedBy(::group)
+}
 
 /** `~/.my-air/pins.json`, shared by every IDE. */
 class PinStore(val file: Path) {

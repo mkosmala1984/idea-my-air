@@ -22,15 +22,16 @@ class PinnedSessionsTest {
 
     private fun live(status: SessionStatus) = LiveSession(1, "cli", status, null, Instant.EPOCH, Path.of("/p"), Instant.EPOCH)
 
-    private fun ids(live: Map<String, LiveSession>, pins: Pins, list: List<ClaudeSession> = sessions) = pinnedSessions(list, live, pins).map { it.id }
+    private fun ids(live: Map<String, LiveSession>, pins: Pins, list: List<ClaudeSession> = sessions, unread: Set<String> = emptySet()) =
+        pinnedSessions(list, live, pins, unread).map { it.id }
 
     @Test
     fun `lists running and hand-pinned sessions, nothing else`() {
-        assertEquals(listOf("s5", "s2"), ids(mapOf("s5" to live(SessionStatus.WORKING)), Pins(setOf("s2", "gone"))))
+        assertEquals(listOf("s2", "s5"), ids(mapOf("s5" to live(SessionStatus.WORKING)), Pins(setOf("s2", "gone"))))
     }
 
     @Test
-    fun `sessions waiting for the user come first, pinned ones without a process last, newest first within a group`() {
+    fun `sessions needing input come first, then unread ones, then the rest, newest first within each`() {
         val live = mapOf(
             "s1" to live(SessionStatus.WORKING),
             "s2" to live(SessionStatus.IDLE),
@@ -38,7 +39,8 @@ class PinnedSessionsTest {
             "s4" to live(SessionStatus.IDLE),
             "s6" to live(SessionStatus.NEEDS_INPUT),
         )
-        assertEquals(listOf("s3", "s6", "s2", "s4", "s1", "s5"), ids(live, Pins(setOf("s5", "s1"))))
+        assertEquals(listOf("s3", "s6", "s2", "s4", "s1", "s5"), ids(live, Pins(setOf("s5", "s1")), unread = setOf("s2", "s4")))
+        assertEquals(listOf("s3", "s6", "s1", "s2", "s4", "s5"), ids(live, Pins(setOf("s5", "s1"))))
     }
 
     @Test
