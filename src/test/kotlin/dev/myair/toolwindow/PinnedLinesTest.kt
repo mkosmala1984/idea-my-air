@@ -51,15 +51,21 @@ class PinnedLinesTest {
     }
 
     @Test
-    fun `the list is as high as its rows, up to the dragged height, scrolling beyond`() {
-        assertEquals(90, pinnedHeight(content = 90, row = 45, max = 300, panel = 1000, treeMin = 60))
-        assertEquals(135, pinnedHeight(content = 450, row = 45, max = 135, panel = 1000, treeMin = 60))
+    fun `until dragged the list is as high as its rows, up to its share of the panel`() {
+        assertEquals(90, pinnedHeight(content = 90, row = 45, dragged = null, share = 400, panel = 1000, treeMin = 60))
+        assertEquals(400, pinnedHeight(content = 450, row = 45, dragged = null, share = 400, panel = 1000, treeMin = 60))
+    }
+
+    @Test
+    fun `a dragged list is as high as dragged, above or below its rows`() {
+        assertEquals(300, pinnedHeight(content = 90, row = 45, dragged = 300, share = 400, panel = 1000, treeMin = 60))
+        assertEquals(135, pinnedHeight(content = 450, row = 45, dragged = 135, share = 400, panel = 1000, treeMin = 60))
     }
 
     @Test
     fun `a dragged height keeps one row and leaves the tree its least`() {
-        assertEquals(45, pinnedHeight(content = 450, row = 45, max = 10, panel = 1000, treeMin = 60))
-        assertEquals(940, pinnedHeight(content = 2000, row = 45, max = 5000, panel = 1000, treeMin = 60))
-        assertEquals(45, pinnedHeight(content = 450, row = 45, max = 300, panel = 80, treeMin = 60))
+        assertEquals(45, pinnedHeight(content = 450, row = 45, dragged = 10, share = 400, panel = 1000, treeMin = 60))
+        assertEquals(940, pinnedHeight(content = 2000, row = 45, dragged = 5000, share = 400, panel = 1000, treeMin = 60))
+        assertEquals(45, pinnedHeight(content = 450, row = 45, dragged = 300, share = 400, panel = 80, treeMin = 60))
     }
 }

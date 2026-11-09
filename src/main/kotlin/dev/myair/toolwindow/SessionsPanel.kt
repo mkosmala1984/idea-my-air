@@ -140,13 +140,14 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private val lists = JPanel(BorderLayout())
     /** The height, in unscaled pixels, the user dragged the pinned list's lower edge to; 0 until dragged, [PINNED_MAX_SHARE] of the panel then. */
     private var pinnedMax = PropertiesComponent.getInstance().getInt(PINNED_MAX, 0)
-    /** The pinned list as high as its rows, up to [pinnedMax], scrolling beyond ([pinnedHeight]); hidden when loaded and empty. */
+    /** The pinned list as high as dragged to ([pinnedMax]), else as its rows, scrolling beyond ([pinnedHeight]); hidden when loaded and empty. */
     private val pinnedPane = object : JBScrollPane(pinned) {
         override fun getPreferredSize(): Dimension {
             // The list's own height counts its insets; before the first load it shows its empty text in one row.
             val content = if (service.loaded) pinned.preferredSize.height else pinned.fixedCellHeight
-            val max = if (pinnedMax > 0) JBUI.scale(pinnedMax) else (lists.height * PINNED_MAX_SHARE).toInt()
-            return Dimension(0, pinnedHeight(content, pinned.fixedCellHeight, max, lists.height, JBUI.scale(TREE_MIN)))
+            val dragged = if (pinnedMax > 0) JBUI.scale(pinnedMax) else null
+            val share = (lists.height * PINNED_MAX_SHARE).toInt()
+            return Dimension(0, pinnedHeight(content, pinned.fixedCellHeight, dragged, share, lists.height, JBUI.scale(TREE_MIN)))
         }
     }.apply {
         horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
@@ -435,7 +436,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private fun fitPinned() {
         pinnedPane.isVisible = !service.loaded || pinned.model.size > 0
         pinnedEdge.isVisible = pinnedPane.isVisible
-        lists.revalidate()
+        // Invalidates from the pane up: its parent caches its preferred size while valid, which lists.revalidate() keeps.
+        pinnedPane.revalidate()
         lists.repaint()
     }
 
@@ -625,13 +627,11 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
 
     /**
      * A pinned row's background, which its renderer paints over the list UI's, so a selected row shows none: hovered, the
-     * hover colour (null when hover painting is off), else amber when its session needs input, else the inactive selection's
-     * when it is the active session tab's, else the list's.
+     * hover colour (null when hover painting is off), else amber when its session needs input, else the list's.
      */
     private fun pinnedBackground(row: Int): Color =
         RenderingUtil.getHoverBackground(pinned).takeIf { ListHoverListener.getHoveredIndex(pinned) == row }
             ?: NEEDS_INPUT_TINT.takeIf { service.live[pinned.model.getElementAt(row).id]?.status == SessionStatus.NEEDS_INPUT }
-            ?: JBUI.CurrentTheme.List.Selection.background(false).takeIf { pinned.model.getElementAt(row).id == activeId }
             ?: RenderingUtil.getBackground(pinned)
 
     private fun isSettled(session: ClaudeSession) = session.id in service.pins.settled
