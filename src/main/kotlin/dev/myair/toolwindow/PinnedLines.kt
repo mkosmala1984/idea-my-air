@@ -30,3 +30,9 @@ fun secondLine(session: ClaudeSession, live: LiveSession?, branch: String?): Sec
         )
     }
 }
+
+/**
+ * How high the pinned list is: as its [content], at most [max] (dragged by the user, else a share of the [panel]), but at
+ * least one [row] and never so high that the tree below keeps less than [treeMin] of the panel.
+ */
+fun pinnedHeight(content: Int, row: Int, max: Int, panel: Int, treeMin: Int): Int = minOf(content, max.coerceIn(row, maxOf(row, panel - treeMin)))

@@ -32,6 +32,7 @@ import com.intellij.ui.hover.ListHoverListener
 import com.intellij.ui.render.RenderingUtil
 import com.intellij.ui.tree.ui.DefaultTreeUI
 import com.intellij.util.ui.JBFont
+import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.StatusText
 import com.intellij.util.ui.tree.TreeUtil
@@ -55,7 +56,10 @@ import dev.myair.store.pinnedSessions
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.CardLayout
+import java.awt.Color
 import java.awt.Component
+import java.awt.Cursor
+import java.awt.Graphics
 import java.awt.Point
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
@@ -69,7 +73,6 @@ import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.ScrollPaneConstants
 import kotlin.math.max
-import kotlin.math.min
 import javax.swing.SwingUtilities
 import javax.swing.ToolTipManager
 import javax.swing.Timer
@@ -119,25 +122,53 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         // The room above the first row the design leaves.
         border = JBUI.Borders.emptyTop(4)
     }
-    private val pinned: TrailerList = TrailerList { s -> NEEDS_INPUT_TINT.takeIf { service.live[s.id]?.status == SessionStatus.NEEDS_INPUT } }.apply {
-        cellRenderer = PinnedRenderer({ service.live[it.id] }, ::isSettled, ::isUnread, service::branchOf, ::pinnedLayout) { repaint() }
+    private val pinned: TrailerList = TrailerList().apply {
+        cellRenderer = PinnedRenderer({ service.live[it.id] }, ::isSettled, ::isUnread, service::branchOf, ::pinnedLayout, ::pinnedBackground) { repaint() }
         allowSpinner()
     }
     /** The pinned list's rows for the font and [density]; set by [applyFontSize]. */
     private lateinit var pinnedLayout: PinnedLayout
-    /** The pinned list as high as its rows, up to [PINNED_MAX_SHARE] of the panel, scrolling beyond; hidden when loaded and empty. */
+    private val lists = JPanel(BorderLayout())
+    /** The height, in unscaled pixels, the user dragged the pinned list's lower edge to; 0 until dragged, [PINNED_MAX_SHARE] of the panel then. */
+    private var pinnedMax = PropertiesComponent.getInstance().getInt(PINNED_MAX, 0)
+    /** The pinned list as high as its rows, up to [pinnedMax], scrolling beyond ([pinnedHeight]); hidden when loaded and empty. */
     private val pinnedPane = object : JBScrollPane(pinned) {
         override fun getPreferredSize(): Dimension {
             // The list's own height counts its insets; before the first load it shows its empty text in one row.
-            val height = if (service.loaded) pinned.preferredSize.height else pinned.fixedCellHeight
-            val max = max(pinned.fixedCellHeight, ((parent?.height ?: 0) * PINNED_MAX_SHARE).toInt())
-            return Dimension(0, min(height, max) + insets.top + insets.bottom)
+            val content = if (service.loaded) pinned.preferredSize.height else pinned.fixedCellHeight
+            val max = if (pinnedMax > 0) JBUI.scale(pinnedMax) else (lists.height * PINNED_MAX_SHARE).toInt()
+            return Dimension(0, pinnedHeight(content, pinned.fixedCellHeight, max, lists.height, JBUI.scale(TREE_MIN)))
         }
     }.apply {
         horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
-        border = JBUI.Borders.customLineBottom(JBColor.border())
+        border = JBUI.Borders.empty()
     }
-    private val lists = JPanel(BorderLayout())
+    /** The pinned list's lower edge: a line the user drags to set [pinnedMax]. */
+    private val pinnedEdge = object : JComponent() {
+        init {
+            cursor = Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR)
+            preferredSize = Dimension(0, JBUI.scale(EDGE))
+            val drag = object : MouseAdapter() {
+                private var startY = 0
+                private var startHeight = 0
+                override fun mousePressed(e: MouseEvent) {
+                    startY = e.yOnScreen
+                    startHeight = pinnedPane.height
+                }
+                override fun mouseDragged(e: MouseEvent) {
+                    pinnedMax = max(1, ((startHeight + e.yOnScreen - startY) / JBUIScale.scale(1f)).toInt())
+                    fitPinned()
+                }
+                override fun mouseReleased(e: MouseEvent) = PropertiesComponent.getInstance().setValue(PINNED_MAX, pinnedMax, 0)
+            }
+            addMouseListener(drag)
+            addMouseMotionListener(drag)
+        }
+        override fun paintComponent(g: Graphics) {
+            g.color = JBColor.border()
+            g.fillRect(0, height / 2, width, 1)
+        }
+    }
     private val trailerButtons = listOf(SETTLE, PIN).map { mark ->
         TrailerButton(mark.icon, { it.id in mark.marked(service.pins) }) { session ->
             service.updatePins { mark.change(it, listOf(session.id), session.id !in mark.marked(it)) }
@@ -167,16 +198,12 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         )
         pinned.trailer = SessionTrailer(
             pinned, pinned::locationToIndex, { pinned.getCellBounds(it, it) }, { pinned.model.getElementAt(it) }, { null },
-            // As WideSelectionListUI paints a row: the renderer leaves an unselected row's background to the list UI, and
-            // a null hover background means hover painting is off.
-            { row ->
-                if (pinned.isSelectedIndex(row)) RenderingUtil.getSelectionBackground(pinned)
-                else RenderingUtil.getHoverBackground(pinned).takeIf { ListHoverListener.getHoveredIndex(pinned) == row }
-                    ?: pinned.getCellBackground(pinned.model.getElementAt(row), row) ?: RenderingUtil.getBackground(pinned)
-            },
-            trailerButtons, ::density, { pinnedLayout.firstLine(it) },
+            ::pinnedBackground, trailerButtons, ::density, { pinnedLayout.firstLine(it) },
         )
-        lists.add(pinnedPane, BorderLayout.NORTH)
+        lists.add(JPanel(BorderLayout()).apply {
+            add(pinnedPane, BorderLayout.CENTER)
+            add(pinnedEdge, BorderLayout.SOUTH)
+        }, BorderLayout.NORTH)
         lists.add(ScrollPaneFactory.createScrollPane(tree), BorderLayout.CENTER)
         setContent(lists)
         applyFontSize()
@@ -382,6 +409,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     /** Lays the panel out again for [pinnedPane]'s height; the scroll pane is a validate root, so the panel above it is revalidated. */
     private fun fitPinned() {
         pinnedPane.isVisible = !service.loaded || pinned.model.size > 0
+        pinnedEdge.isVisible = pinnedPane.isVisible
         lists.revalidate()
         lists.repaint()
     }
@@ -458,7 +486,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private fun renderPinned() {
         val selected = pinned.selectedValuesList.map { it.id }.toSet()
         pinned.emptyText.text = if (service.loaded) "No running or pinned sessions" else LOADING
-        val items = pinnedSessions(shownSessions(), service.live, service.pins)
+        val items = pinnedSessions(shownSessions(), service.live, service.pins, service.unread)
         pinned.setListData(items.toTypedArray())
         pinned.selectedIndices = items.indices.filter { items[it].id in selected }.toIntArray()
         fitPinned()
@@ -533,6 +561,15 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val now = Instant.now()
         return shownSessions().filter { it.isWithin(maxAgeDays, now) }
     }
+
+    /**
+     * A pinned row's background, which its renderer paints over the list UI's, so a selected row shows none: hovered, the
+     * hover colour (null when hover painting is off), else amber when its session needs input, else the list's.
+     */
+    private fun pinnedBackground(row: Int): Color =
+        RenderingUtil.getHoverBackground(pinned).takeIf { ListHoverListener.getHoveredIndex(pinned) == row }
+            ?: NEEDS_INPUT_TINT.takeIf { service.live[pinned.model.getElementAt(row).id]?.status == SessionStatus.NEEDS_INPUT }
+            ?: RenderingUtil.getBackground(pinned)
 
     private fun isSettled(session: ClaudeSession) = session.id in service.pins.settled
 
@@ -622,6 +659,11 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         private const val WORK_TREE_ONLY = "dev.myair.thisWorkTree"
         private const val DENSITY = "dev.myair.density"
         private const val PINNED_MAX_SHARE = 0.4
+        private const val PINNED_MAX = "dev.myair.pinnedMaxHeight"
+        /** The least the tree keeps below a pinned list dragged long. */
+        private const val TREE_MIN = 60
+        /** The pinned list's lower edge, its line in the middle, high enough to grab. */
+        private const val EDGE = 5
         private const val SINGLE_CLICK = "dev.myair.singleClick"
         private const val TOOLBAR_CARD = "toolbar"
         private const val SEARCH_CARD = "search"
