@@ -36,5 +36,6 @@ class NewSessionInDirAction(
         // A removed worktree's row stays until its sessions go.
         e.presentation.isEnabled = dir != null && dir.isDirectory()
     }
-    override fun actionPerformed(e: AnActionEvent) = plan().let { start(e, dir()!!, it, folder() ?: it?.folderId) }
+    override fun actionPerformed(e: AnActionEvent) =
+        plan().let { start(e, checkNotNull(dir()) { "the row the menu was opened on is gone" }, it, folder() ?: it?.folderId) }
 }

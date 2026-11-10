@@ -185,6 +185,20 @@ fun groupSessions(node: DefaultMutableTreeNode): List<ClaudeSession> = node.chil
     (child.userObject as? ClaudeSession)?.let(::listOf) ?: groupSessions(child)
 }
 
+/** The rows of [paths] as their nodes' ids (toString of the user object) from below the root, for [pathsOf] in a rebuilt tree. */
+fun rowKeys(paths: Array<TreePath>?): List<List<String>> =
+    paths.orEmpty().map { path -> path.path.drop(1).map { (it as DefaultMutableTreeNode).userObject.toString() } }
+
+/**
+ * The paths below [root] that [keys] name, id by id from the root; a row whose path no longer exists yields nothing, never
+ * a parent or a sibling (as TreeState's selection does), since a menu action would then act on another row.
+ */
+fun pathsOf(root: DefaultMutableTreeNode, keys: List<List<String>>): List<TreePath> = keys.mapNotNull { key ->
+    key.fold(root as DefaultMutableTreeNode?) { node, id ->
+        node?.children()?.asSequence()?.map { it as DefaultMutableTreeNode }?.firstOrNull { it.userObject.toString() == id }
+    }?.let { TreePath(it.path) }
+}
+
 /** The folder [path] points into, for a new folder or a drop: the nearest user folder above it, none under [UnfiledSessions]. */
 fun targetFolder(path: TreePath): String? = path.path.map { (it as DefaultMutableTreeNode).userObject }.filterIsInstance<Folder>().lastOrNull()?.id
 

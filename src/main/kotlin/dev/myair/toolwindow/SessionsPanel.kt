@@ -698,6 +698,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         tree.dragEnabled = foldersMode
         // The drop shown refers to nodes of the old model; the next pointer move computes it on the new one.
         tree.drop = null
+        // A new model clears the selection, which the menu's actions read when clicked; TreeState keeps none.
+        val selected = rowKeys(tree.selectionPaths)
         rendering = true
         try {
             tree.model = DefaultTreeModel(
@@ -707,6 +709,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                     else -> projectsTree(filter?.let(treeSessions()::filter) ?: treeSessions(), branches::get)
                 },
             )
+            // Before the state, which selects (none) only when nothing is selected.
+            tree.selectionPaths = pathsOf(tree.model.root as DefaultMutableTreeNode, selected).toTypedArray()
             if (query.isNotEmpty()) TreeUtil.expandAll(tree) else state().applyTo(tree)
         } finally {
             rendering = false

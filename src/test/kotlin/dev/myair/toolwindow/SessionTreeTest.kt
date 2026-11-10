@@ -174,6 +174,27 @@ class SessionTreeTest {
     }
 
     @Test
+    fun `a selected row is found again in a rebuilt tree by its ids, a row gone is not replaced by a sibling or its parent`() {
+        val planned = structure.setWorkdir("empty", Path.of("/work").toString()).createFolder("empty", "plan", "plan", plan = Plan()).addMilestone("plan", "first")
+        val withTasks = planned.addTask("M1", "a").addTask("M1", "b")
+        val old = foldersTree(withTasks, sessions, NO_BRANCH, NO_WORKTREES, null)
+        val m1 = old.getChildAt(1).getChildAt(0).getChildAt(0) as DefaultMutableTreeNode
+        val t3 = TreePath((m1.getChildAt(1) as DefaultMutableTreeNode).path)
+        val s2 = TreePath((old.getChildAt(2).getChildAt(1) as DefaultMutableTreeNode).path)
+        val keys = rowKeys(arrayOf(t3, s2))
+        assertEquals(listOf(listOf("empty", "plan", "M1", "T3"), listOf("recent", "s2")), keys)
+        // T3's content changes and a task is inserted before it, so its index moves.
+        val changed = withTasks.editTask("T3") { it.copy(next = "review") }.addTask("M1", "c", index = 0)
+        val found = pathsOf(foldersTree(changed, sessions, NO_BRANCH, NO_WORKTREES, null), keys)
+        assertEquals(listOf("T3", "s2"), found.map { "${(it.lastPathComponent as DefaultMutableTreeNode).userObject}" })
+        assertEquals(Path.of("/work"), nodeDir(found[0]))
+        assertEquals("review", ((found[0].lastPathComponent as DefaultMutableTreeNode).userObject as PlanTaskRow).task.next)
+        // T3 deleted: T2 and T4 remain beside it, M1 above it; none is selected instead.
+        assertEquals(listOf("s2"), pathsOf(foldersTree(changed.deletePlanItem("T3"), sessions, NO_BRANCH, NO_WORKTREES, null), keys).map { "${(it.lastPathComponent as DefaultMutableTreeNode).userObject}" })
+        assertEquals(emptyList(), rowKeys(null))
+    }
+
+    @Test
     fun `a session row opens its own cwd, other nodes as for a new session`() {
         val root = foldersTree(structure, sessions, NO_BRANCH, NO_WORKTREES, null)
         fun pathTo(vararg indices: Int) = TreePath(indices.fold(listOf(root)) { nodes, i -> nodes + nodes.last().getChildAt(i) as DefaultMutableTreeNode }.toTypedArray())
