@@ -34,7 +34,8 @@ internal fun styledHtml(html: String, colors: MarkdownColors): String = STYLED.r
 }
 
 private fun style(tag: String, colors: MarkdownColors) = when (tag) {
-    "code" -> "background-color:${colors.code}"
+    // A monospaced letter is wider and looks larger than the text's at the same size.
+    "code" -> "background-color:${colors.code};font-size:90%"
     "pre" -> "background-color:${colors.code};padding:6px 8px;margin-top:4px;margin-bottom:4px"
     "blockquote" -> "margin:4px 0 4px 0;padding-left:8px;border-left:3px solid ${colors.rule};color:${colors.quote}"
     else -> "font-size:${HEADING_SIZES.getValue(tag)}%;margin-top:6px;margin-bottom:2px"

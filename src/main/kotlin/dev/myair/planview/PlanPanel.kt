@@ -32,7 +32,9 @@ import com.intellij.util.ui.GraphicsUtil
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import dev.myair.actions.NewSessionInDirAction
+import dev.myair.claude.ClaudeSession
 import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.NEEDS_INPUT_AMBER
 import dev.myair.editor.PlanStart
 import dev.myair.editor.projectBase
 import dev.myair.editor.sessionIcon
@@ -41,6 +43,7 @@ import dev.myair.folders.Milestone
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
+import dev.myair.folders.progress
 import dev.myair.prompt.CARD
 import dev.myair.prompt.Rounded
 import dev.myair.service.ClaudeSessionsService
@@ -54,6 +57,7 @@ import dev.myair.toolwindow.shortAge
 import dev.myair.toolwindow.shrinkable
 import dev.myair.toolwindow.urgencyOf
 import java.awt.BorderLayout
+import java.awt.Color
 import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.FlowLayout
@@ -63,8 +67,11 @@ import java.awt.Graphics2D
 import java.awt.Rectangle
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.awt.geom.RoundRectangle2D
 import java.nio.file.Path
 import java.time.Instant
+import javax.swing.Box
+import javax.swing.BoxLayout
 import javax.swing.Icon
 import javax.swing.JComponent
 import javax.swing.JEditorPane
@@ -145,6 +152,8 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
 
     private fun card(init: Panel.() -> Unit) = panel(init).apply { isOpaque = false }
 
+    private fun milestones() = checkNotNull(view).folder.plan!!.milestones
+
     private fun Panel.header(view: PlanView) {
         row {
             label(view.folder.name).applyToComponent { font = JBFont.h3().asBold() }.shrinkable()
@@ -152,12 +161,18 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
                 isSelected = hideClosed
                 addActionListener { hideClosed = isSelected; render(force = true) }
             }
-            val milestones = view.folder.plan!!.milestones
             actions(
-                action("Expand All", AllIcons.Actions.Expandall) { foldAll(true, milestones) },
-                action("Collapse All", AllIcons.Actions.Collapseall) { foldAll(false, milestones) },
+                action("Expand All", AllIcons.Actions.Expandall) { foldAll(true, milestones()) },
+                action("Collapse All", AllIcons.Actions.Collapseall) { foldAll(false, milestones()) },
                 more(action("Edit Description") { openEdit(PlanEdit.Description(null)) }),
             )
+        }
+        val tasks = milestones().flatMap { it.tasks }
+        val counts = statusCounts(tasks)
+        row {
+            cell(commentLabel(progress(tasks)))
+            cell(ProgressLine(counts, PLAN_BAR))
+            cell(commentLabel(openWork(counts)))
         }
         markdown(PlanEdit.Description(null), view.description, "No description")
     }
@@ -165,46 +180,57 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
     private fun milestoneCard(m: MilestoneView): JComponent {
         val milestone = m.milestone
         val unfolded = folding.open(milestone) || open?.edit?.let { it.itemId == milestone.id || it.itemId in m.tasks.map { t -> t.task.id } } == true
-        val rows = JPanel(VerticalLayout(JBUI.scale(2))).apply {
+        val chevron = JBLabel(if (unfolded) AllIcons.General.ChevronDown else AllIcons.General.ChevronRight)
+        val rows = JPanel(VerticalLayout(0)).apply {
             isOpaque = false
-            add(Hover { fold(milestone.id) }.apply {
-                add(card {
-                    row {
-                        icon(if (unfolded) AllIcons.General.ChevronDown else AllIcons.General.ChevronRight)
-                        title(PlanEdit.Title(milestone.id), "${milestone.id} ${milestone.title}")
-                        cell(commentLabel(m.progress))
-                        cell(ProgressLine(m.tasks.count { it.task.status == PlanStatus.DONE }, m.tasks.count { it.task.status != PlanStatus.CANCELED }))
-                        actions(more(
-                            action("Rename") { openEdit(PlanEdit.Title(milestone.id)) },
-                            action(if (milestone.done) "Reopen" else "Mark Done") { change { it.editMilestone(milestone.id) { x -> x.copy(done = !milestone.done) } } },
-                            action("Edit Description") { openEdit(PlanEdit.Description(milestone.id)) },
-                            action("Delete") { deleteMilestone(project, milestone) },
-                        ))
-                    }
-                })
-            })
+            add(head(milestone.id, chevron.apply { preferredSize = ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE }, title(PlanEdit.Title(milestone.id), milestone.title),
+                activity(m.tasks.flatMap { it.sessions }) + listOf(commentLabel(m.progress), ProgressLine(statusCounts(milestone.tasks)), buttons(more(
+                    action("Rename") { openEdit(PlanEdit.Title(milestone.id)) },
+                    action(if (milestone.done) "Reopen" else "Mark Done") { change { it.editMilestone(milestone.id) { x -> x.copy(done = !milestone.done) } } },
+                    action("Edit Description") { openEdit(PlanEdit.Description(milestone.id)) },
+                    action("Delete") { deleteMilestone(project, milestone) },
+                )))))
             if (unfolded) {
-                add(card { indent { markdown(PlanEdit.Description(milestone.id), milestone.description, null) } })
+                add(card { markdown(PlanEdit.Description(milestone.id), milestone.description, null) }.apply { border = JBUI.Borders.emptyLeft(ID_COLUMN) })
                 m.tasks.filter { !hideClosed || !it.task.status.closed || open?.edit?.itemId == it.task.id }.forEach {
-                    add(if (folding.open(it.task) || open?.edit?.itemId == it.task.id) taskCard(it) else taskLine(it))
+                    add(if (folding.open(it.task) || open?.edit?.itemId == it.task.id) taskCard(it) else taskHead(it, unfolded = false))
                 }
                 add(card { indent { addRow(PlanEdit.NewTask(milestone.id), "+ Add task") } })
             }
         }
         return Rounded(CARD, JBUI.scale(MILESTONE_ARC), squareTop = false).apply {
             layout = BorderLayout()
-            border = JBUI.Borders.empty(8, 10)
+            border = JBUI.Borders.empty(4, 8)
             add(rows)
         }
     }
 
-    /** A folded task: one line, a click unfolds it. */
-    private fun taskLine(t: TaskView) = head(t, unfolded = false)
+    /**
+     * A milestone's or task's head on one line: [lead] and the id, then [title] taking the width left, then [trail]; a
+     * click on what takes none folds [id]. Plain Swing, not a DSL row, so it is as high as its tallest part, and a task's
+     * is alike in place and size folded or not: a fold moves nothing but what comes after it.
+     */
+    private fun head(id: String, lead: JComponent, title: JComponent, trail: List<JComponent>) = Hover { fold(id) }.apply {
+        border = JBUI.Borders.empty(3, HEAD_INSET)
+        add(group(listOf(lead, commentLabel(id))), BorderLayout.WEST)
+        add(title)
+        add(group(trail), BorderLayout.EAST)
+    }
 
-    /** A task's head, folded or not alike in place and size, so a fold moves nothing but what comes after it. */
-    private fun head(t: TaskView, unfolded: Boolean) = Hover { fold(t.task.id) }.apply {
-        border = JBUI.Borders.empty(2, 4)
-        add(card { row { taskHead(t, unfolded) } })
+    /** [parts] side by side at their preferred widths, centred vertically. */
+    private fun group(parts: List<JComponent>) = JPanel().apply {
+        isOpaque = false
+        layout = BoxLayout(this, BoxLayout.X_AXIS)
+        parts.forEachIndexed { i, part ->
+            if (i > 0) add(Box.createHorizontalStrut(JBUI.scale(HEAD_GAP)))
+            add(part)
+        }
+    }
+
+    /** The icon of the most urgent of [sessions] and the age of the newest; nothing without a session. */
+    private fun activity(sessions: List<ClaudeSession>): List<JComponent> {
+        val urgent = sessions.minByOrNull { urgencyOf(service.live[it.id], it.id in service.unread)?.ordinal ?: Urgency.entries.size } ?: return emptyList()
+        return listOf(JBLabel(sessionIcon(service.live[urgent.id]?.status, urgent.id in service.unread)), commentLabel(shortAge(sessions.maxOf { it.lastMessage }, Instant.now())))
     }
 
     /** An unfolded task: a white card, its head folding it on a click, then its next step, description and sessions, if any. */
@@ -227,25 +253,31 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
         }
         return Rounded(PAGE, JBUI.scale(TASK_ARC), squareTop = false).apply {
             layout = BorderLayout()
-            add(head(t, unfolded = true), BorderLayout.NORTH)
+            add(taskHead(t, unfolded = true), BorderLayout.NORTH)
             body?.let { add(JPanel(BorderLayout()).apply { isOpaque = false; border = JBUI.Borders.empty(0, 4, 6, 4); add(it) }, BorderLayout.CENTER) }
         }
     }
 
-    /** Every action on a task, its status among them, in one `⋯` menu beside its title. */
-    private fun taskMenu(task: PlanTask): AnAction {
-        val plan = { PlanStart(folderId, task.id) }
-        val statuses = PlanStatus.entries.map { s ->
-            object : DumbAwareToggleAction(s.label.replace('_', ' '), null, s.icon) {
-                override fun getActionUpdateThread() = ActionUpdateThread.EDT
-                override fun isSelected(e: AnActionEvent) = s == task.status
-                override fun setSelected(e: AnActionEvent, state: Boolean) {
-                    if (s != task.status) change { it.editTask(task.id) { x -> x.copy(status = s) } }
-                }
+    /** The statuses as toggles, the task's own selected, under the task's status icon: its status button and the Status of its menu. */
+    private fun statusGroup(task: PlanTask) = DefaultActionGroup("Status", PlanStatus.entries.map { s ->
+        object : DumbAwareToggleAction(s.label.replace('_', ' '), null, s.icon) {
+            override fun getActionUpdateThread() = ActionUpdateThread.EDT
+            override fun isSelected(e: AnActionEvent) = s == task.status
+            override fun setSelected(e: AnActionEvent, state: Boolean) {
+                if (s != task.status) change { it.editTask(task.id) { x -> x.copy(status = s) } }
             }
         }
+    }).apply {
+        isPopup = true
+        templatePresentation.icon = task.status.icon
+        templatePresentation.putClientProperty(ActionUtil.HIDE_DROPDOWN_ICON, true)
+    }
+
+    /** Every action on a task, its [status] among them, in one `⋯` menu beside its title. */
+    private fun taskMenu(task: PlanTask, status: AnAction): AnAction {
+        val plan = { PlanStart(folderId, task.id) }
         return more(
-            DefaultActionGroup("Status", statuses).apply { isPopup = true },
+            status,
             Separator.getInstance(),
             NewSessionInDirAction("New Session", false, ::startDir, ::startDir, plan) { folderId },
             NewSessionInDirAction("New Session in Worktree...", true, ::startDir, ::startDir, plan) { folderId },
@@ -259,30 +291,24 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
     }
 
     /**
-     * Status icon, id and title, then the most urgent of the task's sessions (a folded task names its next step when no
-     * session works on it) and the menu of its actions ([taskMenu]). Plain labels only in a folded line, which takes the clicks of whatever does not take them itself.
+     * A task's head: its status as a button that changes it, id and title, then the most urgent of its sessions (a folded
+     * task names its next step when it has none) and the menu of its actions ([taskMenu]). A folded task is this line alone.
      */
-    private fun Row.taskHead(t: TaskView, unfolded: Boolean) {
+    private fun taskHead(t: TaskView, unfolded: Boolean): JComponent {
         val task = t.task
-        icon(task.status.icon)
-        cell(commentLabel(task.id))
-        title(PlanEdit.Title(task.id), task.title, bold = unfolded, grey = !unfolded && task.status.closed)
-        val urgent = t.sessions.minByOrNull { urgencyOf(service.live[it.id], it.id in service.unread)?.ordinal ?: Urgency.entries.size }
-        if (urgent != null) {
-            cell(JBLabel(sessionIcon(service.live[urgent.id]?.status, urgent.id in service.unread)))
-            cell(commentLabel(shortAge(t.sessions.maxOf { it.lastMessage }, Instant.now())))
-        } else if (!unfolded && task.next != null) cell(commentLabel("Next: " + StringUtil.shortenTextWithEllipsis(task.next, NEXT_CHARS, 0)))
-        actions(taskMenu(task))
+        val status = statusGroup(task)
+        val next = task.next?.takeIf { !unfolded }?.let { commentLabel("Next: " + StringUtil.shortenTextWithEllipsis(it, NEXT_CHARS, 0)) }
+        return head(task.id, buttons(status), title(PlanEdit.Title(task.id), task.title, bold = unfolded, grey = !unfolded && task.status.closed),
+            activity(t.sessions).ifEmpty { listOfNotNull(next) } + buttons(taskMenu(task, status)))
     }
 
     /** A title, its text selectable; the field while its Rename is open. */
-    private fun Row.title(edit: PlanEdit.Title, text: String, bold: Boolean = true, grey: Boolean = false) {
-        if (open?.edit == edit) inline(edit)
-        else cell(SelectableTitle(text).apply {
+    private fun title(edit: PlanEdit.Title, text: String, bold: Boolean = true, grey: Boolean = false): JComponent =
+        if (open?.edit == edit) checkNotNull(open).component
+        else SelectableTitle(text).apply {
             if (bold) font = font.deriveFont(Font.BOLD)
             if (grey) foreground = JBUI.CurrentTheme.ContextHelp.FOREGROUND
-        }).shrinkable()
-    }
+        }
 
     /** [markdown] rendered, else [empty] in grey (nothing when null); the text area with Save and Cancel while its edit is open. */
     private fun Panel.markdown(edit: PlanEdit.Description, markdown: String?, empty: String?) {
@@ -389,7 +415,11 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
         if (orientation == SwingConstants.VERTICAL) visible.height else visible.width
 
     private companion object {
-        const val GAP = 12
+        const val GAP = 6
+        const val HEAD_INSET = 2
+        /** Where a head's id starts: after its inset, its lead (a button's width) and a gap. A milestone's description starts there too. */
+        const val ID_COLUMN = HEAD_INSET + 22 + HEAD_GAP
+        const val PLAN_BAR = 160
         const val MILESTONE_ARC = 16
         const val TASK_ARC = 12
         const val NEXT_CHARS = 48
@@ -398,6 +428,9 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
         val PAGE = JBColor.namedColor("Editor.background", JBColor(0xFFFFFF, 0x1E1F22))
     }
 }
+
+/** The gap between the parts of a head. */
+private const val HEAD_GAP = 8
 
 /** The milestone or task an edit is about; null for a new milestone. */
 private val PlanEdit.itemId: String?
@@ -410,7 +443,7 @@ private val PlanEdit.itemId: String?
     }
 
 /** A row with a rounded hover background that runs [click]; it gets the clicks of the components in it that take none. */
-private class Hover(private val click: () -> Unit) : JPanel(BorderLayout()) {
+private class Hover(private val click: () -> Unit) : JPanel(BorderLayout(JBUI.scale(HEAD_GAP), 0)) {
     private var hover = false
 
     init {
@@ -463,13 +496,18 @@ private class SelectableTitle(text: String) : JTextField(text) {
     }
 }
 
-/** A milestone's progress: a thin bar, [done] of [total] filled green. */
-private class ProgressLine(private val done: Int, private val total: Int) : JComponent() {
+/**
+ * The progress of the tasks counted in [counts] ([statusCounts]): a thin bar [px] wide, a segment each for those done, in
+ * progress, waiting and blocked, the pending ones left as track.
+ */
+private class ProgressLine(private val counts: Map<PlanStatus, Int>, private val px: Int = 60) : JComponent() {
     init {
-        require(done in 0..maxOf(total, 0)) { "$done done of $total" }
+        require(PlanStatus.CANCELED !in counts) { "canceled tasks counted: $counts" }
     }
 
-    override fun getPreferredSize() = Dimension(JBUI.scale(60), JBUI.scale(4))
+    override fun getPreferredSize() = Dimension(JBUI.scale(px), JBUI.scale(4))
+
+    override fun getMaximumSize() = Dimension(preferredSize.width, Int.MAX_VALUE)
 
     override fun paintComponent(g: Graphics) {
         val g2 = g.create() as Graphics2D
@@ -477,11 +515,19 @@ private class ProgressLine(private val done: Int, private val total: Int) : JCom
             GraphicsUtil.setupAAPainting(g2)
             val h = JBUI.scale(4)
             val y = (height - h) / 2
+            val track = RoundRectangle2D.Float(0f, y.toFloat(), width.toFloat(), h.toFloat(), h.toFloat(), h.toFloat())
             g2.color = TRACK
-            g2.fillRoundRect(0, y, width, h, h, h)
-            if (total > 0 && done > 0) {
-                g2.color = FILL
-                g2.fillRoundRect(0, y, width * done / total, h, h, h)
+            g2.fill(track)
+            g2.clip(track)
+            val total = counts.values.sum()
+            var x = 0
+            var seen = 0
+            for ((status, color) in SEGMENTS) {
+                seen += counts[status] ?: continue
+                val end = width * seen / total
+                g2.color = color
+                g2.fillRect(x, y, end - x, h)
+                x = end
             }
         } finally {
             g2.dispose()
@@ -490,6 +536,11 @@ private class ProgressLine(private val done: Int, private val total: Int) : JCom
 
     private companion object {
         val TRACK = JBColor(0xD5D8DE, 0x4A4D52)
-        val FILL = JBColor(0x4C8D5A, 0x5FA06C)
+        val SEGMENTS = listOf(
+            PlanStatus.DONE to JBColor(0x4C8D5A, 0x5FA06C),
+            PlanStatus.IN_PROGRESS to Color(0xD97757),
+            PlanStatus.WAITING to NEEDS_INPUT_AMBER,
+            PlanStatus.BLOCKED to JBColor(0xC75450, 0xDB5C5C),
+        )
     }
 }

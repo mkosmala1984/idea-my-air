@@ -38,6 +38,14 @@ data class Folding(val toggled: Set<String> = emptySet()) {
     }
 }
 
+/** How many of [tasks] have each status, the canceled left out: the segments of a progress bar. */
+fun statusCounts(tasks: List<PlanTask>): Map<PlanStatus, Int> = tasks.filter { it.status != PlanStatus.CANCELED }.groupingBy { it.status }.eachCount()
+
+/** The tasks of [counts] someone works on or waits for, in words: "2 in progress · 1 waiting for you"; empty without any. */
+fun openWork(counts: Map<PlanStatus, Int>): String =
+    listOf(PlanStatus.IN_PROGRESS to "in progress", PlanStatus.WAITING to "waiting for you", PlanStatus.BLOCKED to "blocked")
+        .mapNotNull { (status, text) -> counts[status]?.let { "$it $text" } }.joinToString(" · ")
+
 /** The plan of [folderId] with the sessions under each task, [managerId] left out; null when the folder is gone or has no plan. */
 fun planViewOf(structure: SessionFolders, folderId: String, sessions: List<ClaudeSession>, managerId: String?): PlanView? {
     val folder = structure.find(folderId) ?: return null

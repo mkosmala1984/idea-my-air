@@ -76,4 +76,15 @@ class PlanViewTest {
         assertEquals(List(5) { true }, all(Folding.all(true, milestones)))
         assertEquals(List(5) { false }, all(Folding.all(false, milestones)))
     }
+
+    @Test
+    fun `status counts leave canceled tasks out and open work names what is not pending or done`() {
+        val tasks = listOf(PlanStatus.DONE, PlanStatus.DONE, PlanStatus.IN_PROGRESS, PlanStatus.WAITING, PlanStatus.CANCELED, PlanStatus.PENDING)
+            .mapIndexed { i, status -> PlanTask("T$i", "t", status) }
+        val counts = statusCounts(tasks)
+        assertEquals(mapOf(PlanStatus.DONE to 2, PlanStatus.IN_PROGRESS to 1, PlanStatus.WAITING to 1, PlanStatus.PENDING to 1), counts)
+        assertEquals("1 in progress · 1 waiting for you", openWork(counts))
+        assertEquals("3 blocked", openWork(mapOf(PlanStatus.BLOCKED to 3, PlanStatus.DONE to 1)))
+        assertEquals("", openWork(statusCounts(emptyList())))
+    }
 }
