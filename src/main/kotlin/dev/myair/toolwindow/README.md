@@ -2,7 +2,7 @@
 
 ## Overview
 
-The two tool windows of My Air. **Claude Sessions** (`SessionsPanel`) shows a pinned list of sessions above a tree of all sessions. The tree has two modes: Projects, and Folders (with plans and worktrees). The panel also has a toolbar, search and view options. **Session Context** (`SessionContextPanel`) describes the session of the active session tab as a column of cards. Both read their state from `ClaudeSessionsService` and `ActiveSession` (`dev.myair.service`) and write changes back through them. Pure helpers (`SessionTree.kt`, `SessionContext.kt`, `PinnedLines.kt`, `SectionStates.kt`) are kept apart from the Swing code so they can be tested without the platform.
+The two tool windows of My Air. **Claude Sessions** (`SessionsPanel`) shows a pinned list of sessions above a tree of all sessions. The tree has two modes: Projects, and Folders (with plans and worktrees). The panel also has a toolbar, search and view options. **Session Context** (`SessionContextPanel`) describes the session of the active session tab as a column of cards. Both read their state from `ClaudeSessionsService` and `ActiveSession` (`dev.myair.service`) and write changes back through them. Pure helpers (`SessionTree.kt`, `SessionContext.kt`, `PinnedLines.kt`, `SectionStates.kt`, `ChangeTree.kt`) are kept apart from the Swing code so they can be tested without the platform.
 
 ## Interface
 
@@ -40,6 +40,7 @@ Session Context panel:
   - Formatting: `modelName`, `backgroundState`, `countText`, `durationText`, `fileLabel`.
   - `OUTPUT_EXTENSIONS` (`md`, `html`).
 - Cards (`ContextCards.kt`): `ContextCard`, `ShrinkingLine`, `Chip`, `ChangeBar`, `commentLabel`, `Cell.shrinkable`.
+- Changes tree (`ChangeTree.kt`): `ChangesFilter` (All, Not pushed, Uncommitted), `openByDefault`, `changeTree(changes, filter): ChangeDir`, the changed files as folders (`ChangeDir`, with file and line counts) and files (`ChangeFile`, with its index in the list), single-folder chains merged as Branch Diff does.
 - `CommandDialog` (`CommandDialog.kt`): shows a full command or prompt, with a Copy button.
 - `PaneFont` (`PaneFont.kt`): the font-size offset shared by both windows (`points`, `RANGE` -4..12, `subscribe`, `grow`, `growAll`).
 
@@ -77,7 +78,7 @@ Session Context panel:
 - Project `PropertiesComponent` key: `dev.myair.thisWorkTree`.
 - Folder, plan and pin changes go through `ClaudeSessionsService.updateFolders(ChangeSource.UI, ...)` and `updatePins`, which persist them in `~/.my-air`.
 - Git:
-  - Reads: `Git.head`, `Git.headBranch`, `gitWorktrees`, `Git.state`, `Git.branchOf`, `Git.containedBases`.
+  - Reads: `Git.head`, `Git.headBranch`, `gitWorktrees`, `Git.state`, `Git.branchOf`, `Git.nearestBases`.
   - Write: `Git.setBase`, followed by `ActiveSession.baseChanged`.
 - Actions started from the panels:
   - Open: sessions (`ClaudeSessionOpener.open`), plans (`PlanOpener.open`), files, diffs (`showBaseDiff`, `showCombinedBaseDiff`, `showBaseChangesTree`).

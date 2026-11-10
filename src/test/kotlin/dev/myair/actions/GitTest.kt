@@ -1,5 +1,8 @@
 package dev.myair.actions
 
+import dev.myair.actions.FileChange.Stage.COMMITTED
+import dev.myair.actions.FileChange.Stage.PUSHED
+import dev.myair.actions.FileChange.Stage.UNCOMMITTED
 import dev.myair.service.gitWorktrees
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
@@ -217,7 +220,7 @@ class GitTest {
         assertEquals(true, state.baseStored)
         assertEquals(git(repo, "rev-parse", "origin/feature"), state.mergeBase)
         assertEquals(path.toRealPath(), state.root.toRealPath())
-        assertEquals(listOf(FileChange("a.txt", FileChange.Kind.ADDED, 3, 0), FileChange("new.txt", FileChange.Kind.UNTRACKED, 2, 0)), state.changes)
+        assertEquals(listOf(FileChange("a.txt", FileChange.Kind.ADDED, 3, 0, UNCOMMITTED), FileChange("new.txt", FileChange.Kind.UNTRACKED, 2, 0, UNCOMMITTED)), state.changes)
         assertEquals(5, state.added)
         assertEquals(0, state.removed)
     }
@@ -230,7 +233,7 @@ class GitTest {
         val state = state(repo)
         assertEquals("origin/main", state.base)
         assertEquals(false, state.baseStored)
-        assertEquals(listOf(FileChange("t.txt", FileChange.Kind.ADDED, 1, 0)), state.changes)
+        assertEquals(listOf(FileChange("t.txt", FileChange.Kind.ADDED, 1, 0, COMMITTED)), state.changes)
     }
 
     @Test
@@ -240,7 +243,40 @@ class GitTest {
         commit(repo, "t.txt", "t\n")
         commit(dir.resolve("upstream"), "u.txt", "u\n")
         git(repo, "fetch")
-        assertEquals(listOf(FileChange("t.txt", FileChange.Kind.ADDED, 1, 0)), state(repo).changes)
+        assertEquals(listOf(FileChange("t.txt", FileChange.Kind.ADDED, 1, 0, COMMITTED)), state(repo).changes)
+    }
+
+    @Test
+    fun `a change is uncommitted, committed but not pushed to the upstream, or pushed`() {
+        val repo = clone()
+        git(repo, "checkout", "-q", "-b", "topic")
+        commit(repo, "pushed.txt", "p\n")
+        commit(repo, "edited.txt", "e\n")
+        git(repo, "push", "-q", "-u", "origin", "topic")
+        commit(repo, "local.txt", "l\n")
+        repo.resolve("edited.txt").writeText("e\nf\n")
+        repo.resolve("new.txt").writeText("n\n")
+        assertEquals(
+            listOf(
+                FileChange("edited.txt", FileChange.Kind.ADDED, 2, 0, UNCOMMITTED), FileChange("local.txt", FileChange.Kind.ADDED, 1, 0, COMMITTED),
+                FileChange("pushed.txt", FileChange.Kind.ADDED, 1, 0, PUSHED), FileChange("new.txt", FileChange.Kind.UNTRACKED, 1, 0, UNCOMMITTED),
+            ),
+            state(repo).changes,
+        )
+    }
+
+    @Test
+    fun `commits the upstream got meanwhile do not make pushed changes unpushed`() {
+        val repo = clone()
+        git(repo, "checkout", "-q", "-b", "topic")
+        commit(repo, "a.txt", "a\n")
+        git(repo, "push", "-q", "-u", "origin", "topic")
+        // The upstream's topic changes the same file: a plain diff against it would name a.txt.
+        val upstream = dir.resolve("upstream")
+        git(upstream, "checkout", "-q", "topic")
+        commit(upstream, "a.txt", "a\nb\n")
+        git(repo, "fetch", "-q")
+        assertEquals(listOf(FileChange("a.txt", FileChange.Kind.ADDED, 1, 0, PUSHED)), state(repo).changes)
     }
 
     @Test
@@ -285,7 +321,7 @@ class GitTest {
         val repo = init("outer")
         init("outer/inner")
         repo.resolve("new.txt").writeText("n\n")
-        assertEquals(listOf(FileChange("new.txt", FileChange.Kind.UNTRACKED, 1, 0)), state(repo).changes)
+        assertEquals(listOf(FileChange("new.txt", FileChange.Kind.UNTRACKED, 1, 0, UNCOMMITTED)), state(repo).changes)
     }
 
     @Test
@@ -299,7 +335,7 @@ class GitTest {
         assertEquals("main", state.branch)
         assertEquals("main", state.base)
         assertEquals(git(repo, "rev-parse", "HEAD"), state.mergeBase)
-        assertEquals(listOf(FileChange("a.txt", FileChange.Kind.MODIFIED, 3, 1), FileChange("b.txt", FileChange.Kind.DELETED, 0, 2)), state.changes)
+        assertEquals(listOf(FileChange("a.txt", FileChange.Kind.MODIFIED, 3, 1, UNCOMMITTED), FileChange("b.txt", FileChange.Kind.DELETED, 0, 2, UNCOMMITTED)), state.changes)
     }
 
     @Test
@@ -322,7 +358,7 @@ class GitTest {
         assertEquals("main", state.branch)
         assertEquals(null, state.base)
         assertEquals(null, state.mergeBase)
-        assertEquals(listOf(FileChange("a.txt", FileChange.Kind.UNTRACKED, 1, 0)), state.changes)
+        assertEquals(listOf(FileChange("a.txt", FileChange.Kind.UNTRACKED, 1, 0, UNCOMMITTED)), state.changes)
     }
 
     @Test
@@ -336,7 +372,7 @@ class GitTest {
         val state = state(sub)
         assertEquals(repo.toRealPath(), state.root.toRealPath())
         assertEquals(
-            listOf(FileChange("a.txt", FileChange.Kind.MODIFIED, 1, 1), FileChange("sub/s.txt", FileChange.Kind.UNTRACKED, 1, 0), FileChange("top.txt", FileChange.Kind.UNTRACKED, 1, 0)),
+            listOf(FileChange("a.txt", FileChange.Kind.MODIFIED, 1, 1, UNCOMMITTED), FileChange("sub/s.txt", FileChange.Kind.UNTRACKED, 1, 0, UNCOMMITTED), FileChange("top.txt", FileChange.Kind.UNTRACKED, 1, 0, UNCOMMITTED)),
             state.changes,
         )
     }
@@ -359,15 +395,18 @@ class GitTest {
     }
 
     @Test
-    fun `the contained bases of a branch are the branches its history holds, not those that went their own way`() {
+    fun `the nearest bases of a branch put first the one it forked from last, even after that one moved on`() {
         val repo = init("repo")
         git(repo, "branch", "old")
         git(repo, "commit", "--allow-empty", "-m", "second")
+        git(repo, "checkout", "-b", "feature")
+        git(repo, "commit", "--allow-empty", "-m", "third")
+        git(repo, "checkout", "main")
+        git(repo, "commit", "--allow-empty", "-m", "after the fork")
         git(repo, "checkout", "-b", "side", "old")
         git(repo, "commit", "--allow-empty", "-m", "side")
-        git(repo, "checkout", "-b", "feature", "main")
-        git(repo, "commit", "--allow-empty", "-m", "third")
-        assertEquals(setOf("main", "old"), Git.containedBases(repo, "feature").toSet())
+        git(repo, "checkout", "feature")
+        assertEquals(listOf("main", "old", "side"), Git.nearestBases(repo, "feature"))
     }
 
     @Test

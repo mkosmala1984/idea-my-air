@@ -22,12 +22,12 @@ there by class name, so moving or renaming one means updating that file too.
   - `baseOf(root)`: the stored base for the current branch, else the default branch.
   - `root(dir)`, `branchOf(dir)`, `currentBranch(dir)` (`detached at <sha7>` on a detached HEAD).
   - `head(dir): Head?` / `headBranch(dir)`: read from the HEAD file without running git; null for a missing folder.
-  - `containedBases(dir, branch)`: up to `MAX_CONTAINED_BASES` branches whose tips HEAD contains, latest commit first.
+  - `nearestBases(dir, branch)`: every other branch, nearest first: fewest commits of HEAD it lacks, then fewest of its own (`%(ahead-behind:HEAD)`, git 2.41).
   - `show(root, commit, path)`: file bytes at a commit.
   - `addWorktree(mainRoot, path, pick, fallback, inUse)`, `addBranchWorktree(mainRoot, path, branch, base)`.
   - `setBase(dir, branch, base)` / `storedBase(dir, branch)`: config key `branch.<branch>.myAirBase`.
   - `includedFiles(mainRoot)`: gitignored untracked files matching `.worktreeinclude`.
-- `data class GitRepo(mainRoot, branches, default)`, `data class GitState(...)` (with `added`/`removed` sums), `data class FileChange(path, kind, added, removed)` with `enum Kind { ADDED, MODIFIED, DELETED, UNTRACKED }`.
+- `data class GitRepo(mainRoot, branches, default)`, `data class GitState(...)` (with `added`/`removed` sums), `data class FileChange(path, kind, added, removed, stage)` with `enum Kind { ADDED, MODIFIED, DELETED, UNTRACKED }` and `enum Stage { UNCOMMITTED, COMMITTED, PUSHED }`.
 - `class GitFailure : IllegalStateException`.
 - `fun lineCount(bytes)`: line count as `git diff --numstat` gives it; 0 for binary (NUL in the first 8000 bytes).
 
@@ -35,7 +35,7 @@ there by class name, so moving or renaming one means updating that file too.
 
 - `baseChoices(branches, default, recent): BaseChoices` (popup order: default, recent, rest) and `pushRecent`, both bounded by `MAX_RECENT_BASES = 5`.
 - `defaultBranch(remotes, originHead, local)`, `worktreeName(base, date, id)` (`<base>-<date>-<id4>`), `dirName(branch)`, `worktreePath(mainRoot, setting, name)`.
-- `parseBranches(refs)`, `containedBases(refs, branch)`, `parseWorktrees(porcelain): List<Worktree>`, `copyIncluded(mainRoot, worktree, files)`.
+- `parseBranches(refs)`, `nearestBases(refs, branch)`, `parseWorktrees(porcelain): List<Worktree>`, `copyIncluded(mainRoot, worktree, files)`.
 
 ### Starting sessions
 
@@ -61,7 +61,7 @@ there by class name, so moving or renaming one means updating that file too.
 
 ### Diffs against the base (`BaseDiff.kt`)
 
-- `showBaseDiff(project, state, selected)`, `showCombinedBaseDiff(project, state)`, `showBaseChangesTree(project, state)`.
+- `showBaseDiff(project, state, selected)` (in the editor's preview tab), `showCombinedBaseDiff(project, state)`, `showBaseChangesTree(project, state)`.
 - `plannotator: File?` (looked up on PATH once) and `reviewInPlannotator(project, state)`.
 - `ShowChangesVsBaseAction(selected)`: on a session's menu.
 - `val Kind.status: FileStatus`.

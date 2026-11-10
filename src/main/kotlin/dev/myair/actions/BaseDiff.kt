@@ -18,7 +18,10 @@ import com.intellij.openapi.vcs.changes.Change
 import com.intellij.openapi.vcs.changes.CurrentContentRevision
 import com.intellij.openapi.vcs.changes.ChangesUtil
 import com.intellij.openapi.vcs.changes.actions.diff.ChangeDiffRequestProducer
-import com.intellij.openapi.vcs.changes.actions.diff.ShowDiffAction
+import com.intellij.openapi.vcs.changes.ui.ChangeDiffRequestChain
+import com.intellij.diff.editor.ChainDiffVirtualFile
+import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
+import com.intellij.openapi.fileEditor.impl.FileEditorOpenOptions
 import com.intellij.openapi.vcs.history.VcsDiffUtil
 import com.intellij.openapi.vcs.history.VcsRevisionNumber
 import com.intellij.vcsUtil.VcsUtil
@@ -66,9 +69,18 @@ private fun changesOf(state: GitState): List<Change> {
 private fun <T> withChanges(project: Project, state: GitState, work: (List<Change>) -> T, show: (T) -> Unit) =
     background(project, "Reading changes", { runReadAction { work(changesOf(state)) } }, show)
 
-/** The diff of every file of [state]'s changes, opened on the [selected] one. */
-fun showBaseDiff(project: Project, state: GitState, selected: Int) =
-    withChanges(project, state, { it }) { ShowDiffAction.showDiffForChange(project, it, selected) }
+/**
+ * The diff of every file of [state]'s changes, opened on the [selected] one in the editor's preview tab, as the Commit
+ * view opens its diffs: the next file shown replaces it until it is pinned by a double-click or an edit. Without Enable
+ * preview tab (Settings › Editor Tabs) every diff gets a tab of its own, as every file does then.
+ */
+fun showBaseDiff(project: Project, state: GitState, selected: Int) {
+    val producers = { changes: List<Change> -> changes.map { checkNotNull(ChangeDiffRequestProducer.create(project, it)) { "no diff for $it" } } }
+    withChanges(project, state, producers) {
+        val file = ChainDiffVirtualFile(ChangeDiffRequestChain(it, selected), "Changes vs ${state.base}")
+        FileEditorManagerEx.getInstanceEx(project).openFile(file, null, FileEditorOpenOptions(requestFocus = true, reuseOpen = true, usePreviewTab = true))
+    }
+}
 
 /** Every file of [state]'s changes in one editor tab, one under another: the IDE's combined diff. */
 fun showCombinedBaseDiff(project: Project, state: GitState) {

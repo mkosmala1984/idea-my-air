@@ -32,6 +32,8 @@ import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import dev.myair.actions.FileChange.Kind
+import dev.myair.actions.FileChange.Stage
+import com.intellij.ui.JBColor
 import dev.myair.actions.Git
 import dev.myair.actions.GitState
 import dev.myair.actions.background
@@ -47,6 +49,7 @@ import dev.myair.actions.showBaseChangesTree
 import dev.myair.actions.showCombinedBaseDiff
 import dev.myair.actions.status
 import com.intellij.ui.ColoredTreeCellRenderer
+import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.treeStructure.Tree
 import dev.myair.claude.BackgroundTask
 import dev.myair.claude.ClaudeSession
@@ -108,6 +111,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     }
     /** The lists showing all their rows, by section; the others show [FILES_SHOWN]. */
     private val fullLists = HashSet<String>()
+    /** The folders of the changes tree opened or closed by hand, by path relative to the work tree; the others as [openByDefault]. */
+    private val changeFolders = HashMap<String, Boolean>()
     /** The opened skills by the session's folder and name, with their files once read (null while reading). */
     private val skills = HashMap<Pair<Path, String>, Result<SkillFiles?>?>()
     /** The folders opened in each skill's tree. */
@@ -140,6 +145,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             git = null
             gitReads.forget()
             fullLists.clear()
+            changeFolders.clear()
         }
         shownId = id
         render()
@@ -157,7 +163,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val session = service.sessions.firstOrNull { it.id == id }
         val context = session?.let { contextOf(it, it.workDir.exists(), it.id in service.live, git) }
         val plan = session?.let { planContextOf(it, service.folders, service.sessions) }
-        val shown = listOf(id, context, plan, context?.let { shortAge(it.lastMessage, Instant.now()) }, fullLists.toSet(), skills.toMap(), pinnedSkills())
+        val shown = listOf(id, context, plan, context?.let { shortAge(it.lastMessage, Instant.now()) }, fullLists.toSet(), skills.toMap(), pinnedSkills(), changesAsTree(), changesFilter())
         if (!force && shown == rendered) return
         rendered = shown
         val content = when {
@@ -222,23 +228,45 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         else context.git?.let { git ->
             card("Changes vs base") {
                 val changes = git.changes
+                val asTree = changesAsTree()
+                val filter = changesFilter()
                 if (changes == null) row { comment(checkNotNull(git.problem)) }
                 else {
+                    val shown = changes.withIndex().filter { filter.shows(it.value) }
+                    val added = shown.sumOf { it.value.added }
+                    val removed = shown.sumOf { it.value.removed }
                     row {
-                        label("+${git.added}").applyToComponent { foreground = FileStatus.ADDED.color }
-                        label("−${git.removed}").applyToComponent { foreground = FileStatus.DELETED.color }
+                        label("+$added").applyToComponent { foreground = FileStatus.ADDED.color }
+                        label("−$removed").applyToComponent { foreground = FileStatus.DELETED.color }
                         if (changes.isNotEmpty()) {
+                            cell(InplaceButton(if (asTree) "Show as list" else "Show as tree", if (asTree) AllIcons.Actions.ListFiles else AllIcons.Actions.ShowAsTree) {
+                                PropertiesComponent.getInstance().setValue(CHANGES_AS_TREE, !asTree)
+                                render()
+                            }).resizableColumn().align(AlignX.RIGHT)
                             link("Show diff") { showCombinedBaseDiff(project, git) }
                                 .applyToComponent { toolTipText = "All files in one tab, against ${git.base}" }
-                                .resizableColumn().align(AlignX.RIGHT)
                             link("Tree") { showBaseChangesTree(project, git) }
                                 .applyToComponent { toolTipText = "The changed files as a tree of folders, against ${git.base}" }
                             if (plannotator != null) link("Plannotator") { reviewInPlannotator(project, git) }
                                 .applyToComponent { toolTipText = "Review all changes against ${git.base} in Plannotator, in the browser" }
                         }
                     }
-                    if (git.added + git.removed > 0) row { cell(ChangeBar(git.added, git.removed)).align(AlignX.FILL) }
-                    paged("Changes", changes) { change, index ->
+                    // Which changes show, each choice with its count; the chosen one is plain text.
+                    if (changes.isNotEmpty()) row {
+                        for (choice in ChangesFilter.entries) {
+                            val text = "${choice.label} ${changes.count(choice::shows)}"
+                            if (choice == filter) label(text).bold()
+                            else link(text) {
+                                PropertiesComponent.getInstance().setValue(CHANGES_FILTER, choice.name)
+                                render()
+                            }
+                        }
+                    }
+                    if (added + removed > 0) row { cell(ChangeBar(added, removed)).align(AlignX.FILL) }
+                    if (changes.isNotEmpty() && shown.isEmpty()) row { comment("No ${filter.label.lowercase()} changes") }
+                    else if (asTree) {
+                        if (shown.isNotEmpty()) row { cell(wrapped(changesTree(git, changeTree(changes, filter)))).align(AlignX.FILL) }
+                    } else paged("Changes", shown) { (index, change), _ ->
                         row {
                             label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = change.kind.status.color }
                             link(change.path) { showBaseDiff(project, git, index) }.shrinkable()
@@ -363,12 +391,78 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 else -> skillFiles(key, files)
             }
         }.apply { isOpaque = false }
-        // In a plain panel: the grid of a card makes room for what its cells paint past their bounds, and the
-        // description and the tree made it move every row of the card to the right.
-        val wrapper = JPanel(BorderLayout())
-        wrapper.isOpaque = false
-        wrapper.add(details, BorderLayout.CENTER)
-        row { cell(wrapper).align(AlignX.FILL) }
+        row { cell(wrapped(details)).align(AlignX.FILL) }
+    }
+
+    /**
+     * [component] in a plain panel: the grid of a card makes room for what its cells paint past their bounds, and a
+     * tree or a wrapped description made it move every row of the card to the right.
+     */
+    private fun wrapped(component: JComponent) = JPanel(BorderLayout()).apply {
+        isOpaque = false
+        add(component, BorderLayout.CENTER)
+    }
+
+    /**
+     * [root]'s folders and files as Branch Diff shows them, every folder open but test folders ([openByDefault]) until opened
+     * or closed here (kept by path across renders, until another session is shown); a click on a file opens its diff against the base.
+     */
+    private fun changesTree(git: GitState, root: ChangeDir): Tree {
+        val nodes = HashMap<String, DefaultMutableTreeNode>()
+        fun node(change: ChangeNode, path: String): DefaultMutableTreeNode = DefaultMutableTreeNode(change).also { node ->
+            if (change is ChangeDir) {
+                nodes[path] = node
+                for (child in change.children) node.add(node(child, if (path.isEmpty()) child.name else "$path/${child.name}"))
+            }
+        }
+        val top = node(root, "")
+        val keys = nodes.entries.associate { (path, node) -> node to path }
+        return Tree(DefaultTreeModel(top)).apply {
+            isRootVisible = false
+            showsRootHandles = true
+            isOpaque = false
+            cellRenderer = object : ColoredTreeCellRenderer() {
+                override fun customizeCellRenderer(tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean) {
+                    when (val change = (value as DefaultMutableTreeNode).userObject as ChangeNode) {
+                        is ChangeDir -> {
+                            icon = AllIcons.Nodes.Folder
+                            append(change.name)
+                            append("  " + if (change.files == 1) "1 file" else "${change.files} files", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                            lineCounts(change.added, change.removed)
+                        }
+                        is ChangeFile -> {
+                            icon = fileIcon(Path.of(change.name))
+                            if (change.change.stage == Stage.UNCOMMITTED) append("● ", SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, JBColor.ORANGE))
+                            val style = if (change.change.kind == Kind.DELETED) SimpleTextAttributes.STYLE_STRIKEOUT else SimpleTextAttributes.STYLE_PLAIN
+                            append(change.name, SimpleTextAttributes(style, change.change.kind.status.color))
+                            lineCounts(change.change.added, change.change.removed)
+                        }
+                    }
+                }
+
+                private fun lineCounts(added: Int, removed: Int) {
+                    if (added > 0) append("  +$added", SimpleTextAttributes(SimpleTextAttributes.STYLE_SMALLER, FileStatus.ADDED.color))
+                    if (removed > 0) append("  −$removed", SimpleTextAttributes(SimpleTextAttributes.STYLE_SMALLER, FileStatus.DELETED.color))
+                }
+            }
+            fun open(node: DefaultMutableTreeNode) = node.isRoot || changeFolders[keys.getValue(node)] ?: openByDefault(node.userObject as ChangeDir)
+            // Only a folder with no closed folder above it: expanding one opens its parents too.
+            for (node in nodes.values) {
+                if (node.path.all { open(it as DefaultMutableTreeNode) }) expandPath(TreePath(node.path))
+            }
+            addTreeExpansionListener(object : TreeExpansionListener {
+                override fun treeExpanded(event: TreeExpansionEvent) { changeFolders[keys.getValue(event.path.lastPathComponent as DefaultMutableTreeNode)] = true }
+                override fun treeCollapsed(event: TreeExpansionEvent) { changeFolders[keys.getValue(event.path.lastPathComponent as DefaultMutableTreeNode)] = false }
+            })
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(event: MouseEvent) {
+                    // The second click of a double-click would open the diff again; the preview tab is kept by a double-click on it.
+                    if (event.clickCount != 1) return
+                    val file = (getPathForLocation(event.x, event.y)?.lastPathComponent as? DefaultMutableTreeNode)?.userObject as? ChangeFile ?: return
+                    showBaseDiff(project, git, file.index)
+                }
+            })
+        }
     }
 
     /** A skill's description and its files: a command's one file, a skill's directory as a tree. */
@@ -485,14 +579,14 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     }
 
     /**
-     * Asks under [anchor] for a new base of [git]'s branch among the branches it contains ([Git.containedBases]) and
+     * Asks under [anchor] for a new base of [git]'s branch among the other branches, nearest first ([Git.nearestBases]), and
      * reads the changes again against it. The point is taken at the click: the pane may be rebuilt, and [anchor] gone,
      * while the branches are read.
      */
     private fun pickBase(git: GitState, anchor: JComponent) {
         val under = RelativePoint.fromScreen(Point(anchor.locationOnScreen).apply { y += anchor.height })
-        background(project, "Reading branches", { Git.containedBases(git.root, git.branch) }) { bases ->
-            if (bases.isEmpty()) return@background Messages.showInfoMessage(project, "${git.branch} contains no other branch.", "Base Branch")
+        background(project, "Reading branches", { Git.nearestBases(git.root, git.branch) }) { bases ->
+            if (bases.isEmpty()) return@background Messages.showInfoMessage(project, "The repository has no branch other than ${git.branch}.", "Base Branch")
             // No separators: getSeparatorAbove never meets an index past the last item.
             val choices = BaseChoices(bases, bases.size, bases.size, bases.indexOf(git.base).coerceAtLeast(0))
             basePopup("Base Branch of ${git.branch}", choices) { base ->
@@ -537,6 +631,12 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         private fun pinnedSkills(): Set<String> = PropertiesComponent.getInstance().getList(PINNED_SKILLS).orEmpty().toSet()
         private fun setPinnedSkills(names: Set<String>) = PropertiesComponent.getInstance().setList(PINNED_SKILLS, names.sorted())
         private const val SECTIONS = "dev.myair.context.sections"
+        /** Whether Changes vs base shows its files as a tree of folders rather than a list, in every session's pane. */
+        private const val CHANGES_AS_TREE = "dev.myair.context.changesAsTree"
+        private fun changesAsTree() = PropertiesComponent.getInstance().getBoolean(CHANGES_AS_TREE)
+        /** Which changes Changes vs base shows ([ChangesFilter]'s name), in every session's pane. */
+        private const val CHANGES_FILTER = "dev.myair.context.changesFilter"
+        private fun changesFilter() = ChangesFilter.valueOf(PropertiesComponent.getInstance().getValue(CHANGES_FILTER, ChangesFilter.ALL.name))
         private fun sectionStates(): List<String> = PropertiesComponent.getInstance().getList(SECTIONS).orEmpty()
         private fun setSectionStates(states: List<String>) = PropertiesComponent.getInstance().setList(SECTIONS, states)
         private const val FILES_SHOWN = 5

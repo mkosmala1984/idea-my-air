@@ -11,9 +11,18 @@ import kotlin.io.path.readText
 /** A git repository as the worktree popup needs it. */
 data class GitRepo(val mainRoot: Path, val branches: List<String>, val default: String)
 
-/** A file of [GitState.changes]; [path] is relative to [GitState.root]. A binary file counts no lines. */
-data class FileChange(val path: String, val kind: Kind, val added: Int, val removed: Int) {
+/**
+ * A file of [GitState.changes]; [path] is relative to [GitState.root]. A binary file counts no lines. [stage]: how far
+ * its change has gone.
+ */
+data class FileChange(val path: String, val kind: Kind, val added: Int, val removed: Int, val stage: Stage) {
     enum class Kind { ADDED, MODIFIED, DELETED, UNTRACKED }
+
+    /**
+     * [UNCOMMITTED]: the work tree differs from HEAD (untracked files too); [COMMITTED]: committed, but HEAD's upstream
+     * does not have it (a branch without an upstream, or whose upstream is gone, has nothing pushed); [PUSHED]: the rest.
+     */
+    enum class Stage { UNCOMMITTED, COMMITTED, PUSHED }
 }
 
 /**
@@ -89,7 +98,7 @@ object Git {
         if (!isCommit(root, base)) return problem(base, "Base $base no longer exists")
         // merge-base exits 1, saying nothing, when the two share no commit.
         val mergeBase = run(root, "merge-base", base, "HEAD", ok = setOf(0, 1)).trim().ifEmpty { return problem(base, "Base $base shares no history with $branch") }
-        return GitState(branch, current == null, root, base, stored != null, mergeBase, tracked(root, mergeBase) + untracked(root), null)
+        return GitState(branch, current == null, root, base, stored != null, mergeBase, tracked(root, mergeBase, stages(root, current)) + untracked(root), null)
     }
 
     /**
@@ -135,11 +144,11 @@ object Git {
     fun branchOf(dir: Path): String? = if (inRepo(dir)) currentBranch(dir) else null
 
     /**
-     * The [MAX_CONTAINED_BASES] local and remote branches whose tips HEAD of [dir] contains, latest commit first:
-     * the branches [branch] grew from, without [branch] itself and its remote copies.
+     * Every local and remote branch of [dir] but [branch] and its remote copies, the likeliest bases of [branch] first
+     * ([nearestBases]); a base that moved on since [branch] forked from it is among them (`%(ahead-behind)` needs git 2.41).
      */
-    fun containedBases(dir: Path, branch: String): List<String> =
-        containedBases(run(dir, "for-each-ref", "--merged", "HEAD", "--sort=-committerdate", "--format=%(refname)", "refs/heads", "refs/remotes"), branch)
+    fun nearestBases(dir: Path, branch: String): List<String> =
+        nearestBases(run(dir, "for-each-ref", "--sort=-committerdate", "--format=%(refname) %(ahead-behind:HEAD)", "refs/heads", "refs/remotes"), branch)
 
     /** [path], relative to [root], as it was in [commit]. */
     fun show(root: Path, commit: String, path: String): ByteArray = bytes(root, "show", "$commit:$path")
@@ -151,7 +160,7 @@ object Git {
      * gives both the status (`--raw`: `:<modes> <shas> <status>`, then the path) and the counts (`--numstat`), so a
      * file the session writes meanwhile cannot be in one list and not the other.
      */
-    private fun tracked(root: Path, mergeBase: String): List<FileChange> {
+    private fun tracked(root: Path, mergeBase: String, stage: (String) -> FileChange.Stage): List<FileChange> {
         val entries = nulSeparated(run(root, "--no-optional-locks", "diff", "--no-renames", "--raw", "--numstat", "-z", mergeBase))
         // Raw entries take two fields each, a meta line and a path that may itself start with ':'.
         var raw = 0
@@ -159,8 +168,26 @@ object Git {
         val kinds = entries.take(raw).chunked(2).associate { (meta, path) -> path to kindOf(meta.substringAfterLast(' ')) }
         return entries.drop(raw).map { line ->
             val (added, removed, path) = line.split('\t', limit = 3)
-            FileChange(path, kinds.getValue(path), lines(added), lines(removed))
+            FileChange(path, kinds.getValue(path), lines(added), lines(removed), stage(path))
         }.sortedBy { it.path }
+    }
+
+    /**
+     * The [FileChange.Stage] of a tracked path of the work tree [root] on [branch] (null: detached): uncommitted when it
+     * differs from HEAD, else pushed unless it changed in the commits HEAD has and its upstream lacks
+     * (`<upstream>...HEAD`: since their merge base, so commits the upstream got meanwhile do not count).
+     */
+    private fun stages(root: Path, branch: String?): (String) -> FileChange.Stage {
+        val uncommitted = nulSeparated(run(root, "--no-optional-locks", "diff", "--no-renames", "--name-only", "-z", "HEAD")).toSet()
+        val upstream = branch?.let { run(root, "for-each-ref", "--format=%(upstream)", "refs/heads/$it").trim().ifEmpty { null } }?.takeIf { isCommit(root, it) }
+        val unpushed = upstream?.let { nulSeparated(run(root, "diff", "--no-renames", "--name-only", "-z", "$it...HEAD")).toSet() }
+        return { path ->
+            when {
+                path in uncommitted -> FileChange.Stage.UNCOMMITTED
+                unpushed == null || path in unpushed -> FileChange.Stage.COMMITTED
+                else -> FileChange.Stage.PUSHED
+            }
+        }
     }
 
     private fun kindOf(status: String) = when (status) {
@@ -175,7 +202,7 @@ object Git {
      * file (a symlink to a folder, a broken one) counts no lines.
      */
     private fun untracked(root: Path) = nulSeparated(run(root, "ls-files", "-z", "--others", "--exclude-standard")).filterNot { it.endsWith("/") }.sorted()
-        .map { FileChange(it, FileChange.Kind.UNTRACKED, root.resolve(it).let { file -> if (file.isRegularFile()) lineCount(file.readBytes()) else 0 }, 0) }
+        .map { FileChange(it, FileChange.Kind.UNTRACKED, root.resolve(it).let { file -> if (file.isRegularFile()) lineCount(file.readBytes()) else 0 }, 0, FileChange.Stage.UNCOMMITTED) }
 
     /** `-z` output: every entry ends with a NUL. */
     private fun nulSeparated(output: String) = output.split('\u0000').dropLast(1)

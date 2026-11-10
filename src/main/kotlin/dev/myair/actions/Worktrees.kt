@@ -59,13 +59,20 @@ fun worktreePath(mainRoot: Path, setting: String, name: String): Path = mainRoot
 fun parseBranches(refs: String): List<String> = refs.lines().filter { it.isNotEmpty() && !(it.startsWith("refs/remotes/") && it.endsWith("/HEAD")) }
     .map { it.removePrefix("refs/heads/").removePrefix("refs/remotes/") }
 
-const val MAX_CONTAINED_BASES = 10
-
-/** [parseBranches] of [refs] without [branch] and its copies on remotes, the first [MAX_CONTAINED_BASES] of them. */
-fun containedBases(refs: String, branch: String): List<String> = parseBranches(
-    refs.lines().filterNot { it == "refs/heads/$branch" || it.startsWith("refs/remotes/") && it.removePrefix("refs/remotes/").substringAfter('/') == branch }
-        .joinToString("\n"),
-).take(MAX_CONTAINED_BASES)
+/**
+ * The branches of [refs], lines `<refname> <ahead> <behind>` of `%(ahead-behind:HEAD)` newest first, without [branch]
+ * and its copies on remotes, nearest first: fewest commits of HEAD they lack (a fork point closer to HEAD), then fewest
+ * of their own. A base that moved on since the fork lacks no more than it did, so it stays near the top.
+ */
+fun nearestBases(refs: String, branch: String): List<String> = parseBranches(
+    refs.lines().filter { it.isNotEmpty() }.map { line ->
+        val fields = line.split(' ')
+        check(fields.size == 3) { "unexpected git for-each-ref line: $line" }
+        Triple(fields[0], fields[2].toInt(), fields[1].toInt())
+    }.filterNot { (ref) -> ref == "refs/heads/$branch" || ref.startsWith("refs/remotes/") && ref.removePrefix("refs/remotes/").substringAfter('/') == branch }
+        .sortedWith(compareBy({ it.second }, { it.third }))
+        .joinToString("\n") { it.first },
+)
 
 /** An entry of `git worktree list --porcelain`; [branch] is null on a detached HEAD. */
 data class Worktree(val path: Path, val branch: String?, val locked: Boolean)
