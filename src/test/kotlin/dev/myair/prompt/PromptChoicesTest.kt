@@ -64,4 +64,45 @@ class PromptChoicesTest {
         assertEquals("Claude Opus", modelLabel("opus"))
         assertEquals("claude-opus-5-5", modelLabel("claude-opus-5-5"))
     }
+
+    @Test
+    fun `opening message of a configuration`() {
+        assertEquals("/code-review ", openingMessage(Preset("R", prompt = "/code-review")))
+        assertEquals("", openingMessage(Preset("P")))
+    }
+
+    @Test
+    fun `switch replaces an empty or untouched message`() {
+        val a = Preset("A", prompt = "/a")
+        val b = Preset("B", prompt = "/b")
+        assertEquals("/b ", switchedMessage("", a, b))
+        assertEquals("/b ", switchedMessage("/a ", a, b))
+        assertEquals("", switchedMessage("/a ", a, Preset("C")))
+    }
+
+    @Test
+    fun `switch keeps edited text`() {
+        val a = Preset("A", prompt = "/a")
+        assertEquals("/a 7506", switchedMessage("/a 7506", a, Preset("B", prompt = "/b")))
+        assertEquals("own words", switchedMessage("own words", a, Preset("B", prompt = "/b")))
+    }
+
+    @Test
+    fun `project list has no repeats`() {
+        assertEquals(
+            listOf("E:/a", "E:/b", "E:/c"),
+            projectChoices(listOf("E:/a", "E:/b"), listOf("E:\\a", "E:/c", "E:/gone")) { it != "E:/gone" },
+        )
+    }
+
+    @Test
+    fun `the project is a choice like the model`() {
+        val own = Preset("P", project = "E:/p")
+        val presets = listOf(DEFAULT_PRESET, own)
+        assertEquals("E:/q", restore(presets, LastChoice("P", null, null, null, project = "E:/q")).project)
+        assertEquals(null, restore(presets, LastChoice("P", null, null, null)).project)
+        assertEquals("E:/q", Choice(own, "opus", "low", false, project = "E:/q").toLast().project)
+        assertEquals("E:/x", choiceOf(own).copy(project = "E:/x").toPreset(null).project)
+        assertEquals("E:/p", choiceOf(own).toPreset(null).project)
+    }
 }
