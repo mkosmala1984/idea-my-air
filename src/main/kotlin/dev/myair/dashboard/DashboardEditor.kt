@@ -84,12 +84,32 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
     private val reads = LatestRead<List<ClaudeSession>, Map<String, Result<SessionGit>>>(
         pool,
         { ApplicationManager.getApplication().invokeLater(it) { project.isDisposed } },
-        facts::read,
+        { asked -> facts.read(asked) { partial -> landPartial(asked, partial) } },
     ) { asked, result ->
         if (inFlight == asked) inFlight = null
         val facts = result.getOrElse { e -> throw IllegalStateException("dashboard git facts failed", e) }
         git = asked.filter { it.id in facts }.associate { it.id to (it to facts.getValue(it.id)) }
         rebuild()
+    }
+
+    // Facts of a read still going on, gathered on the reader thread and landed together on the EDT, newest roots first.
+    private val partials = HashMap<String, Result<SessionGit>>()
+    private var partialsQueued = false
+
+    private fun landPartial(asked: List<ClaudeSession>, partial: Map<String, Result<SessionGit>>) {
+        if (partial.isEmpty()) return
+        synchronized(partials) {
+            partials += partial
+            if (partialsQueued) return
+            partialsQueued = true
+        }
+        ApplicationManager.getApplication().invokeLater({
+            val landed = synchronized(partials) { HashMap(partials).also { partials.clear(); partialsQueued = false } }
+            // Reads run one after another and land in order, so a read since asked lands after these; a session that
+            // changed meanwhile is dropped by model()'s freshness check.
+            git = git + asked.filter { it.id in landed }.associate { it.id to (it to landed.getValue(it.id)) }
+            rebuild()
+        }) { project.isDisposed }
     }
 
     init {
