@@ -113,6 +113,8 @@ class PresetDialog(
     ) { _, repo -> showBranches(repo) }
     private var addDirs = preset?.addDirs.orEmpty().joinToString("\n")
     private var pinned = preset?.pinned ?: false
+    private var prompt = preset?.prompt.orEmpty()
+    private var askMore = preset?.askMore ?: false
 
     init {
         title = dialogTitle
@@ -161,6 +163,10 @@ class PresetDialog(
         row("Other directories:") {
             textArea().bindText(::addDirs).rows(3).align(AlignX.FILL).comment("One per line, each passed to --add-dir.")
         }
+        row("Initial prompt:") {
+            textArea().bindText(::prompt).rows(3).align(AlignX.FILL).comment("The session's first message, e.g. /code-review.")
+        }
+        row { checkBox("Open the composer to add to it before the start").bindSelected(::askMore) }
         row { checkBox("Own button on the toolbar").bindSelected(::pinned) }
     }.also { loadBranches(project) }
 
@@ -195,6 +201,8 @@ class PresetDialog(
             base.takeIf { worktree == WorktreeMode.FIXED },
             addDirs.lines().map { it.trim() }.filter { it.isNotEmpty() },
             pinned,
+            prompt.trim().ifEmpty { null },
+            askMore,
         )
     }
 }
