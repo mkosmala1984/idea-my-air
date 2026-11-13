@@ -12,6 +12,17 @@ import dev.myair.store.Preset
  * project), each argument given replacing its field; [addDirs] is a JSON array. A worktree needs a base, since an agent
  * cannot pick one from a popup.
  */
+/**
+ * The first message of a session [start]ed by the tool: the configuration's prompt, then the agent's [prompt] after a
+ * space (as the composer opened from a configuration takes it), or either alone; neither is refused.
+ */
+fun firstMessage(start: Preset, prompt: String?): String {
+    require(prompt == null || prompt.isNotBlank()) { "prompt is blank" }
+    return requireNotNull(listOfNotNull(start.prompt, prompt).joinToString(" ").ifEmpty { null }) {
+        "no prompt, and configuration '${start.name}' has none"
+    }
+}
+
 fun sessionStartPreset(
     saved: List<Preset>, preset: String?, dir: String?, model: String?, effort: String?, addDirs: String?, worktree: Boolean?, base: String?,
 ): Preset {

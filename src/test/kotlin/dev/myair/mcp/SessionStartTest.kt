@@ -39,4 +39,14 @@ class SessionStartTest {
         assertThrows<IllegalArgumentException> { start(addDirs = "[1]") }
         assertThrows<IllegalArgumentException> { start(addDirs = "[") }
     }
+
+    @Test
+    fun `the configuration's prompt leads the first message, the agent's prompt following it`() {
+        val reviewing = review.copy(prompt = "/code-review")
+        assertEquals("/code-review 7506", firstMessage(reviewing, "7506"))
+        assertEquals("/code-review", firstMessage(reviewing, null))
+        assertEquals("fix the test", firstMessage(review, "fix the test"))
+        assertThrows<IllegalArgumentException> { firstMessage(review, null) }
+        assertThrows<IllegalArgumentException> { firstMessage(reviewing, " ") }
+    }
 }

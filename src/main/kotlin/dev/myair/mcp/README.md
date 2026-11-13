@@ -24,6 +24,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - Constants `DEFAULT_LIMIT = 50`, `MAX_LIMIT = 100` and `PROMPT_CHARS = 300`.
 - `SessionStart.kt`:
   - `fun sessionStartPreset(saved, preset, dir, model, effort, addDirs, worktree, base): Preset`
+  - `fun firstMessage(start, prompt): String`: the configuration's prompt, then the agent's after a space, or either alone; neither throws
   - `fun SessionFolders.requireTask(id): Pair<Folder, PlanTask>`
 - `McpJson.kt`, the shapes of the tool results:
   - `startedJson`

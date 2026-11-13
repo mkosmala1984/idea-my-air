@@ -69,14 +69,15 @@ class FoldersMcpToolset : McpToolset {
 
     @McpTool
     @McpDescription(
-        "Starts a new Claude Code session in a My Air tab of this IDE: claude runs there with prompt as its first message. " +
+        "Starts a new Claude Code session in a My Air tab of this IDE: claude runs there with prompt as its first message, " +
+            "after the prompt of the configuration named in preset when it has one (such as /code-review, prompt then adding a PR number). " +
             "Start one only when the user asked for it in this conversation. The new session does not see this conversation, " +
             "so its prompt must say everything it needs. Arguments left out take the values of the configuration named in " +
             "preset, else claude's own settings, in the IDE project's directory. Returns the new session's id, cwd (where it " +
             "runs: the new worktree when one was made) and project.",
     )
     suspend fun my_air_session_start(
-        @McpDescription("The session's first message.") prompt: String,
+        @McpDescription("The session's first message; may be left out when the configuration has a prompt, which goes before it.") prompt: String? = null,
         @McpDescription("The project directory it starts in; default: the IDE project's.") dir: String? = null,
         @McpDescription("claude --model: opus, sonnet, haiku or a full model id.") model: String? = null,
         @McpDescription("claude --effort: low, medium, high, xhigh or max.") effort: String? = null,
@@ -111,7 +112,7 @@ class FoldersMcpToolset : McpToolset {
         val args = expected {
             val missing = start.missingDirs(sessionProject)
             require(missing.isEmpty()) { "not directories: ${missing.joinToString()}" }
-            start.claudeArgs(prompt)
+            start.claudeArgs(firstMessage(start, prompt))
         }
         val id = UUID.randomUUID().toString()
         val repo = if (start.worktree) withContext(Dispatchers.IO) { expected { Git.repo(sessionProject) } } else null
