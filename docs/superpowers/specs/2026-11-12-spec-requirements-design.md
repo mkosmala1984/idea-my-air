@@ -1,5 +1,7 @@
 # Requirements of a spec, checked at approval and at the end
 
+**Approved:** 2026-11-13, requirements `62007f69`
+
 ## TL;DR
 
 - **Goal:** a spec has one numbered list of checkable requirements; My Air shows it beside the spec when it is approved, and at the end shows for each requirement whether the plans that implement the spec prove it.
