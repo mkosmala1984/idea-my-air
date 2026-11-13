@@ -16,6 +16,8 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.dsl.builder.MAX_LINE_LENGTH_WORD_WRAP
+import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
@@ -28,7 +30,9 @@ import dev.myair.store.Homes
 import dev.myair.toolwindow.shortAge
 import java.awt.BorderLayout
 import java.awt.Cursor
+import java.awt.Dimension
 import java.awt.FlowLayout
+import java.awt.Rectangle
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.beans.PropertyChangeListener
@@ -37,6 +41,9 @@ import javax.swing.Box
 import javax.swing.BoxLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.JViewport
+import javax.swing.Scrollable
+import javax.swing.SwingConstants
 
 class DashboardEditorProvider : FileEditorProvider, DumbAware {
     override fun accept(project: Project, file: VirtualFile) = file is DashboardVirtualFile
@@ -75,7 +82,15 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
         analyses = result.getOrElse { e -> throw IllegalStateException("session analyses could not be read", e) }
         rebuild()
     }
-    private val content = JPanel().apply {
+    // Follows the viewport's width, so a long Left: line wraps instead of running off the right edge.
+    private val content = object : JPanel(), Scrollable {
+        override fun getScrollableTracksViewportWidth() = true
+        override fun getScrollableTracksViewportHeight() = (parent as? JViewport)?.let { it.height > preferredSize.height } == true
+        override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
+        override fun getScrollableUnitIncrement(visible: Rectangle, orientation: Int, direction: Int) = JBUI.scale(16)
+        override fun getScrollableBlockIncrement(visible: Rectangle, orientation: Int, direction: Int) =
+            if (orientation == SwingConstants.VERTICAL) visible.height else visible.width
+    }.apply {
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
         border = JBUI.Borders.empty(16, 24)
         background = UIUtil.getEditorPaneBackground()
@@ -238,23 +253,32 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
             }
         }
         val settle = ActionLink("Settle") { service.updatePins { it.settle(listOf(session.id)) } }
-        val panel = JPanel(BorderLayout()).apply {
+        // The height of a wrapped Left: line depends on the width, so the row's limit is asked for each layout.
+        val panel = object : JPanel(BorderLayout()) {
+            override fun getMaximumSize() = Dimension(Int.MAX_VALUE, preferredSize.height)
+        }.apply {
             isOpaque = false
             alignmentX = 0f
             border = JBUI.Borders.empty(1, 12, 1, 0)
             add(line(title, *chipLabels.toTypedArray()), BorderLayout.CENTER)
             add(line(grey(shortAge(session.lastMessage, now)), settle), BorderLayout.EAST)
             (analysis as? RowAnalysis.Current)?.takeIf { it.verdict != Verdict.DONE }?.let {
-                add(grey("Left: ${it.left}").apply { border = JBUI.Borders.emptyLeft(28) }, BorderLayout.SOUTH)
+                add(panel { row { comment("Left: ${it.left}", MAX_LINE_LENGTH_WORD_WRAP) } }.apply {
+                    isOpaque = false
+                    border = JBUI.Borders.empty(0, 28, 4, 0)
+                }, BorderLayout.SOUTH)
             }
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-            maximumSize = java.awt.Dimension(Int.MAX_VALUE, preferredSize.height)
         }
         val open = object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) = ClaudeSessionOpener.open(project, session)
         }
         panel.addMouseListener(open)
         title.addMouseListener(open)
+        // The wrapped Left: line takes its own clicks; they open the session as the rest of the row does.
+        (panel.layout as BorderLayout).getLayoutComponent(BorderLayout.SOUTH)?.let { south ->
+            UIUtil.uiTraverser(south).forEach { it.addMouseListener(open) }
+        }
         return panel
     }
 
