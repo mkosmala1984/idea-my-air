@@ -70,7 +70,7 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
     }
     // Read on every change, as other IDEs write analyses too.
     private val storeReads = LatestRead<Unit, Map<String, Analysis>>(
-        pool, { ApplicationManager.getApplication().invokeLater(it) { project.isDisposed } }, { store.readAll() },
+        AppExecutorUtil.createBoundedApplicationPoolExecutor("Session analyses store", 1), { ApplicationManager.getApplication().invokeLater(it) { project.isDisposed } }, { store.readAll() },
     ) { _, result ->
         analyses = result.getOrElse { e -> throw IllegalStateException("session analyses could not be read", e) }
         rebuild()
@@ -170,7 +170,7 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
         fun later(action: () -> Unit) = ApplicationManager.getApplication().invokeLater(action) { project.isDisposed }
         lateinit var started: AnalysisRun
         started = AnalysisRun(candidates, { session ->
-            val chips = rows.getValue(session.id).chips.filter { it !is Chip.AnalysisFailed }
+            val chips = rows.getValue(session.id).chips.filter { it !is Chip.AnalysisFailed && it !is Chip.Pending }
             analyzeSession(session, chips, folders.taskOf(session)?.second?.let { "${it.id} ${it.status.label}" })
         }, analysisPool, { session, result ->
             val stored = result.mapCatching { store.write(session.id, it); it }

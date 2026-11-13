@@ -85,7 +85,7 @@ class DashboardTest {
     }
 
     @Test
-    fun `candidates leave out merged, pending, current and too old sessions`() {
+    fun `candidates leave out merged, current and too old sessions, not those whose git is still being read`() {
         val current = session("current", 3, asks = true)
         val sessions = listOf(current, session("fresh", 3, asks = true), session("old", 20), session("merged", 2), session("pending", 1), session("failed", 4))
         val git = mapOf(
@@ -93,7 +93,7 @@ class DashboardTest {
             "merged" to Result.success(SessionGit(false, BranchFate(0, BranchFate.Merged("abc", 1)))),
         )
         val b = board(sessions, git, mapOf("current" to Analysis(current.lastMessage, Verdict.OPEN, "x", now)), mapOf("failed" to "boom"))
-        assertEquals(listOf("fresh", "failed"), analysisCandidates(b, 14, now).map { it.id })
-        assertEquals(listOf("fresh", "failed", "old"), analysisCandidates(b, null, now).map { it.id })
+        assertEquals(listOf("pending", "fresh", "failed"), analysisCandidates(b, 14, now).map { it.id })
+        assertEquals(listOf("pending", "fresh", "failed", "old"), analysisCandidates(b, null, now).map { it.id })
     }
 }

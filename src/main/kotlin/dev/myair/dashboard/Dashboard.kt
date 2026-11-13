@@ -114,11 +114,11 @@ private fun chips(session: ClaudeSession, folders: SessionFolders, git: Result<S
     return chips
 }
 
-/** The sessions an analysis run takes: listed out of Now, not merged, git read, no current analysis, last message within [days] (null: any). */
+/** The sessions an analysis run takes: listed out of Now, not known merged (a first git read of every work tree takes minutes), no current analysis, last message within [days] (null: any). */
 fun analysisCandidates(board: Dashboard, days: Int?, now: Instant): List<ClaudeSession> {
     val since = days?.let { now - Duration.ofDays(it.toLong()) }
     return (board.unfinished.flatMap { it.rows } + board.finished)
-        .filter { row -> row.chips.none { it is Chip.Merged || it is Chip.Pending } && row.analysis !is RowAnalysis.Current }
+        .filter { row -> row.chips.none { it is Chip.Merged } && row.analysis !is RowAnalysis.Current }
         .map { it.session }.filter { since == null || it.lastMessage > since }.sortedByDescending { it.lastMessage }
 }
 
