@@ -16,7 +16,6 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
@@ -54,7 +53,6 @@ import java.nio.file.Path
 import java.time.Instant
 import javax.swing.JComponent
 import javax.swing.JPanel
-import javax.swing.event.DocumentEvent
 
 /** The choices of the last start, so the next panel opens on them, and under `.draft` a message not yet sent. */
 private const val LAST = "dev.myair.prompt"
@@ -95,9 +93,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
     private val presets = listOf(DEFAULT_PRESET) + read.getOrDefault(emptyList())
     private val draft = if (from == null) loadDraft() else null
     private var choice = from?.let(::choiceOf) ?: opening(presets, loadChoice(LAST), draft)
-
-    /** Whether the message may go to the stored draft: not yet for a panel opened from a configuration. */
-    private var edited = from == null
+    private val message: MessageDraft
     private var repo: Result<Repo>? = null
     private var base: String? = null
 
@@ -112,7 +108,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
 
     private val presetChip = Chip(AllIcons.Actions.Lightning) { chip ->
         choose(chip, presets, choice.preset, { it.name }, { it.summary() }) {
-            prompt.text = switchedMessage(prompt.text, choice.preset, it)
+            message.set(switchedMessage(prompt.text, choice.preset, it))
             selectPreset(choiceOf(it))
         }
     }
@@ -176,12 +172,9 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         }.registerCustomShortcutSet(ActionManager.getInstance().getAction(IdeActions.ACTION_PASTE).shortcutSet, prompt)
         prompt.text = from?.let(::openingMessage) ?: draft?.text.orEmpty()
         prompt.caretPosition = prompt.text.length
-        prompt.document.addDocumentListener(object : DocumentAdapter() {
-            override fun textChanged(e: DocumentEvent) {
-                edited = true
-                saveDraft()
-            }
-        })
+        message = MessageDraft(prompt, kept = from != null) { text ->
+            storeDraft(text.takeIf { it.isNotBlank() }?.let { Draft(it, choice.toLast(), base) })
+        }
         selectPreset(choice, draft?.base ?: choice.preset.base)
         ApplicationManager.getApplication().executeOnPooledThread { pruneImages(PASTED_IMAGES, Instant.now() - IMAGES_KEPT) }
     }
@@ -239,11 +232,8 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         revalidate()
         repaint()
         // With no message, another panel's draft stays: the empty editor area keeps its panel while a popup is used.
-        if (prompt.text.isNotBlank()) saveDraft()
+        if (prompt.text.isNotBlank()) message.flush()
     }
-
-    /** The message with the choices it is typed with, until it is sent or emptied. */
-    private fun saveDraft() = if (!edited) Unit else storeDraft(prompt.text.takeIf { it.isNotBlank() }?.let { Draft(it, choice.toLast(), base) })
 
     private fun choicesOf(repo: Repo) = baseChoices(repo.git.branches, repo.git.default, recentBases(repo.git.mainRoot))
 
@@ -307,7 +297,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         // Taken from the screen: [started] may close the popup holding the button, and the base popup of a worktree
         // started before its branches are read opens here.
         val where = RelativePoint.fromScreen(RelativePoint(send, Point(0, send.height)).screenPoint)
-        prompt.text = ""
+        message.set("")
         started()
         startPreset(project, choice.toPreset(base), where, text, branch)
     }

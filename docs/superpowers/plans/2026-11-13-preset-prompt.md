@@ -128,7 +128,7 @@
 - Modify: `src/main/kotlin/dev/myair/prompt/README.md`
 
 - [x] **Step 1: Update docs**: `Preset` gains the first message and the composer option; `PromptPanel` gains the project chip (open, then recent projects) and the opening configuration with the message rules and the draft rule.
-- [ ] **Step 2: Sandbox walk** (not done: needs the user) (`env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daemon runIde`): create "Review" (`/code-review`, askMore, own button) and "Quick" (`/help`, no askMore); click Quick → session starts with `/help`; click Review → composer with `/code-review `, type `7506`, Enter → session's first message `/code-review 7506`; with a draft stored, click Review and close without typing → the draft is back in the next composer; in the composer switch Review → Default with `/code-review ` untouched → empty; pick another project → branches change, session starts there; set the last project to a deleted folder → the start reports it missing.
+- [ ] **Step 2: Sandbox walk** (not done: needs the user) (`env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daemon runIde`): create "Review" (`/code-review`, askMore, own button) and "Quick" (`/help`, no askMore); click Quick → session starts with `/help`; click Review → composer with `/code-review `, type `7506`, Enter → session's first message `/code-review 7506`; with a draft stored, click Review and close without typing, again switching the chip to Default, again pressing Enter without typing → each time the draft is back in the next composer; in the composer switch Review → Default with `/code-review ` untouched → empty; pick another project → branches change, session starts there; set the last project to a deleted folder → the start reports it missing.
 - [x] **Step 3: Run** `./gradlew test buildPlugin` (full, not filtered) — BUILD SUCCESSFUL, then `my_air_spec_check` with this plan's absolute path if available.
 - [x] **Step 4: Commit** `"Document configuration prompts and the composer's project chip"`, trailers `Plan-Task: 5/5`, `Plan: ...`.
 
@@ -141,7 +141,7 @@
 | R3 | 4 | commit `8e976c6`; not done: sandbox walk |
 | R4 | 4, 5 | test `PromptChoicesTest` › `opening message of a configuration`; commit `8e976c6`; not done: sandbox walk |
 | R5 | 2, 4 | test `PromptChoicesTest` › `switch replaces an empty or untouched message`; test `PromptChoicesTest` › `switch keeps edited text`; commit `8e976c6` |
-| R6 | 4, 5 | commit `8e976c6`; not done: sandbox walk |
+| R6 | 4, 5 | test `MessageDraftTest` › `text set from code leaves the draft of a panel opened from a configuration alone`; test `MessageDraftTest` › `the user's edit saves, and every change after it`; not done: sandbox walk |
 | R7 | 2, 4 | test `PromptChoicesTest` › `project list has no repeats`; commit `8e976c6` |
 | R8 | 4, 5 | commit `8e976c6`; not done: sandbox walk |
 | R9 | 2, 4 | test `PromptChoicesTest` › `the project is a choice like the model`; commit `8e976c6` |
