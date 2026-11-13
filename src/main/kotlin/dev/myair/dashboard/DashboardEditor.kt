@@ -49,7 +49,9 @@ class DashboardEditorProvider : FileEditorProvider, DumbAware {
 class DashboardEditor(private val project: Project, private val file: DashboardVirtualFile) : UserDataHolderBase(), FileEditor {
     private val service = ClaudeSessionsService.getInstance()
     private val facts = GitFacts()
-    private var git: Map<String, Result<SessionGit>> = emptyMap()
+    // The landed facts with the session each was read for: a session that wrote on since counts as not read (R15).
+    private var git: Map<String, Pair<ClaudeSession, Result<SessionGit>>> = emptyMap()
+    private var inFlight: List<ClaudeSession>? = null
     private var finishedOpen = false
     private val content = JPanel().apply {
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -61,8 +63,10 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
         AppExecutorUtil.createBoundedApplicationPoolExecutor("Sessions dashboard git", 1),
         { ApplicationManager.getApplication().invokeLater(it) { project.isDisposed } },
         facts::read,
-    ) { _, result ->
-        git = result.getOrElse { e -> throw IllegalStateException("dashboard git facts failed", e) }
+    ) { asked, result ->
+        if (inFlight == asked) inFlight = null
+        val facts = result.getOrElse { e -> throw IllegalStateException("dashboard git facts failed", e) }
+        git = asked.filter { it.id in facts }.associate { it.id to (it to facts.getValue(it.id)) }
         rebuild()
     }
 
@@ -74,11 +78,21 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
     private fun update() {
         val board = model()
         val asked = board.unfinished.flatMap { it.rows } + board.finished
-        reads.request(asked.map { it.session })
+        val sessions = asked.map { it.session }
+        // A read of the same sessions still under way answers this change too; queueing another would only delay it.
+        if (sessions != inFlight) {
+            inFlight = sessions
+            reads.request(sessions)
+        }
         rebuild(board)
     }
 
-    private fun model() = dashboardOf(service.listed, service.live, service.pins.settled, service.unread, service.folders, git, Instant.now())
+    private fun model(): Dashboard {
+        val listed = service.listed
+        val current = listed.associateBy { it.id }
+        val fresh = git.filterValues { (read, _) -> current[read.id]?.let { it.lastMessage == read.lastMessage && it.changedFiles == read.changedFiles } == true }
+        return dashboardOf(listed, service.live, service.pins.settled, service.unread, service.folders, fresh.mapValues { it.value.second }, Instant.now())
+    }
 
     private fun rebuild(board: Dashboard = model()) {
         val now = Instant.now()

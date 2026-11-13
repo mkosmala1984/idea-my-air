@@ -166,7 +166,9 @@ object Git {
     fun branchFate(root: Path, branch: String): BranchFate? {
         val ref = "refs/heads/$branch"
         if (!isCommit(root, ref)) return null
-        val base = baseFrom(root, storedBase(root, branch))
+        // A base that cannot be told (no default branch, a stored base since pruned) leaves the branch without a fate, as a
+        // missing ref does, rather than failing the facts of every session of the work tree.
+        val base = runCatching { baseFrom(root, storedBase(root, branch)) }.getOrNull()?.takeIf { isCommit(root, it) } ?: return null
         val upstream = run(root, "for-each-ref", "--format=%(upstream:short)", ref).trim().ifEmpty { null }?.takeIf { isCommit(root, it) }
         if (base == branch || base == upstream) return null
         val tip = run(root, "rev-parse", "$ref^{commit}").trim()
@@ -174,16 +176,18 @@ object Git {
         return BranchFate(unpushed, merged(root, tip, base))
     }
 
-    /** The first merge of [base]'s first-parent history whose second parent holds [tip] and whose first does not. */
+    /**
+     * The merge of [base]'s first-parent history whose second parent holds [tip] and whose first does not: the oldest
+     * first-parent merge descending from [tip], checked, so a busy base costs one walk rather than a process per merge.
+     */
     private fun merged(root: Path, tip: String, base: String): BranchFate.Merged? {
         if (!isAncestor(root, tip, base)) return null
-        val merges = run(root, "--no-optional-locks", "log", "--first-parent", "--merges", "--format=%H %P%x1f%s", base, "^$tip")
-        for (line in merges.lines().filter { it.isNotEmpty() }) {
-            val (shas, subject) = line.split('\u001f', limit = 2)
-            val (sha, first, second) = shas.split(' ')
-            if (isAncestor(root, tip, second) && !isAncestor(root, tip, first)) return BranchFate.Merged(sha, PULL_REQUEST.find(subject)?.groupValues?.get(1)?.toInt())
-        }
-        return null
+        val sha = run(root, "--no-optional-locks", "rev-list", "--first-parent", "--merges", "--ancestry-path", "--reverse", "$tip..$base")
+            .lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: return null
+        val (parents, subject) = run(root, "--no-optional-locks", "log", "-1", "--format=%P%x1f%s", sha).trim().split('\u001f', limit = 2)
+        val (first, second) = parents.split(' ')
+        if (!isAncestor(root, tip, second) || isAncestor(root, tip, first)) return null
+        return BranchFate.Merged(sha, PULL_REQUEST.find(subject)?.groupValues?.get(1)?.toInt())
     }
 
     /** `merge-base --is-ancestor` answers by exit code alone: 0 yes, 1 no, anything else is a failure. */
