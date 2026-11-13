@@ -1,6 +1,7 @@
 package dev.myair.toolwindow
 
 import dev.myair.actions.Git
+import dev.myair.claude.BackgroundTask
 import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
@@ -56,6 +57,16 @@ class BriefTaskRow(val session: ClaudeSession, val index: Int, val task: BriefTa
 /** The group of the files [session] wrote that are not outputs ([OUTPUT_EXTENSIONS]); the outputs follow it directly. */
 class FilesGroup(val session: ClaudeSession, val count: Int) {
     override fun toString() = "files ${session.id}"
+}
+
+/** The group of the agents [session] sent to the background ([BackgroundTask.Kind.AGENT]), [running] of them without an end. */
+class AgentsGroup(val session: ClaudeSession, val count: Int, val running: Int) {
+    override fun toString() = "agents ${session.id}"
+}
+
+/** A background agent of [session], in its [AgentsGroup]. */
+class AgentRow(val session: ClaudeSession, val task: BackgroundTask) {
+    override fun toString() = "agent ${session.id} ${task.id}"
 }
 
 /** A milestone of [folder]'s plan; toString() is the TreeState id. */
@@ -171,7 +182,7 @@ data class FolderSummary(val sessions: Int, val urgent: Urgency?)
  * as shown, a session under both its folder and a worktree once; null for a session and its children.
  */
 fun folderSummary(node: DefaultMutableTreeNode, urgency: (ClaudeSession) -> Urgency?): FolderSummary? = when (node.userObject) {
-    is ClaudeSession, is WorkDirRow, is AddedDir, is BranchRow, is BriefGroup, is BriefGoal, is BriefTaskRow, is FilesGroup, is ChangedFile -> null
+    is ClaudeSession, is WorkDirRow, is AddedDir, is BranchRow, is BriefGroup, is BriefGoal, is BriefTaskRow, is AgentsGroup, is AgentRow, is FilesGroup, is ChangedFile -> null
     is Folder, is Path, RecentSessions, UnfiledSessions, is MilestoneRow, is PlanTaskRow, is NoTask, is WorktreesGroup, is WorktreeRow -> {
         val sessions = groupSessions(node).distinctBy { it.id }
         FolderSummary(sessions.size, sessions.mapNotNull(urgency).minOrNull())
@@ -320,10 +331,13 @@ private fun sessionNode(session: ClaudeSession, branchOf: (Path) -> String?): De
     val brief = session.brief?.let {
         node(BriefGroup(session), listOfNotNull(it.goal?.let { goal -> node(BriefGoal(session, goal)) }) + it.tasks.mapIndexed { i, task -> node(BriefTaskRow(session, i, task)) })
     }
+    val agents = session.background.filter { it.kind == BackgroundTask.Kind.AGENT }.sortedWith(BACKGROUND_ORDER).takeIf { it.isNotEmpty() }?.let {
+        node(AgentsGroup(session, it.size, it.count { task -> task.end == null }), it.map { task -> node(AgentRow(session, task)) })
+    }
     return node(
         session,
         listOf(node(WorkDirRow(session))) + branch(session.workDir) + session.addedDirs.flatMap { listOf(node(AddedDir(session, it))) + branch(it) } +
-            listOfNotNull(brief) +
+            listOfNotNull(brief, agents) +
             listOfNotNull(files.takeIf { it.isNotEmpty() }?.let { node(FilesGroup(session, it.size), it.map { f -> node(ChangedFile(f, session.cwd)) }) }) +
             outputs.map { node(ChangedFile(it, session.cwd)) },
     )

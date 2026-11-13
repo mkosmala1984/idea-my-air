@@ -65,7 +65,7 @@ fun contextOf(session: ClaudeSession, cwdExists: Boolean, live: Boolean, read: G
         },
         session.brief, session.changedFiles.filterNot { git != null && it.startsWith(git.root) },
         session.changedFiles.filter { it.extension.lowercase() in OUTPUT_EXTENSIONS }.reversed(), session.artifacts,
-        session.background.sortedWith(compareBy(nullsFirst(reverseOrder())) { it.end?.time }),
+        session.background.sortedWith(BACKGROUND_ORDER),
         live, cwdExists, git, read?.state?.exceptionOrNull()?.let { it.message.orEmpty() }, session.mcpServers, session.skills,
     )
 }
@@ -111,6 +111,9 @@ private val MODEL_ID = Regex("""claude-([a-z]+)((?:-\d{1,2})+)(?:-\d{8})?""")
 fun modelName(id: String): String = MODEL_ID.matchEntire(id)?.let { m ->
     m.groupValues[1].replaceFirstChar { it.uppercase() } + " " + m.groupValues[2].drop(1).replace('-', '.')
 } ?: id
+
+/** Background tasks as the pane and the tree list them: the unended ones first, in the order launched, then the ended ones, latest first. */
+val BACKGROUND_ORDER: Comparator<BackgroundTask> = compareBy(nullsFirst(reverseOrder())) { it.end?.time }
 
 private val EXIT_CODE = Regex("exit code (\\d+)")
 private val CLOCK = DateTimeFormatter.ofPattern("HH:mm")

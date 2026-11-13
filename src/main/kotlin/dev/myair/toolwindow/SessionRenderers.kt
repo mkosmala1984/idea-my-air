@@ -214,6 +214,20 @@ class SessionRenderer(
                 briefCount(item.session.brief)?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
             }
             is BriefGoal -> append(item.text)
+            is AgentsGroup -> {
+                icon = d.grow(AllIcons.Actions.Execute)
+                append("Agents")
+                append("  ${item.count}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                // A task without an end runs only while its session's process does: the transcript never records it dying with it.
+                if (item.running > 0 && liveOf(item.session) != null) append("  ${item.running} running", SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
+            }
+            is AgentRow -> {
+                val running = item.task.end == null && liveOf(item.session) != null
+                icon = d.grow(AllIcons.Actions.Execute)
+                append(item.task.description, if (running) SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES else SimpleTextAttributes.REGULAR_ATTRIBUTES)
+                append("  ${backgroundState(item.task, liveOf(item.session) != null, ZoneId.systemDefault())}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                toolTipText = item.task.command?.let { "<html>${StringUtil.escapeXmlEntities(it.take(1000)).replace("\n", "<br>")}</html>" }
+            }
             is FilesGroup -> {
                 icon = d.grow(AllIcons.Nodes.Folder)
                 append("Files")

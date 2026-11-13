@@ -648,6 +648,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         when {
             session != null -> ClaudeSessionOpener.open(project, session)
             item is ChangedFile -> openFile(project, item.path)
+            item is AgentRow -> item.task.output?.let { openFile(project, it) }
             else -> if (tree.isExpanded(path)) tree.collapsePath(path) else tree.expandPath(path)
         }
         return true

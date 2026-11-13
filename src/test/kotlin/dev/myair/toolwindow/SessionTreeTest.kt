@@ -1,6 +1,7 @@
 package dev.myair.toolwindow
 
 import dev.myair.actions.Git
+import dev.myair.claude.BackgroundTask
 import dev.myair.claude.Brief
 import dev.myair.claude.BriefTask
 import dev.myair.claude.ClaudeSession
@@ -62,6 +63,29 @@ class SessionTreeTest {
                 "s2(workdir s2, brief s2(task s2 0)), s3(workdir s3))",
             shape(projectsTree(listOf(briefed, goalless, bare), NO_BRANCH), sessionChildren = true),
         )
+    }
+
+    @Test
+    fun `a session's background agents follow its brief as a group, the unended ones first in launch order, then the ended ones latest first`() {
+        fun task(id: String, kind: BackgroundTask.Kind, started: Long, ended: Long?) = BackgroundTask(
+            id, kind, "task $id", Instant.ofEpochMilli(started),
+            end = ended?.let { BackgroundTask.End(Instant.ofEpochMilli(it), BackgroundTask.Status.COMPLETED, "") },
+        )
+        val session = session("s1", "/rtm", 1).copy(
+            brief = Brief("Migrate", emptyList()),
+            background = listOf(
+                task("a1", BackgroundTask.Kind.AGENT, 1, 5), task("sh", BackgroundTask.Kind.SHELL, 2, null), task("a2", BackgroundTask.Kind.AGENT, 3, null),
+                task("a3", BackgroundTask.Kind.AGENT, 4, 9), task("wf", BackgroundTask.Kind.WORKFLOW, 5, null), task("a4", BackgroundTask.Kind.AGENT, 6, null),
+            ),
+        )
+        val root = projectsTree(listOf(session, session("s2", "/rtm", 0)), NO_BRANCH)
+        assertEquals(
+            "${Path.of("/rtm")}(s1(workdir s1, brief s1(goal s1), agents s1(agent s1 a2, agent s1 a4, agent s1 a3, agent s1 a1)), s2(workdir s2))",
+            shape(root, sessionChildren = true),
+        )
+        val group = root.breadthFirstEnumeration().toList().map { it as DefaultMutableTreeNode }.single { it.userObject is AgentsGroup }
+        assertEquals(4 to 2, (group.userObject as AgentsGroup).let { it.count to it.running })
+        assertNull(folderSummary(group) { null })
     }
 
     @Test
