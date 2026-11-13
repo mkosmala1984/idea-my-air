@@ -163,7 +163,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 mcpServers = mcpServers(env.mcpTools),
                 // A transcript without an environment snapshot comes from a `claude` that wrote none: it works where it started.
                 workDir = env.workDir?.let(Path::of) ?: cwd, startBranch = c.startBranch, continuedIn = c.continuedIn,
-                lastBranch = messages.branch, asks = messages.asks,
+                lastBranch = messages.branch, asks = messages.asks, transcript = file,
             )
         }
 
@@ -546,7 +546,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         private val COMMAND_ARGS = Regex("<command-args>([\\s\\S]*?)</command-args>")
 
         /** Plain text the human typed, or a skill they ran as they typed it; tool results and harness-injected `<...>` blocks are not prompts. */
-        private fun promptText(o: JsonObject): String? {
+        internal fun promptText(o: JsonObject): String? {
             val content = o.getAsJsonObject("message")["content"]
             val text = if (content.isJsonPrimitive) content.asString
             else content.asJsonArray.map { it.asJsonObject }.firstOrNull { it["type"].asString == "text" }?.get("text")?.asString

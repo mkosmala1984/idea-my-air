@@ -53,9 +53,9 @@ class ClaudeSessionScannerTest {
         val scanner = ClaudeSessionScanner(dir)
         assertEquals("Old", scanner.scan().single().title)
         original.appendText("""{"type":"custom-title","customTitle":"Longer","sessionId":"s1"}""" + "\n")
-        assertEquals("Longer", scanner.scan().single().title)
+        assertEquals("Longer" to original, scanner.scan().single().let { it.title to it.transcript })
         copy.appendText(user("\"later\"", at = "2026-10-24T11:00:00Z") + "\n" + """{"type":"custom-title","customTitle":"Later","sessionId":"s1"}""" + "\n")
-        assertEquals("Later" to Instant.parse("2026-10-24T11:00:00Z"), scanner.scan().single().let { it.title to it.lastMessage })
+        assertEquals(Triple("Later", Instant.parse("2026-10-24T11:00:00Z"), copy), scanner.scan().single().let { Triple(it.title, it.lastMessage, it.transcript) })
     }
 
     @Test

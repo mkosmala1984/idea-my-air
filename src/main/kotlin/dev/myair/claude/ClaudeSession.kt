@@ -27,6 +27,8 @@ data class ClaudeSession(
     val background: List<BackgroundTask> = emptyList(), val skills: List<String> = emptyList(), val mcpServers: List<String> = emptyList(),
     val workDir: Path = cwd, val startBranch: String? = null, val continuedIn: String? = null,
     val lastBranch: String? = null, val asks: Boolean = false,
+    /** The `.jsonl` this session was read from (the copy that counts); null for a session not scanned. */
+    val transcript: Path? = null,
 ) {
     /**
      * Case-insensitive substring match on the title, the cwd, [startBranch] or [branch], the branch checked out where it
