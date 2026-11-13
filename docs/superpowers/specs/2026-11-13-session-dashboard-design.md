@@ -11,8 +11,8 @@
 
 ## Requirements
 
-- **R1** Tools › Open Sessions Dashboard and a button on the Claude Sessions toolbar open the dashboard tab; a second invocation in the same window focuses the open tab instead of opening another.
-- **R2** The dashboard tab is restored after an IDE restart, never listed in Recent Files.
+- **R1** Tools › Open Sessions Dashboard and a button on the Claude Sessions toolbar open the dashboard as an editor tab; the IDE holds at most one dashboard tab across all its windows: when one is open in any window, the action brings that window to the front and selects the tab instead of opening another.
+- **R2** The dashboard tab is restored after an IDE restart, never listed in Recent Files; when the restored windows would hold more than one dashboard tab, only the first one restored stays and the others are closed.
 - **R3** Settled sessions (`Pins.settled`) appear in no section; settling a session from any place removes it from the dashboard at the next service change.
 - **R4** Now lists exactly the sessions that need input, are working (registry `busy`/`shell`) or are unread, in that order and newest first within each, and each session appears in Now at most once.
 - **R5** A session listed in Now appears in no other section.
@@ -107,7 +107,7 @@ A branch with new commits after its merge has a tip that is no ancestor of any m
 
 ### Opening and restoring
 
-A `DashboardVirtualFile` under a `DashboardFileSystem` (`myair-dashboard://sessions`), one per IDE held by an application service, as `PlanFiles`/`PlanFileSystem` do: the platform saves it with the open tabs and resolves it on startup, `EditorHistoryManager.OptionallyIncluded` keeps it out of Recent Files. A `FileEditorProvider` gives it the dashboard editor and hides the text editor.
+A `DashboardVirtualFile` under a `DashboardFileSystem` (`myair-dashboard://sessions`), one per IDE held by an application service, as `PlanFiles`/`PlanFileSystem` do: the platform saves it with the open tabs and resolves it on startup, `EditorHistoryManager.OptionallyIncluded` keeps it out of Recent Files. A `FileEditorProvider` gives it the dashboard editor and hides the text editor. The one file per IDE makes the single instance: the action looks for it among the open files of every project window (`FileEditorManager` of each open project) and focuses that window and tab when found, else opens it in the current window. Each IDE process (another IDE instance running My Air) has its own dashboard; cross-IDE focusing is out of scope.
 
 ## Data and code
 
