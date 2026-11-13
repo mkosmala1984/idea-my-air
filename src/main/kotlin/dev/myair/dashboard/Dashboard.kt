@@ -23,6 +23,8 @@ sealed interface Chip {
     data class Merged(val pr: Int?) : Chip
     data object Pending : Chip
     data class GitError(val message: String) : Chip
+    data class Verdict(val verdict: dev.myair.dashboard.Verdict) : Chip
+    data class AnalysisFailed(val message: String) : Chip
 }
 
 fun chipText(chip: Chip): String = when (chip) {
@@ -34,9 +36,18 @@ fun chipText(chip: Chip): String = when (chip) {
     is Chip.Merged -> chip.pr?.let { "PR #$it" } ?: "merged"
     Chip.Pending -> "…"
     is Chip.GitError -> "git error"
+    is Chip.Verdict -> chip.verdict.label
+    is Chip.AnalysisFailed -> "analysis failed"
 }
 
-data class Row(val session: ClaudeSession, val chips: List<Chip>)
+/** What Haiku said about a row's session: nothing current, its verdict and what is left, or why it could not tell. */
+sealed interface RowAnalysis {
+    data object None : RowAnalysis
+    data class Current(val verdict: Verdict, val left: String) : RowAnalysis
+    data class Failed(val message: String) : RowAnalysis
+}
+
+data class Row(val session: ClaudeSession, val chips: List<Chip>, val analysis: RowAnalysis = RowAnalysis.None)
 
 /** A group of Unfinished: a plan folder, a folder at depth one or two, or a project. */
 data class Area(val name: String, val rows: List<Row>)
@@ -49,10 +60,13 @@ data class Dashboard(val now: List<ClaudeSession>, val unfinished: List<Area>, v
 
 private val RECENT = Duration.ofDays(2)
 
-/** [git]: per session id; absent means not read yet, a failure means git could not be read. [sessions] arrive newest first. */
+/**
+ * [git]: per session id; absent means not read yet, a failure means git could not be read. [analyses] count only while
+ * the session has no newer message; [failures] are the messages of the last analyses that failed. [sessions] arrive newest first.
+ */
 fun dashboardOf(
     sessions: List<ClaudeSession>, live: Map<String, LiveSession>, settled: Set<String>, unread: Set<String>,
-    folders: SessionFolders, git: Map<String, Result<SessionGit>>, now: Instant,
+    folders: SessionFolders, git: Map<String, Result<SessionGit>>, analyses: Map<String, Analysis>, failures: Map<String, String>, now: Instant,
 ): Dashboard {
     val shown = sessions.filter { it.id !in settled }
     fun nowRank(s: ClaudeSession) = when {
@@ -62,8 +76,16 @@ fun dashboardOf(
         else -> null
     }
     val current = shown.filter { nowRank(it) != null }.sortedBy { nowRank(it) }
-    val rows = (shown - current.toSet()).map { Row(it, chips(it, folders, git[it.id])) }
-    val (open, done) = rows.partition { row -> row.chips.any { it !is Chip.Merged } }
+    val rows = (shown - current.toSet()).map { session ->
+        val chips = chips(session, folders, git[session.id])
+        val analysis = analyses[session.id]?.takeIf { it.lastMessage == session.lastMessage }
+        when {
+            analysis != null -> Row(session, chips + Chip.Verdict(analysis.verdict), RowAnalysis.Current(analysis.verdict, analysis.left))
+            session.id in failures -> failures.getValue(session.id).let { Row(session, chips + Chip.AnalysisFailed(it), RowAnalysis.Failed(it)) }
+            else -> Row(session, chips)
+        }
+    }
+    val (open, done) = rows.partition { row -> row.chips.any { it !is Chip.Merged && it !is Chip.Verdict && it !is Chip.AnalysisFailed } }
     val areas = open.groupBy { areaOf(it.session, folders) }.map { (name, rows) -> Area(name, rows) }
     val recent = shown.count { it.lastMessage > now - RECENT }
     return Dashboard(current, areas, done, recent, shown.size - recent)
@@ -90,6 +112,14 @@ private fun chips(session: ClaudeSession, folders: SessionFolders, git: Result<S
     }
     if (merged != null) chips += Chip.Merged(merged.pr)
     return chips
+}
+
+/** The sessions an analysis run takes: listed out of Now, not merged, git read, no current analysis, last message within [days] (null: any). */
+fun analysisCandidates(board: Dashboard, days: Int?, now: Instant): List<ClaudeSession> {
+    val since = days?.let { now - Duration.ofDays(it.toLong()) }
+    return (board.unfinished.flatMap { it.rows } + board.finished)
+        .filter { row -> row.chips.none { it is Chip.Merged || it is Chip.Pending } && row.analysis !is RowAnalysis.Current }
+        .map { it.session }.filter { since == null || it.lastMessage > since }.sortedByDescending { it.lastMessage }
 }
 
 private val OPEN_TASK = setOf(PlanStatus.IN_PROGRESS, PlanStatus.WAITING, PlanStatus.BLOCKED)

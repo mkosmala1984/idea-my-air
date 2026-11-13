@@ -91,7 +91,7 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
         val listed = service.listed
         val current = listed.associateBy { it.id }
         val fresh = git.filterValues { (read, _) -> current[read.id]?.let { it.lastMessage == read.lastMessage && it.changedFiles == read.changedFiles } == true }
-        return dashboardOf(listed, service.live, service.pins.settled, service.unread, service.folders, fresh.mapValues { it.value.second }, Instant.now())
+        return dashboardOf(listed, service.live, service.pins.settled, service.unread, service.folders, fresh.mapValues { it.value.second }, emptyMap(), emptyMap(), Instant.now())
     }
 
     private fun rebuild(board: Dashboard = model()) {

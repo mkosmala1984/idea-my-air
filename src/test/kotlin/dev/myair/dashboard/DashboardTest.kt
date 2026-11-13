@@ -39,7 +39,7 @@ class DashboardTest {
             "mergedDirty" to Result.success(SessionGit(true, merged)),
         )
         val live = mapOf("working" to live(SessionStatus.WORKING), "waiting" to live(SessionStatus.NEEDS_INPUT))
-        val board = dashboardOf(sessions, live, setOf("settled"), emptySet(), SessionFolders(), git, now)
+        val board = dashboardOf(sessions, live, setOf("settled"), emptySet(), SessionFolders(), git, emptyMap(), emptyMap(), now)
 
         assertEquals(listOf("waiting", "working"), board.now.map { it.id })
         val unfinished = board.unfinished.single()
@@ -53,5 +53,47 @@ class DashboardTest {
         )
         assertEquals(listOf("merged", "done"), board.finished.map { it.session.id })
         assertEquals(2 to 6, board.recent to board.older)
+    }
+
+    private fun board(sessions: List<ClaudeSession>, git: Map<String, Result<SessionGit>>, analyses: Map<String, Analysis> = emptyMap(), failures: Map<String, String> = emptyMap()) =
+        dashboardOf(sessions, emptyMap(), emptySet(), emptySet(), SessionFolders(), git, analyses, failures, now)
+
+    @Test
+    fun `an analysis of an older last message is not shown`() {
+        val s = session("s", 3, asks = true)
+        val stale = Analysis(s.lastMessage - Duration.ofHours(1), Verdict.OPEN, "tests", now)
+        val row = board(listOf(s), mapOf("s" to clean), mapOf("s" to stale)).unfinished.single().rows.single()
+        assertEquals(RowAnalysis.None, row.analysis)
+        assertEquals(listOf("asks"), row.chips.map(::chipText))
+    }
+
+    @Test
+    fun `a current analysis adds its verdict chip and does not keep a session unfinished`() {
+        val s = session("s", 3)
+        val board = board(listOf(s), mapOf("s" to clean), mapOf("s" to Analysis(s.lastMessage, Verdict.OPEN, "tests", now)))
+        val row = board.finished.single()
+        assertEquals(RowAnalysis.Current(Verdict.OPEN, "tests"), row.analysis)
+        assertEquals(listOf("open"), row.chips.map(::chipText))
+    }
+
+    @Test
+    fun `a failed analysis shows until the next result`() {
+        val s = session("s", 3)
+        val row = board(listOf(s), mapOf("s" to clean), failures = mapOf("s" to "Not logged in")).finished.single()
+        assertEquals(RowAnalysis.Failed("Not logged in"), row.analysis)
+        assertEquals(listOf("analysis failed"), row.chips.map(::chipText))
+    }
+
+    @Test
+    fun `candidates leave out merged, pending, current and too old sessions`() {
+        val current = session("current", 3, asks = true)
+        val sessions = listOf(current, session("fresh", 3, asks = true), session("old", 20), session("merged", 2), session("pending", 1), session("failed", 4))
+        val git = mapOf(
+            "current" to clean, "fresh" to clean, "old" to clean, "failed" to clean,
+            "merged" to Result.success(SessionGit(false, BranchFate(0, BranchFate.Merged("abc", 1)))),
+        )
+        val b = board(sessions, git, mapOf("current" to Analysis(current.lastMessage, Verdict.OPEN, "x", now)), mapOf("failed" to "boom"))
+        assertEquals(listOf("fresh", "failed"), analysisCandidates(b, 14, now).map { it.id })
+        assertEquals(listOf("fresh", "failed", "old"), analysisCandidates(b, null, now).map { it.id })
     }
 }
