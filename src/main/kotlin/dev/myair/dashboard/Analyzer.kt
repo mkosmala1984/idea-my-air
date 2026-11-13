@@ -1,16 +1,15 @@
 package dev.myair.dashboard
 
 import com.google.gson.JsonParser
+import dev.myair.actions.runClaude
 import dev.myair.claude.ClaudeSession
 import dev.myair.editor.claudeExecutable
 import dev.myair.store.Homes
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executor
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createDirectories
@@ -53,25 +52,10 @@ fun parseAnalysis(stdout: String, lastMessage: Instant, now: Instant): Analysis 
     return Analysis(lastMessage, verdict, left.trim(), now)
 }
 
-/** Runs [claude] in `~/.my-air/analysis`; a timeout, an interrupt or a non-zero exit kills it with its descendants. */
+/** Runs [claude] in `~/.my-air/analysis` ([runClaude]). */
 fun analyze(claude: Path, digest: String, lastMessage: Instant, timeout: Duration = Duration.ofMinutes(2)): Analysis {
     val dir = Homes.myAir.resolve("analysis").createDirectories()
-    val process = ProcessBuilder(analysisArgs(claude)).directory(dir.toFile()).start()
-    try {
-        // Written apart from reading, so neither pipe fills while the other waits; claude -p answers once stdin ends.
-        val stdin = CompletableFuture.runAsync { process.outputStream.use { it.write(analysisPrompt(digest).toByteArray()) } }
-        val stderr = CompletableFuture.supplyAsync { process.errorStream.readAllBytes().toString(Charsets.UTF_8) }
-        val stdout = CompletableFuture.supplyAsync { process.inputStream.readAllBytes().toString(Charsets.UTF_8) }
-        check(process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) { "claude did not answer within $timeout" }
-        check(process.exitValue() == 0) { "claude -p failed (exit ${process.exitValue()}): ${stderr.get().trim()}" }
-        stdin.get()
-        return parseAnalysis(stdout.get(), lastMessage, Instant.now())
-    } finally {
-        if (process.isAlive) {
-            process.descendants().forEach { it.destroyForcibly() }
-            process.destroyForcibly()
-        }
-    }
+    return parseAnalysis(runClaude(analysisArgs(claude), dir, analysisPrompt(digest), timeout), lastMessage, Instant.now())
 }
 
 /** Reads the session's transcript, builds its digest and asks Haiku. */

@@ -2,8 +2,7 @@ package dev.myair.actions
 
 import dev.myair.editor.claudeExecutable
 import java.nio.file.Path
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
+import java.time.Duration
 
 private val TICKET_KEY = Regex("""\b[A-Z][A-Z0-9]+-\d+\b""")
 private val SLUG = Regex("[a-z0-9]+(-[a-z0-9]+)*")
@@ -38,15 +37,5 @@ fun suggestBranchName(dir: Path, text: String, jiraTools: List<String>): String 
     val claude = claudeExecutable()
     val args = listOf(claude.path, "-p", "--model", "haiku", "--no-session-persistence", "--output-format", "text") +
         (if (jiraTools.isEmpty()) emptyList() else listOf("--allowedTools") + jiraTools) + listOf("--", namingPrompt(text))
-    val process = ProcessBuilder(args).directory(dir.toFile()).start()
-    // claude -p reads a piped stdin to its end before it answers.
-    process.outputStream.close()
-    val stderr = CompletableFuture.supplyAsync { process.errorStream.readAllBytes().toString(Charsets.UTF_8) }
-    val stdout = CompletableFuture.supplyAsync { process.inputStream.readAllBytes().toString(Charsets.UTF_8) }
-    if (!process.waitFor(NAMING_MINUTES, TimeUnit.MINUTES)) {
-        process.destroyForcibly()
-        error("claude did not name the branch within $NAMING_MINUTES minutes")
-    }
-    check(process.exitValue() == 0) { "claude -p failed (exit ${process.exitValue()}):\n${stderr.get().trim()}" }
-    return branchName(ticketKey(text), stdout.get())
+    return branchName(ticketKey(text), runClaude(args, dir, "", Duration.ofMinutes(NAMING_MINUTES)))
 }

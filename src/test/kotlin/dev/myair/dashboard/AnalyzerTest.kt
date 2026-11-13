@@ -1,13 +1,16 @@
 package dev.myair.dashboard
 
 import dev.myair.claude.ClaudeSession
+import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
 import java.util.Collections
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -82,6 +85,26 @@ class AnalyzerTest {
         val failing = script("failing", "echo rate limited 1>&2\r\nexit /b 3")
         val e = assertFailsWith<IllegalStateException> { analyze(failing, "d", t) }
         assertTrue("rate limited" in e.message.orEmpty() && "3" in e.message.orEmpty(), e.message)
+    }
+
+    @Test
+    fun `a failing claude reports what it printed on stdout`() {
+        val failing = script("unauthorized", "echo " + envelope("null", isError = true, result = "Not logged in") + "\r\nexit /b 1")
+        val e = assertFailsWith<IllegalStateException> { analyze(failing, "d", t) }
+        assertTrue("Not logged in" in e.message.orEmpty(), e.message)
+    }
+
+    @Test
+    fun `claude is read and fed while the common pool is busy`() {
+        val release = CountDownLatch(1)
+        val busy = (1..ForkJoinPool.getCommonPoolParallelism()).map { CompletableFuture.runAsync { release.await() } }
+        try {
+            val reads = script("busy", "findstr \"^\" > nul\r\necho " + envelope("""{"verdict":"done","left":""}"""))
+            assertTimeoutPreemptively(Duration.ofSeconds(15)) { assertEquals(Verdict.DONE, analyze(reads, "d", t, Duration.ofSeconds(10)).verdict) }
+        } finally {
+            release.countDown()
+            busy.forEach { it.join() }
+        }
     }
 
     @Test
