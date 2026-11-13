@@ -34,14 +34,17 @@ class PresetsTest {
 
     @Test
     fun `survives a round trip through json, also without optional values`() {
-        val presets = listOf(full, Preset("Plain"), Preset("Ask", worktree = true))
+        val presets = listOf(full, Preset("Plain"), Preset("Ask", worktree = true), Preset("Rv", prompt = "/code-review\nthen wait", askMore = true))
         assertEquals(presets, parsePresets(presetsJson(presets)))
     }
 
     @Test
     fun `reads the file as written by hand, absent keys meaning not set`() {
-        val text = """{"presets": [{"name": "Fast", "model": "sonnet", "effort": "low"}, {"name": "Wt", "worktree": true, "base": "main"}]}"""
-        assertEquals(listOf(Preset("Fast", "sonnet", "low"), Preset("Wt", worktree = true, base = "main")), parsePresets(text))
+        val text = """{"presets": [{"name": "Fast", "model": "sonnet", "effort": "low"}, {"name": "Wt", "worktree": true, "base": "main"}, {"name": "Rv", "prompt": "/code-review", "askMore": true}]}"""
+        assertEquals(
+            listOf(Preset("Fast", "sonnet", "low"), Preset("Wt", worktree = true, base = "main"), Preset("Rv", prompt = "/code-review", askMore = true)),
+            parsePresets(text),
+        )
     }
 
     @Test
@@ -56,6 +59,8 @@ class PresetsTest {
             """{"presets": [{"name": " "}]}""",
             """{"presets": [{"name": "a", "addDirs": [""]}]}""",
             """{"presets": [{"name": "a"}, {"name": "a"}]}""",
+            """{"presets": [{"name": "a", "prompt": " "}]}""",
+            """{"presets": [{"name": "a", "askMore": "yes"}]}""",
         ).forEach { text -> assertThrows<Exception>(text) { parsePresets(text) } }
     }
 

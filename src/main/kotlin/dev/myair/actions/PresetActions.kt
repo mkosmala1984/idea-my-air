@@ -62,6 +62,8 @@ fun Preset.summary() = listOfNotNull(
     project ?: "the project's directory",
     if (!worktree) null else "worktree off ${base ?: "a branch picked at start"}",
     addDirs.takeIf { it.isNotEmpty() }?.joinToString(", ", "also ") { it },
+    prompt?.let { "starts with \"${it.lineSequence().first().take(40)}\"" },
+    "opens the composer".takeIf { askMore },
 ).joinToString("; ")
 
 class PresetAction(private val preset: Preset) : DumbAwareAction(preset.name, preset.summary(), AvatarIcon(16, 0.3, preset.name, preset.name, AvatarPalette)) {

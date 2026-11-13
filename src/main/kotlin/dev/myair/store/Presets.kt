@@ -21,6 +21,7 @@ val EFFORTS = listOf("low", "medium", "high", "xhigh", "max")
  * A way to start a new session. A null [model] or [effort] leaves its flag out, so `claude` takes its own setting; a
  * null [project] is the directory of the IDE project. [worktree]: start in a new worktree off [base], or off a branch
  * picked at start when [base] is null. [addDirs] go to `--add-dir`. [pinned] gives the preset its own toolbar button.
+ * [prompt] is the first message of its sessions; [askMore] opens the composer with it typed in, to add to it before the start.
  */
 data class Preset(
     val name: String,
@@ -31,10 +32,12 @@ data class Preset(
     val base: String? = null,
     val addDirs: List<String> = emptyList(),
     val pinned: Boolean = false,
+    val prompt: String? = null,
+    val askMore: Boolean = false,
 ) {
     init {
         require(name.isNotBlank()) { "preset name is blank" }
-        require(listOfNotNull(model, project, base).plus(addDirs).none { it.isBlank() }) { "preset $name has a blank value" }
+        require(listOfNotNull(model, project, base, prompt).plus(addDirs).none { it.isBlank() }) { "preset $name has a blank value" }
         require(effort == null || effort in EFFORTS) { "effort of preset $name is $effort, not one of $EFFORTS" }
         require(worktree || base == null) { "preset $name has a base branch without a worktree" }
     }
@@ -103,11 +106,13 @@ fun parsePresets(text: String): List<Preset> {
             preset.string("base"),
             preset["addDirs"]?.asJsonArray?.map { it.string() }.orEmpty(),
             preset.boolean("pinned"),
+            preset.string("prompt"),
+            preset.boolean("askMore"),
         )
     }.also(::checkPresets)
 }
 
-private val PRESET_KEYS = setOf("name", "model", "effort", "project", "worktree", "base", "addDirs", "pinned")
+private val PRESET_KEYS = setOf("name", "model", "effort", "project", "worktree", "base", "addDirs", "pinned", "prompt", "askMore")
 
 private fun JsonObject.string(key: String) = get(key)?.string()
 
