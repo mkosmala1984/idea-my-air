@@ -462,4 +462,25 @@ class GitTest {
         git(repo, "worktree", "add", "--relative-paths", "-b", "rel", dir.resolve("rel").toString())
         assertEquals(listOf(dir.resolve("rel").toRealPath()), gitWorktrees(repo).map { it.path.toRealPath() })
     }
+
+    @Test
+    fun `a branch merged by a pull request merge is merged with its number, and a commit after the merge is new work`() {
+        val repo = init("fate")
+        git(repo, "switch", "-c", "feature")
+        repo.resolve("a.txt").writeText("a")
+        git(repo, "add", "a.txt")
+        git(repo, "commit", "-m", "a")
+        git(repo, "switch", "main")
+        git(repo, "merge", "--no-ff", "-m", "Merged in feature (pull request #12)", "feature")
+        val merge = git(repo, "rev-parse", "HEAD")
+        assertEquals(BranchFate(0, BranchFate.Merged(merge, 12)), Git.branchFate(repo, "feature"))
+        assertEquals(null, Git.branchFate(repo, "main"))
+        assertEquals(null, Git.branchFate(repo, "nope"))
+        git(repo, "switch", "feature")
+        repo.resolve("b.txt").writeText("b")
+        assertEquals(setOf(repo.resolve("b.txt").normalize()), Git.uncommitted(repo))
+        git(repo, "add", "b.txt")
+        git(repo, "commit", "-m", "b")
+        assertEquals(BranchFate(1, null), Git.branchFate(repo, "feature"))
+    }
 }

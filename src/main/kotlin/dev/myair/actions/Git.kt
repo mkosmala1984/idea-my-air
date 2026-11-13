@@ -8,6 +8,12 @@ import kotlin.io.path.isRegularFile
 import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 
+/** What became of a branch: commits its upstream (else its base) lacks, and the merge into its base that holds its tip. */
+data class BranchFate(val unpushed: Int, val merged: Merged?) {
+    /** [sha]: the merge commit; [pr]: the number its subject names as `(pull request #<n>)`. */
+    data class Merged(val sha: String, val pr: Int?)
+}
+
 /** A git repository as the worktree popup needs it. */
 data class GitRepo(val mainRoot: Path, val branches: List<String>, val default: String)
 
@@ -152,6 +158,48 @@ object Git {
 
     /** [path], relative to [root], as it was in [commit]. */
     fun show(root: Path, commit: String, path: String): ByteArray = bytes(root, "show", "$commit:$path")
+
+    /**
+     * What became of [branch] in the repository of [root]; null when `refs/heads/<branch>` is missing or the branch is
+     * its own base (the base is the branch or its upstream), where neither question makes sense.
+     */
+    fun branchFate(root: Path, branch: String): BranchFate? {
+        val ref = "refs/heads/$branch"
+        if (!isCommit(root, ref)) return null
+        val base = baseFrom(root, storedBase(root, branch))
+        val upstream = run(root, "for-each-ref", "--format=%(upstream:short)", ref).trim().ifEmpty { null }?.takeIf { isCommit(root, it) }
+        if (base == branch || base == upstream) return null
+        val tip = run(root, "rev-parse", "$ref^{commit}").trim()
+        val unpushed = run(root, "--no-optional-locks", "rev-list", "--count", "${upstream ?: base}..$tip").trim().toInt()
+        return BranchFate(unpushed, merged(root, tip, base))
+    }
+
+    /** The first merge of [base]'s first-parent history whose second parent holds [tip] and whose first does not. */
+    private fun merged(root: Path, tip: String, base: String): BranchFate.Merged? {
+        if (!isAncestor(root, tip, base)) return null
+        val merges = run(root, "--no-optional-locks", "log", "--first-parent", "--merges", "--format=%H %P%x1f%s", base, "^$tip")
+        for (line in merges.lines().filter { it.isNotEmpty() }) {
+            val (shas, subject) = line.split('\u001f', limit = 2)
+            val (sha, first, second) = shas.split(' ')
+            if (isAncestor(root, tip, second) && !isAncestor(root, tip, first)) return BranchFate.Merged(sha, PULL_REQUEST.find(subject)?.groupValues?.get(1)?.toInt())
+        }
+        return null
+    }
+
+    /** `merge-base --is-ancestor` answers by exit code alone: 0 yes, 1 no, anything else is a failure. */
+    private fun isAncestor(root: Path, commit: String, of: String): Boolean {
+        val exit = ProcessBuilder("git", "merge-base", "--is-ancestor", commit, of).directory(root.toFile()).redirectErrorStream(true).start()
+            .let { it.inputStream.readAllBytes(); it.waitFor() }
+        if (exit !in 0..1) throw GitFailure("git merge-base --is-ancestor $commit $of failed in $root (exit $exit)")
+        return exit == 0
+    }
+
+    private val PULL_REQUEST = Regex("""\(pull request #(\d+)\)""")
+
+    /** The files of the work tree [root] that differ from HEAD, untracked ones included, as absolute paths. */
+    fun uncommitted(root: Path): Set<Path> =
+        nulSeparated(run(root, "--no-optional-locks", "status", "--porcelain", "-z", "--untracked-files=all", "--no-renames"))
+            .map { root.resolve(it.substring(3)).normalize() }.toSet()
 
     private fun isCommit(root: Path, ref: String) = run(root, "rev-parse", "--verify", "-q", "$ref^{commit}", ok = setOf(0, 1)).isNotBlank()
 
