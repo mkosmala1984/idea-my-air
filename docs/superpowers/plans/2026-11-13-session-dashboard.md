@@ -10,12 +10,12 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
-| 6 | | |
+| 1 | done | `19265fb` |
+| 2 | done | `6829ae7` |
+| 3 | done | `fd47a8e` |
+| 4 | done | `11d0675` |
+| 5 | done | `da60a41` |
+| 6 | done | `b4a0005` |
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -285,20 +285,20 @@ Behaviour: layout of the spec's "Layout"; header counts `recent`/`older`; Now ro
 
 | R | Task | Evidence |
 |---|---|---|
-| R1 | 5 | |
-| R2 | 5 | |
-| R3 | 3, 6 | |
-| R4 | 3 | |
-| R5 | 3 | |
-| R6 | 3 | |
-| R7 | 3 | |
-| R8 | 1, 3, 4 | |
-| R9 | 3 | |
-| R10 | 2 | |
-| R11 | 1, 4 | |
-| R12 | 3, 6 | |
-| R13 | 6 | |
-| R14 | 6 | |
-| R15 | 3, 6 | |
-| R16 | 3, 4 | |
-| R17 | 2, 4, 6 | |
+| R1 | 5 | not done: sandbox walk not run |
+| R2 | 5 | not done: sandbox walk not run |
+| R3 | 3, 6 | test `DashboardTest` › `sessions split into now, unfinished by signal and finished, merged work ending all but uncommitted files` |
+| R4 | 3 | test `DashboardTest` › `sessions split into now, unfinished by signal and finished, merged work ending all but uncommitted files` |
+| R5 | 3 | test `DashboardTest` › `sessions split into now, unfinished by signal and finished, merged work ending all but uncommitted files` |
+| R6 | 3 | test `DashboardTest` › `sessions split into now, unfinished by signal and finished, merged work ending all but uncommitted files` |
+| R7 | 3 | commit `fd47a8e`; not done: no test of plan or depth-2 areas |
+| R8 | 1, 3, 4 | commit `19265fb`; commit `11d0675`; test `DashboardTest` › `sessions split into now, unfinished by signal and finished, merged work ending all but uncommitted files` |
+| R9 | 3 | test `DashboardTest` › `sessions split into now, unfinished by signal and finished, merged work ending all but uncommitted files` |
+| R10 | 2 | test `GitTest` › `a branch merged by a pull request merge is merged with its number, and a commit after the merge is new work` |
+| R11 | 1, 4 | commit `19265fb`; commit `11d0675` |
+| R12 | 3, 6 | test `DashboardTest` › `sessions split into now, unfinished by signal and finished, merged work ending all but uncommitted files` |
+| R13 | 6 | commit `b4a0005`; not done: sandbox walk not run |
+| R14 | 6 | commit `b4a0005`; not done: sandbox walk not run |
+| R15 | 3, 6 | test `DashboardTest` › `sessions split into now, unfinished by signal and finished, merged work ending all but uncommitted files` |
+| R16 | 3, 4 | commit `fd47a8e` |
+| R17 | 2, 4, 6 | commit `11d0675`; not done: no test, sandbox walk not run |
