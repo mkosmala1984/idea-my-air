@@ -6,12 +6,14 @@
 - **Approach (user's pick, 1):** one `claude -p --model haiku` call per session, a few in parallel, off the EDT, on a digest of its transcript; results land in the rows one by one and are stored per session in `~/.my-air/analysis/`.
 - **Decided by the user:** the analysis only describes (variant A): a verdict chip and a "Left:" line; sections Now / Unfinished / Finished stay decided by the hard signals of the dashboard spec.
 - **My calls to check:** analysed are the sessions of Unfinished and of Finished except merged ones and those whose git facts are still loading; the transcript is read at analysis time from a path the scanner now records (all prompts, last 5 agent texts), not kept in the scan cache; Haiku runs without the user's hooks, plugins and MCP servers; a session analysed is skipped until it gets a newer last message, then its old result is hidden and it is analysed again; Haiku runs in `~/.my-air/analysis/` with no tools, so no project CLAUDE.md or tool call costs anything; the summary is written in the language of the session's own prompts; 3 calls at a time.
-- **Risks:** the first run over ~250 sessions costs ~250 Haiku calls; a digest that leaves out the decisive message gives a wrong "Left:".
+- **Date limit (user's request):** a run takes only sessions whose last message is within the chosen 7 / 14 / 30 days or all, default 14 days (my call: the default and the steps).
+- **Risks:** a first run with "all" over ~250 sessions costs ~250 Haiku calls; a digest that leaves out the decisive message gives a wrong "Left:".
 - **Out of scope:** moving sessions between sections by the verdict, analysing sessions in Now or settled, Jira/Bitbucket.
 
 ## Requirements
 
 - **R1** The dashboard header has an Analyze button; a click starts one analysis run over the sessions listed in Unfinished and Finished at that moment, leaving out merged sessions (`Chip.Merged`), sessions whose git facts are not read yet (`Chip.Pending`; a later run takes them) and those whose stored analysis is current (R3).
+- **R11** Beside Analyze a chooser limits the run to sessions whose `lastMessage` is within the last 7, 14 or 30 days, or takes all; the default is 14 days and the choice is kept across restarts (application property `dev.myair.dashboard.analysisDays`); the sessions R1 offers are counted against it at the moment of the click.
 - **R2** While a run goes on the button reads Cancel and the header shows `Analyzing <done>/<total>`; Cancel stops starting new calls and kills those running; closing the dashboard tab cancels the run the same way.
 - **R3** An analysis is current while the session's `lastMessage` equals the `lastMessage` stored with it; a session whose analysis is not current shows no analysis and is analysed by the next run.
 - **R4** Each analysis is one `claude -p --model haiku --no-session-persistence` process with no tools (`--tools ""`), no MCP servers (`--strict-mcp-config` without `--mcp-config`) and only project settings (`--setting-sources project`, so the user's hooks and plugins do not run), started in `~/.my-air/analysis/`, given a digest of the session (R6), answering in JSON validated by `--json-schema`: `verdict` (`done`, `open` or `unclear`) and `left` (one or two sentences; empty only with `done`).
@@ -49,7 +51,7 @@ Variant B of the earlier question (a `done` verdict moves the session to Finishe
 ## Behaviour
 
 ```
-Sessions        17 in the last 2 days · 244 older      [Analyze]
+Sessions   17 in the last 2 days · 244 older   [14 days ▾] [Analyze]
 ...
 Unfinished                                                   12
 ┌ rtm-cloud / security
@@ -72,7 +74,7 @@ During a run the button reads `Cancel` and `Analyzing 7/31` stands beside it. St
 
 ## Testing
 
-- `DashboardTest`: R3 (stale analysis dropped), R8 chip and line, R9 failure chip, merged rows not offered for analysis (R1).
+- `DashboardTest`: R11 (a session older than the chosen days not offered, "all" offers it), R3 (stale analysis dropped), R8 chip and line, R9 failure chip, merged rows not offered for analysis (R1).
 - Digest test: field order, the cuts of R6, oldest prompts dropped first.
 - Store test: write, read back, a malformed file throws.
 - Runner: a test with a fake executable standing for `claude` (a script echoing a fixed JSON, one exiting non-zero, one sleeping past a short timeout) checks parsing, failure and timeout.
