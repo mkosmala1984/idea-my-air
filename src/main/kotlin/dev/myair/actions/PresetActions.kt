@@ -18,6 +18,7 @@ import com.intellij.util.ui.AvatarPalette
 import dev.myair.MyAirConfigurable
 import dev.myair.claude.ClaudeSession
 import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.NEW_SESSION_ICON
 import dev.myair.editor.projectBase
 import dev.myair.store.Preset
 import dev.myair.store.PresetStore
@@ -106,7 +107,7 @@ class PresetsGroup : ActionGroup(), DumbAware {
 
 /** On a session's menu: a new session started as the [selected] one runs ([presetOf]). */
 class SameSettingsAction(private val selected: () -> List<ClaudeSession>) :
-    DumbAwareAction("New Session with Same Settings", "Same model, effort, project, worktree and added directories", AllIcons.General.Add) {
+    DumbAwareAction("New Session with Same Settings", "Same model, effort, project, worktree and added directories", NEW_SESSION_ICON) {
     override fun getActionUpdateThread() = ActionUpdateThread.EDT
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabledAndVisible = selected().size == 1

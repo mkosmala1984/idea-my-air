@@ -24,7 +24,7 @@ This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `m
   - `ClaudeSessionEditorProvider` (editor type `claude-session`, `HIDE_DEFAULT_EDITOR`) and `ClaudeSessionEditor` (`ClaudeSessionEditor.kt`).
   - `SessionPaneHost` and `SessionPane(project, file, checkFirst)` (`SessionPane.kt`). The pane has `show(view)`, `showElsewhere()` (the Show Here notice) and `type(text)`, which sends text unsent and returns `false` without a view.
   - `CenteredTerminal(terminal, grid, columns)` and `TextGrid` (`CenteredTerminal.kt`).
-  - `SessionHeader`, `HeaderText` and `headerText(session, branch)` (`SessionHeader.kt`).
+  - `SessionHeader`, `HeaderText` and `headerText(session, branch)` (`SessionHeader.kt`); `NewSessionHereAction`, the header's button (`ClaudeSessionEditor.kt`).
 - Processes (`SessionTerminals.kt`):
   - `SessionTerminals` (`@Service(APP)`) offers `attach`, `release`, `close`, `runs`, `detached`, `retireIdle`, `jobOf`, `interrupted`, `wouldInterrupt` and `getInstance()`.
   - `SessionTerminals.ProjectClose` is a `ProjectCloseListener`.

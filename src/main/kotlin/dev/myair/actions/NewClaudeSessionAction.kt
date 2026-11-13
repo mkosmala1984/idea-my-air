@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.DumbAwareAction
 import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.NEW_SESSION_ICON
 import dev.myair.editor.PlanStart
 import java.nio.file.Path
 import kotlin.io.path.isDirectory
@@ -24,7 +25,7 @@ class NewClaudeSessionAction : DumbAwareAction() {
 class NewSessionInDirAction(
     text: String, inWorktree: Boolean, private val dir: () -> Path?, private val home: () -> Path?, private val plan: () -> PlanStart?,
     private val folder: () -> String?,
-) : DumbAwareAction(text, null, if (inWorktree) AllIcons.Vcs.Branch else AllIcons.General.Add) {
+) : DumbAwareAction(text, null, if (inWorktree) AllIcons.Vcs.Branch else NEW_SESSION_ICON) {
     private val start: (AnActionEvent, Path, PlanStart?, String?) -> Unit =
         if (inWorktree) { e, dir, plan, folderId -> startInWorktree(e.project!!, dir, null, emptyList(), popupPoint(e), plan, askBranch = true, folderId = folderId) }
         else { e, dir, plan, folderId -> ClaudeSessionOpener.startNew(e.project!!, home()!!, dir, plan = plan, folderId = folderId) }

@@ -46,6 +46,9 @@ fun projectColor(dir: Path, onRead: () -> Unit): Color? = projectColors[dir] ?: 
 /** Claude's orange asterisk: an idle session. */
 val CLAUDE_ICON: Icon = IconLoader.getIcon("/icons/claude.svg", SessionStatus::class.java)
 
+/** The Claude asterisk with a green plus: starts a new session, wherever one is started. */
+val NEW_SESSION_ICON: Icon = IconLoader.getIcon("/icons/newSession.svg", SessionStatus::class.java)
+
 /** A thin grey asterisk: a session without a process. */
 val OFFLINE_SESSION_ICON: Icon = IconLoader.getIcon("/icons/claudeOffline.svg", SessionStatus::class.java)
 

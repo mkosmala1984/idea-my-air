@@ -51,7 +51,7 @@
 
   <actions>
     <action id="dev.myair.NewClaudeSession" class="dev.myair.actions.NewClaudeSessionAction" text="New Claude Session"
-            description="Start claude in the project directory in an editor tab" icon="AllIcons.General.Add">
+            description="Start claude in the project directory in an editor tab" icon="/icons/newSession.svg">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
     <action id="dev.myair.NewClaudeSessionInWorktree" class="dev.myair.actions.NewClaudeSessionInWorktreeAction"

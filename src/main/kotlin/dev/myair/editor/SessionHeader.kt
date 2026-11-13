@@ -1,5 +1,8 @@
 package dev.myair.editor
 
+import com.intellij.openapi.actionSystem.ActionToolbar
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.impl.ActionButton
 import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.SimpleTextAttributes
@@ -9,6 +12,7 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.toolwindow.briefCount
 import dev.myair.toolwindow.projectName
 import java.awt.BorderLayout
+import java.awt.FlowLayout
 import java.nio.file.Path
 import javax.swing.JPanel
 
@@ -20,8 +24,8 @@ fun headerText(session: ClaudeSession, branch: String?) = HeaderText(
     session.title, session.project, branch, session.brief?.let { it.goal ?: it.current?.content }, briefCount(session.brief),
 )
 
-/** The bar above a session tab's terminal, so the tab says which session it shows and what that session is for. */
-class SessionHeader(private val repaintLater: () -> Unit) : JPanel(BorderLayout()) {
+/** The bar above a session tab's terminal, so the tab says which session it shows and what that session is for; [actions] are buttons at its right. */
+class SessionHeader(actions: List<AnAction>, private val repaintLater: () -> Unit) : JPanel(BorderLayout()) {
     private val first = SimpleColoredComponent()
     private val second = SimpleColoredComponent()
 
@@ -31,8 +35,21 @@ class SessionHeader(private val repaintLater: () -> Unit) : JPanel(BorderLayout(
             it.isOpaque = false
             it.ipad = JBUI.emptyInsets()
         }
-        add(first, BorderLayout.NORTH)
-        add(second, BorderLayout.CENTER)
+        add(JPanel(BorderLayout()).apply {
+            isOpaque = false
+            add(first, BorderLayout.NORTH)
+            add(second, BorderLayout.CENTER)
+        }, BorderLayout.CENTER)
+        val buttons = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0)).apply {
+            isOpaque = false
+            actions.forEach { add(ActionButton(it, it.templatePresentation.clone(), PLACE, ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE)) }
+        }
+        // Kept at the top, beside the title, when the goal adds a second line.
+        add(JPanel(BorderLayout()).apply { isOpaque = false; add(buttons, BorderLayout.NORTH) }, BorderLayout.EAST)
+    }
+
+    private companion object {
+        const val PLACE = "MyAirSessionHeader"
     }
 
     fun show(text: HeaderText) {

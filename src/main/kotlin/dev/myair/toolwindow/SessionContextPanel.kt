@@ -10,6 +10,7 @@ import com.intellij.ui.InplaceButton
 import dev.myair.editor.SessionPaneHost
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.sessionIcon
+import dev.myair.editor.NEW_SESSION_ICON
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -566,7 +567,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         row {
             listOfNotNull(context.model?.let(::modelName), context.effort).forEach { cell(Chip(it)) }
             // The session is looked up at the click, as the tab is: the pane is not rebuilt for every change of it.
-            if (context.cwdExists) cell(InplaceButton("Continue in a new session: same model, effort and added directories, in ${context.cwd}", AllIcons.General.Add) {
+            if (context.cwdExists) cell(InplaceButton("Continue in a new session: same model, effort and added directories, in ${context.cwd}", NEW_SESSION_ICON) {
                 continueSession(project, service.sessions.first { it.id == shownId }, context.cwd)
             })
             comment(shortAge(context.lastMessage, Instant.now())).align(AlignX.RIGHT)
