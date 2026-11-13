@@ -163,12 +163,13 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 mcpServers = mcpServers(env.mcpTools),
                 // A transcript without an environment snapshot comes from a `claude` that wrote none: it works where it started.
                 workDir = env.workDir?.let(Path::of) ?: cwd, startBranch = c.startBranch, continuedIn = c.continuedIn,
+                lastBranch = messages.branch, asks = messages.asks,
             )
         }
 
         companion object {
             val EMPTY = Transcript(
-                0, Conversation(null, null, null, null, emptyList(), emptyList(), null), Messages(null, null, null),
+                0, Conversation(null, null, null, null, emptyList(), emptyList(), null), Messages(null, null, null, null, false),
                 Environment(null, emptyList(), emptyList(), emptyList()), emptyMap(), emptyMap(), emptyMap(), null,
             )
         }
@@ -199,12 +200,21 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         }
     }
 
-    /** The time of the latest message of the main conversation, and the [model] and [effort] of the latest reply of the model. */
-    data class Messages(val last: Instant?, val model: String?, val effort: String?) {
+    /**
+     * The time of the latest message of the main conversation, the [model] and [effort] of the latest reply of the model,
+     * the [branch] checked out at the latest message, and whether the model's latest text [asks] a question no human
+     * prompt has answered yet.
+     */
+    data class Messages(val last: Instant?, val model: String?, val effort: String?, val branch: String?, val asks: Boolean) {
         internal fun next(line: Line): Messages {
             if (MESSAGE_HINTS.none { it in line }) return this
             val message = message(line.text) ?: return this
-            return Messages(message.time, message.model ?: model, message.effort ?: effort)
+            val asks = when {
+                message.reply != null -> message.reply.trimEnd().endsWith('?')
+                message.prompt -> false
+                else -> asks
+            }
+            return Messages(message.time, message.model ?: model, message.effort ?: effort, message.branch, asks)
         }
     }
 
@@ -414,8 +424,11 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             return this + (field("artifact_id") to Artifact(field("artifact_id"), field("title"), field("url"), Path.of(field("path"))))
         }
 
-        /** A message of the main conversation: its [time], and for a reply of the model the [model] and [effort] it ran with. */
-        private class Message(val time: Instant, val model: String?, val effort: String?)
+        /**
+         * A message of the main conversation: its [time], the [branch] checked out then, for a reply of the model the
+         * [model] and [effort] it ran with and its last text item ([reply]), and whether it is a human [prompt].
+         */
+        private class Message(val time: Instant, val model: String?, val effort: String?, val branch: String?, val reply: String?, val prompt: Boolean)
 
         /**
          * [line] as a message of the main conversation: a human or assistant one, or a slash command run; null for anything
@@ -428,6 +441,8 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             var aside = false
             var model: String? = null
             var effort: String? = null
+            var branch: String? = null
+            var text: String? = null
             JsonReader(StringReader(line)).use { reader ->
                 reader.beginObject()
                 while (reader.hasNext()) when (reader.nextName()) {
@@ -436,9 +451,14 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                     "timestamp" -> timestamp = reader.nextString()
                     "isMeta", "isSidechain" -> aside = reader.nextBoolean() || aside
                     "effort" -> effort = reader.nextString()
+                    "gitBranch" -> branch = reader.nextString()
                     "message" -> if (reader.peek() != JsonToken.BEGIN_OBJECT) reader.skipValue() else {
                         reader.beginObject()
-                        while (reader.hasNext()) if (reader.nextName() == "model") model = reader.nextString() else reader.skipValue()
+                        while (reader.hasNext()) when (reader.nextName()) {
+                            "model" -> model = reader.nextString()
+                            "content" -> text = lastText(reader) ?: text
+                            else -> reader.skipValue()
+                        }
                         reader.endObject()
                     }
                     else -> reader.skipValue()
@@ -447,8 +467,32 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             val message = type == "user" || type == "assistant" || type == "system" && subtype == "local_command"
             if (!message || aside) return null
             val time = Instant.parse(checkNotNull(timestamp) { "message without timestamp: ${line.take(200)}" })
+            val onBranch = branch?.takeIf { it != "HEAD" }
             // `claude` writes its own error replies as the model `<synthetic>`.
-            return if (type == "assistant" && model != SYNTHETIC) Message(time, model, effort) else Message(time, null, null)
+            return if (type == "assistant" && model != SYNTHETIC) Message(time, model, effort, onBranch, text, false)
+            else Message(time, null, null, onBranch, null, type == "user" && text != null)
+        }
+
+        /** A message's content: the string itself, or the last `text` item of its array; null when it has no text. */
+        private fun lastText(reader: JsonReader): String? {
+            if (reader.peek() == JsonToken.STRING) return reader.nextString()
+            if (reader.peek() != JsonToken.BEGIN_ARRAY) return null.also { reader.skipValue() }
+            var last: String? = null
+            reader.beginArray()
+            while (reader.hasNext()) {
+                var itemType: String? = null
+                var itemText: String? = null
+                reader.beginObject()
+                while (reader.hasNext()) when (reader.nextName()) {
+                    "type" -> itemType = reader.nextString()
+                    "text" -> itemText = if (reader.peek() == JsonToken.STRING) reader.nextString() else null.also { reader.skipValue() }
+                    else -> reader.skipValue()
+                }
+                reader.endObject()
+                if (itemType == "text") last = checkNotNull(itemText) { "text item without text" }
+            }
+            reader.endArray()
+            return last
         }
 
         /** Paths from the edit tool calls of one assistant message; a notebook edit names its file `notebook_path`. */
