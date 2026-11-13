@@ -42,6 +42,9 @@ data class Preset(
         require(worktree || base == null) { "preset $name has a base branch without a worktree" }
     }
 
+    /** [prompt]'s first line for a tooltip, cut to 40 characters with an ellipsis. */
+    fun promptHead(): String? = prompt?.lineSequence()?.first()?.let { if (it.length > 40) it.take(40) + "…" else it }
+
     /** The directory its sessions start in: [project], else [ideBase], the IDE project's. */
     fun dir(ideBase: Path): Path = project?.let(Path::of) ?: ideBase
 

@@ -33,6 +33,14 @@ class PresetsTest {
     }
 
     @Test
+    fun `the prompt's head is its first line, cut with an ellipsis past 40 characters`() {
+        assertEquals("/code-review", Preset("R", prompt = "/code-review\nthen wait").promptHead())
+        assertEquals("a".repeat(40) + "…", Preset("R", prompt = "a".repeat(41)).promptHead())
+        assertEquals("a".repeat(40), Preset("R", prompt = "a".repeat(40)).promptHead())
+        assertEquals(null, Preset("R").promptHead())
+    }
+
+    @Test
     fun `survives a round trip through json, also without optional values`() {
         val presets = listOf(full, Preset("Plain"), Preset("Ask", worktree = true), Preset("Rv", prompt = "/code-review\nthen wait", askMore = true))
         assertEquals(presets, parsePresets(presetsJson(presets)))

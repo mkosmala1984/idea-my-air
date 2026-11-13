@@ -63,7 +63,7 @@ fun Preset.summary() = listOfNotNull(
     project ?: "the project's directory",
     if (!worktree) null else "worktree off ${base ?: "a branch picked at start"}",
     addDirs.takeIf { it.isNotEmpty() }?.joinToString(", ", "also ") { it },
-    prompt?.let { "starts with \"${it.lineSequence().first().take(40)}\"" },
+    promptHead()?.let { "starts with \"$it\"" },
     "opens the composer".takeIf { askMore },
 ).joinToString("; ")
 

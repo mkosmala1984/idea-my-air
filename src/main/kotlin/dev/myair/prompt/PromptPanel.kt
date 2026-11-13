@@ -221,8 +221,8 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         }
         branchChip.chevron = new.worktree && found != null
         val dir = dirOf(new)
-        projectChip.text = dir.fileName.toString()
-        projectChip.icon = projectIcon(dir, dir.fileName.toString(), 16)
+        projectChip.text = dirName(dir)
+        projectChip.icon = projectIcon(dir, dirName(dir), 16)
         workspaceChip.isEnabled = found != null
         error.text = listOfNotNull(
             repo?.exceptionOrNull()?.message?.takeIf { new.worktree },
@@ -237,12 +237,20 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
 
     private fun choicesOf(repo: Repo) = baseChoices(repo.git.branches, repo.git.default, recentBases(repo.git.mainRoot))
 
+    /** The list is read off the EDT: a recent project on a drive gone offline would stall it on the existence check. */
     private fun chooseProject(chip: Chip) {
+        val own = choice.preset.project
         val open = ProjectManager.getInstance().openProjects.mapNotNull { it.basePath }
         val recent = RecentProjectsManagerBase.getInstanceEx().getRecentPaths()
-        val items = projectChoices(open, recent) { Path.of(it).isDirectory() }
-        choose(chip, items, items.firstOrNull { Path.of(it) == dirOf(choice) }, { Path.of(it).fileName.toString() }, { it }, search = true) {
-            selectProject(it)
+        val modality = ModalityState.stateForComponent(this)
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val items = projectChoices(own, open, recent) { Path.of(it).isDirectory() }
+            ApplicationManager.getApplication().invokeLater({
+                if (!chip.isShowing) return@invokeLater
+                choose(chip, items, items.firstOrNull { Path.of(it) == dirOf(choice) }, { dirName(Path.of(it)) }, { it }, search = true) {
+                    selectProject(it)
+                }
+            }, modality)
         }
     }
 
@@ -292,6 +300,14 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
             error.isVisible = true
             return
         }
+        val start = choice.toPreset(base)
+        val missing = start.missingDirs(start.dir(projectBase(project)))
+        if (missing.isNotEmpty()) {
+            // Before anything is stored or cleared, so the message stays to be started elsewhere.
+            error.text = "No longer exists: ${missing.joinToString()}; choose another project"
+            error.isVisible = true
+            return
+        }
         val text = prompt.text.trim().ifEmpty { null }
         saveChoice(LAST, choice.toLast())
         // Taken from the screen: [started] may close the popup holding the button, and the base popup of a worktree
@@ -299,7 +315,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         val where = RelativePoint.fromScreen(RelativePoint(send, Point(0, send.height)).screenPoint)
         message.set("")
         started()
-        startPreset(project, choice.toPreset(base), where, text, branch)
+        startPreset(project, start, where, text, branch)
     }
 }
 
@@ -307,7 +323,7 @@ private fun loadChoice(key: String) = PropertiesComponent.getInstance().run {
     LastChoice(
         getValue("$key.preset"), getValue("$key.model"), getValue("$key.effort"), getValue("$key.worktree")?.toBooleanStrict(),
         getValue("$key.newBranch")?.toBooleanStrict(), getValue("$key.project"),
-    )
+    ).present { Path.of(it).isDirectory() }
 }
 
 /** Null removes the stored choices. */

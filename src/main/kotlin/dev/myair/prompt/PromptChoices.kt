@@ -67,9 +67,18 @@ fun openingMessage(preset: Preset) = preset.prompt?.let { "$it " }.orEmpty()
 fun switchedMessage(text: String, from: Preset, to: Preset) =
     if (text.isBlank() || text == openingMessage(from)) openingMessage(to) else text
 
-/** The projects the composer offers: [open] ones, then [recent] ones that [exists], each directory once. */
-fun projectChoices(open: List<String>, recent: List<String>, exists: (String) -> Boolean): List<String> =
-    (open + recent.filter(exists)).distinctBy { Path.of(it).normalize().toString() }
+/**
+ * The projects the composer offers: the configuration's [own], then [open] ones, then [recent] ones that [exists], each
+ * directory once (compared as paths, so case and separators do not tell two apart on Windows).
+ */
+fun projectChoices(own: String?, open: List<String>, recent: List<String>, exists: (String) -> Boolean): List<String> =
+    (listOfNotNull(own) + open + recent.filter(exists)).distinctBy { Path.of(it).normalize() }
+
+/** The choices with a [project] that no longer [exists] forgotten, so the configuration's own directory counts again. */
+fun LastChoice.present(exists: (String) -> Boolean) = copy(project = project?.takeIf(exists))
+
+/** A directory's name on its chip: its last part; a drive root has none and is named by itself. */
+fun dirName(dir: Path): String = (dir.fileName ?: dir).toString()
 
 /** The gray note after a branch in the base list. */
 fun branchTag(branch: String, current: String?, default: String, recent: List<String>) = when (branch) {

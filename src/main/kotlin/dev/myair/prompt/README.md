@@ -21,7 +21,7 @@ look to name a new worktree branch. The start itself happens in `dev.myair.actio
   - `Choice(preset, model, effort, worktree, newBranch, project)` with `toPreset(base)`; `project` replaces the configuration's directory, null keeping it
   - `choiceOf(preset)`, `LastChoice`, `Draft(text, choice, base)`, `Choice.toLast()`
   - `opening(presets, last, draft)`, `restore(presets, last)`, `branchTag(...)`, `modelLabel(model)`
-  - `openingMessage(preset)`, `switchedMessage(text, from, to)`, `projectChoices(open, recent, exists)`
+  - `openingMessage(preset)`, `switchedMessage(text, from, to)`, `projectChoices(own, open, recent, exists)`, `LastChoice.present(exists)`, `dirName(dir)`
 - `PastedImages.kt`: `PASTED_IMAGES` (`~/.my-air/images`), `IMAGES_KEPT` (30 days), `pruneImages(dir, cutoff)`, `pastedMentions(content, dir)`, `mention(path)`.
 - `Composer.kt` (internal): the colours `CARD`, `BAR`, `SEND`, and `row(...)`, `Chip`, `Rounded`, `SendButton`.
 
@@ -34,6 +34,7 @@ look to name a new worktree branch. The start itself happens in `dev.myair.actio
 - `Choice.toPreset(base)` keeps a base only for a worktree. A null base means it is picked in the popup at start.
 - The base stays while it is among the branches read for the configuration's directory. Otherwise it becomes the
   one `baseChoices` preselects. A repository read overtaken by a newer `LatestRead.request` never lands.
+- A start whose directories are gone is refused in the error label, the message and the stored choices kept.
 - A start goes in this order: save the last choices, compute the popup point from the screen, clear the message
   (which removes the stored draft), call `started`, call `startPreset`. A new branch requires a non-blank name.
 - The prompt goes to `claude` after `--` (through `Preset.claudeArgs`, called by `startPreset`).
@@ -49,7 +50,7 @@ look to name a new worktree branch. The start itself happens in `dev.myair.actio
 - Files: pasted images are written as `~/.my-air/images/<uuid>.png`. Every panel that opens deletes PNGs there older than 30 days, on a pooled thread.
 - Reads `PresetStore` (`presets.json`) once per panel. A broken file is shown in the panel's error label.
 - Reads the repository (`Git.repo`, `Git.currentBranch`) off the EDT on every configuration or project change.
-- Reads the open projects and `RecentProjectsManagerBase.getRecentPaths()` when the project chip opens.
+- Reads the open projects and `RecentProjectsManagerBase.getRecentPaths()` when the project chip opens; which of them exist is checked on a pooled thread. Stored choices naming a project gone lose it on load.
 - Processes: Suggest runs `claude -p --model haiku` through `suggestBranchName`, on a pooled thread.
 - Starts a session (and maybe a worktree) through `actions.startPreset`.
 

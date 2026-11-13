@@ -3,6 +3,7 @@ package dev.myair.prompt
 import dev.myair.store.Preset
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import java.nio.file.Path
 import kotlin.test.assertEquals
 
 class PromptChoicesTest {
@@ -91,8 +92,27 @@ class PromptChoicesTest {
     fun `project list has no repeats`() {
         assertEquals(
             listOf("E:/a", "E:/b", "E:/c"),
-            projectChoices(listOf("E:/a", "E:/b"), listOf("E:\\a", "E:/c", "E:/gone")) { it != "E:/gone" },
+            projectChoices(null, listOf("E:/a", "E:/b"), listOf("E:\\a", "e:/B", "E:/c", "E:/gone")) { it != "E:/gone" },
         )
+    }
+
+    @Test
+    fun `the configuration's own project leads the list, even when neither open nor recent`() {
+        assertEquals(listOf("E:/own", "E:/a"), projectChoices("E:/own", listOf("E:/a"), emptyList()) { true })
+        assertEquals(listOf("e:/A", "E:/c"), projectChoices("e:/A", listOf("E:/a"), listOf("E:/c")) { true })
+    }
+
+    @Test
+    fun `a last project that is gone is forgotten, the configuration's own taking its place`() {
+        val last = LastChoice("P", null, null, null, project = "E:/gone")
+        assertEquals(null, last.present { false }.project)
+        assertEquals("E:/gone", last.present { true }.project)
+    }
+
+    @Test
+    fun `a directory is named by its last part, a drive root by itself`() {
+        assertEquals("my-air", dirName(Path.of("E:/dev/my-air")))
+        assertEquals("E:\\", dirName(Path.of("E:\\")))
     }
 
     @Test
