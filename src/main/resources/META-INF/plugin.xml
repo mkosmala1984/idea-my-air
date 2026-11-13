@@ -29,6 +29,8 @@
     <fileEditorProvider implementation="dev.myair.planview.PlanEditorProvider"/>
     <fileIconProvider order="first" implementation="dev.myair.planview.PlanFileIconProvider"/>
     <editorTabTitleProvider implementation="dev.myair.planview.PlanTabTitleProvider"/>
+    <virtualFileSystem key="myair-dashboard" implementationClass="dev.myair.dashboard.DashboardFileSystem"/>
+    <fileEditorProvider implementation="dev.myair.dashboard.DashboardEditorProvider"/>
     <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>
     <editorTabTitleProvider implementation="dev.myair.editor.ClaudeSessionTabTitleProvider"/>
     <editorTabColorProvider implementation="dev.myair.editor.ClaudeSessionTabColorProvider"/>
@@ -44,6 +46,7 @@
 
   <projectListeners>
     <listener class="dev.myair.tabs.TabsSyncListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    <listener class="dev.myair.dashboard.DashboardSingleTab" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
   </projectListeners>
 
   <actions>
@@ -59,6 +62,10 @@
     <action id="dev.myair.NewSessionWithPrompt" class="dev.myair.prompt.NewSessionWithPromptAction"
             text="New Claude Session with Prompt..." icon="AllIcons.Actions.Edit"
             description="Type the first message and pick a configuration, then start claude in an editor tab">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+    <action id="dev.myair.OpenSessionsDashboard" class="dev.myair.dashboard.OpenDashboardAction" text="Open Sessions Dashboard"
+            description="Show what needs you now, what was left unfinished and what is finished, across all sessions" icon="AllIcons.Actions.ListFiles">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
     <action id="dev.myair.FocusClaudeSession" class="dev.myair.actions.FocusClaudeSessionAction" text="Focus Claude Session..."
