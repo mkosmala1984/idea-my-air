@@ -48,7 +48,7 @@ there by class name, so moving or renaming one means updating that file too.
   - `internal background(project, title, work, done)`: runs work off the EDT and continues on the EDT; a failure opens an error dialog.
 - `PresetActions.kt`:
   - `startPreset(project, preset, where, prompt, branch)`, `continueSession(project, session, workTree)`, `Preset.summary()`
-  - `PresetAction`, `PresetsGroup` (toolbar buttons and dropdown)
+  - `PresetAction` (starts with the preset's `prompt`, or with `askMore` opens `prompt.showPromptPopup` on it), `PresetsGroup` (toolbar buttons and dropdown)
   - `SameSettingsAction`, `SaveAsPresetAction` (on a session's menu)
 - `PresetSettings.kt`: `PresetsEditor` (the list in Settings › Tools › My Air), `PresetDialog` (`preset(): Preset?`), `internal val MODELS = listOf("fable", "opus", "sonnet")`.
 
