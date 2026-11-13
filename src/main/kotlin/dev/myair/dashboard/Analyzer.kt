@@ -31,11 +31,14 @@ fun analysisPrompt(digest: String) = """
     $digest
 """.trimIndent()
 
-/** Haiku without tools, MCP servers or user settings (so no hooks or plugins), leaving no transcript. */
-fun analysisArgs(claude: Path, digest: String): List<String> = listOf(
+/**
+ * Haiku without tools, MCP servers or user settings (so no hooks or plugins), leaving no transcript. The prompt goes
+ * through stdin: a digest may exceed Windows' 32767-character command line, and CreateProcess keeps a double quote of
+ * an argument only escaped, which Java does not do, so the schema is escaped here.
+ */
+fun analysisArgs(claude: Path): List<String> = listOf(
     claude.toString(), "-p", "--model", "haiku", "--no-session-persistence", "--output-format", "json",
-    "--json-schema", ANALYSIS_SCHEMA, "--tools", "", "--strict-mcp-config", "--setting-sources", "project",
-    "--", analysisPrompt(digest),
+    "--json-schema", ANALYSIS_SCHEMA.replace("\"", "\\\""), "--tools", "", "--strict-mcp-config", "--setting-sources", "project",
 )
 
 /** Reads `claude -p --output-format json`'s envelope, whose `structured_output` holds the reply matching [ANALYSIS_SCHEMA]. */
@@ -53,14 +56,15 @@ fun parseAnalysis(stdout: String, lastMessage: Instant, now: Instant): Analysis 
 /** Runs [claude] in `~/.my-air/analysis`; a timeout, an interrupt or a non-zero exit kills it with its descendants. */
 fun analyze(claude: Path, digest: String, lastMessage: Instant, timeout: Duration = Duration.ofMinutes(2)): Analysis {
     val dir = Homes.myAir.resolve("analysis").createDirectories()
-    val process = ProcessBuilder(analysisArgs(claude, digest)).directory(dir.toFile()).start()
+    val process = ProcessBuilder(analysisArgs(claude)).directory(dir.toFile()).start()
     try {
-        // claude -p reads a piped stdin to its end before it answers.
-        process.outputStream.close()
+        // Written apart from reading, so neither pipe fills while the other waits; claude -p answers once stdin ends.
+        val stdin = CompletableFuture.runAsync { process.outputStream.use { it.write(analysisPrompt(digest).toByteArray()) } }
         val stderr = CompletableFuture.supplyAsync { process.errorStream.readAllBytes().toString(Charsets.UTF_8) }
         val stdout = CompletableFuture.supplyAsync { process.inputStream.readAllBytes().toString(Charsets.UTF_8) }
         check(process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) { "claude did not answer within $timeout" }
         check(process.exitValue() == 0) { "claude -p failed (exit ${process.exitValue()}): ${stderr.get().trim()}" }
+        stdin.get()
         return parseAnalysis(stdout.get(), lastMessage, Instant.now())
     } finally {
         if (process.isAlive) {

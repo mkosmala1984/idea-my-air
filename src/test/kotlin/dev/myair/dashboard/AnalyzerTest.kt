@@ -11,6 +11,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -52,12 +53,20 @@ class AnalyzerTest {
     }
 
     @Test
-    fun `the arguments run haiku without tools, MCP servers or user settings`() {
-        val args = analysisArgs(Path.of("claude"), "digest")
+    fun `the arguments run haiku without tools, MCP servers or user settings, the prompt going through stdin`() {
+        val args = analysisArgs(Path.of("claude"))
         assertEquals(listOf("claude", "-p", "--model", "haiku", "--no-session-persistence", "--output-format", "json"), args.take(7))
-        assertTrue(args.containsAll(listOf("--tools", "", "--strict-mcp-config", "--setting-sources", "project", "--json-schema", ANALYSIS_SCHEMA)))
-        assertEquals("--", args[args.size - 2])
-        assertTrue("digest" in args.last())
+        assertTrue(args.containsAll(listOf("--tools", "", "--strict-mcp-config", "--setting-sources", "project", "--json-schema")))
+        // CreateProcess keeps a double quote of an argument only escaped, and Java does not escape it.
+        assertEquals(ANALYSIS_SCHEMA.replace("\"", "\\\""), args[args.indexOf("--json-schema") + 1])
+    }
+
+    @Test
+    fun `the digest reaches claude on stdin, quotes and backslashes intact`() {
+        val reads = script("reads", "findstr \"^\" > \"%~dp0stdin.txt\"\r\necho " + envelope("""{"verdict":"done","left":""}"""))
+        val digest = "say \"C:\\dir\\\" " + "x".repeat(40_000)
+        assertEquals(Verdict.DONE, analyze(reads, digest, t).verdict)
+        assertTrue(digest in dir.resolve("stdin.txt").readText())
     }
 
     @Test
