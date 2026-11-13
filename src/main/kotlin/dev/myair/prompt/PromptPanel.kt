@@ -39,7 +39,12 @@ import dev.myair.editor.projectBase
 import dev.myair.service.LatestRead
 import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.store.EFFORTS
+import dev.myair.store.Preset
 import dev.myair.store.PresetStore
+import dev.myair.editor.projectIcon
+import com.intellij.ide.RecentProjectsManagerBase
+import com.intellij.openapi.project.ProjectManager
+import kotlin.io.path.isDirectory
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.Point
@@ -74,9 +79,10 @@ private data class Repo(val git: GitRepo, val current: String)
  * sets the rest; each may then be changed, and the next panel opens on the last start's choices, or on the message
  * typed and not sent with the choices it was typed with. Enter starts it,
  * Shift+Enter breaks the line, and an empty message starts the session without one. [started] runs before the session
- * starts, with the message already taken.
+ * starts, with the message already taken. Opened [from] a configuration, it starts on that configuration with its
+ * prompt typed in, and leaves the stored draft alone until the message is changed.
  */
-class PromptPanel(private val project: Project, private val started: () -> Unit) : JPanel(VerticalLayout(0)) {
+class PromptPanel(private val project: Project, private val started: () -> Unit, from: Preset? = null) : JPanel(VerticalLayout(0)) {
     val prompt = JBTextArea(3, 60).apply {
         font = JBUI.Fonts.label().biggerOn(1f)
         lineWrap = true
@@ -87,8 +93,11 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
     }
     private val read = PresetStore.INSTANCE.read()
     private val presets = listOf(DEFAULT_PRESET) + read.getOrDefault(emptyList())
-    private val draft = loadDraft()
-    private var choice = opening(presets, loadChoice(LAST), draft)
+    private val draft = if (from == null) loadDraft() else null
+    private var choice = from?.let(::choiceOf) ?: opening(presets, loadChoice(LAST), draft)
+
+    /** Whether the message may go to the stored draft: not yet for a panel opened from a configuration. */
+    private var edited = from == null
     private var repo: Result<Repo>? = null
     private var base: String? = null
 
@@ -102,7 +111,10 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
     }
 
     private val presetChip = Chip(AllIcons.Actions.Lightning) { chip ->
-        choose(chip, presets, choice.preset, { it.name }, { it.summary() }) { selectPreset(choiceOf(it)) }
+        choose(chip, presets, choice.preset, { it.name }, { it.summary() }) {
+            prompt.text = switchedMessage(prompt.text, choice.preset, it)
+            selectPreset(choiceOf(it))
+        }
     }
     private val modelChip = Chip(CLAUDE_ICON) { chip ->
         choose(chip, (MODELS + choice.model).distinct(), choice.model, ::modelLabel) { update(choice.copy(model = it)) }
@@ -121,6 +133,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
         chevron = false
         toolTipText = "Haiku names the branch from the message, reading the Jira issue it names"
     }
+    private val projectChip = Chip(null) { chip -> chooseProject(chip) }
     private val branchChip = Chip(AllIcons.Vcs.Branch) { chip -> chooseBase(chip) }
     private val send = SendButton("Start the session (Enter)") { start() }
     private val error = JBLabel().apply { foreground = UIUtil.getErrorForeground() }
@@ -142,7 +155,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
             layout = BorderLayout()
             border = JBUI.Borders.empty(2, 6)
             add(row(workspaceChip, branchName, suggestChip), BorderLayout.WEST)
-            add(row(branchChip), BorderLayout.EAST)
+            add(row(projectChip, branchChip), BorderLayout.EAST)
         }
         add(card)
         add(JPanel(BorderLayout()).apply { isOpaque = false; border = JBUI.Borders.empty(0, 24); add(bar) })
@@ -161,9 +174,13 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
                 prompt.replaceSelection(mentions.joinToString(" ", postfix = " "))
             }
         }.registerCustomShortcutSet(ActionManager.getInstance().getAction(IdeActions.ACTION_PASTE).shortcutSet, prompt)
-        draft?.let { prompt.text = it.text }
+        prompt.text = from?.let(::openingMessage) ?: draft?.text.orEmpty()
+        prompt.caretPosition = prompt.text.length
         prompt.document.addDocumentListener(object : DocumentAdapter() {
-            override fun textChanged(e: DocumentEvent) = saveDraft()
+            override fun textChanged(e: DocumentEvent) {
+                edited = true
+                saveDraft()
+            }
         })
         selectPreset(choice, draft?.base ?: choice.preset.base)
         ApplicationManager.getApplication().executeOnPooledThread { pruneImages(PASTED_IMAGES, Instant.now() - IMAGES_KEPT) }
@@ -179,8 +196,18 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
         repo = null
         base = wanted
         update(new)
-        repoReads.request(new.preset.dir(projectBase(project)))
+        repoReads.request(dirOf(new))
     }
+
+    /** Another project's directory in place of the configuration's, whose repository is read again. */
+    private fun selectProject(dir: String) {
+        repo = null
+        update(choice.copy(project = dir))
+        repoReads.request(dirOf(choice))
+    }
+
+    /** Where a session of [choice] starts: the project chosen here, else the configuration's directory. */
+    private fun dirOf(choice: Choice): Path = choice.project?.let(Path::of) ?: choice.preset.dir(projectBase(project))
 
     private fun update(new: Choice) {
         choice = new
@@ -200,6 +227,9 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
             else -> found.current
         }
         branchChip.chevron = new.worktree && found != null
+        val dir = dirOf(new)
+        projectChip.text = dir.fileName.toString()
+        projectChip.icon = projectIcon(dir, dir.fileName.toString(), 16)
         workspaceChip.isEnabled = found != null
         error.text = listOfNotNull(
             repo?.exceptionOrNull()?.message?.takeIf { new.worktree },
@@ -213,9 +243,18 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
     }
 
     /** The message with the choices it is typed with, until it is sent or emptied. */
-    private fun saveDraft() = storeDraft(prompt.text.takeIf { it.isNotBlank() }?.let { Draft(it, choice.toLast(), base) })
+    private fun saveDraft() = if (!edited) Unit else storeDraft(prompt.text.takeIf { it.isNotBlank() }?.let { Draft(it, choice.toLast(), base) })
 
     private fun choicesOf(repo: Repo) = baseChoices(repo.git.branches, repo.git.default, recentBases(repo.git.mainRoot))
+
+    private fun chooseProject(chip: Chip) {
+        val open = ProjectManager.getInstance().openProjects.mapNotNull { it.basePath }
+        val recent = RecentProjectsManagerBase.getInstanceEx().getRecentPaths()
+        val items = projectChoices(open, recent) { Path.of(it).isDirectory() }
+        choose(chip, items, items.firstOrNull { Path.of(it) == dirOf(choice) }, { Path.of(it).fileName.toString() }, { it }, search = true) {
+            selectProject(it)
+        }
+    }
 
     private fun chooseBase(chip: Chip) {
         val found = repo?.getOrNull() ?: return
@@ -247,7 +286,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
     private fun suggest(chip: Chip) {
         chip.isEnabled = false
         chip.text = "Naming..."
-        suggestInBackground(chip, choice.preset.dir(projectBase(project)), prompt.text) { result ->
+        suggestInBackground(chip, dirOf(choice), prompt.text) { result ->
             chip.isEnabled = true
             chip.text = "Suggest"
             result.onSuccess { branchName.text = it }
@@ -277,7 +316,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit)
 private fun loadChoice(key: String) = PropertiesComponent.getInstance().run {
     LastChoice(
         getValue("$key.preset"), getValue("$key.model"), getValue("$key.effort"), getValue("$key.worktree")?.toBooleanStrict(),
-        getValue("$key.newBranch")?.toBooleanStrict(),
+        getValue("$key.newBranch")?.toBooleanStrict(), getValue("$key.project"),
     )
 }
 
@@ -288,6 +327,7 @@ private fun saveChoice(key: String, choice: LastChoice?) = PropertiesComponent.g
     setValue("$key.effort", choice?.effort)
     setValue("$key.worktree", choice?.worktree?.toString())
     setValue("$key.newBranch", choice?.newBranch?.toString())
+    setValue("$key.project", choice?.project)
 }
 
 private fun loadDraft(): Draft? {
@@ -307,7 +347,7 @@ private fun storeDraft(draft: Draft?) {
 class PromptEmptyState : EditorEmptyStateComponentProvider {
     override fun isAvailable(splitters: EditorsSplitters) = splitters.manager.project.basePath != null
     override suspend fun createComponent(splitters: EditorsSplitters): JComponent =
-        buildEditorEmptyStateComponentOnUiThread { PromptPanel(splitters.manager.project) {} }
+        buildEditorEmptyStateComponentOnUiThread { PromptPanel(splitters.manager.project, {}) }
     override fun claimsFocus(splitters: EditorsSplitters) = true
     override fun getPreferredFocusedComponent(component: JComponent) = (component as PromptPanel).prompt
 }
@@ -318,12 +358,15 @@ class NewSessionWithPromptAction : DumbAwareAction() {
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.project?.basePath != null
     }
-    override fun actionPerformed(e: AnActionEvent) {
-        lateinit var popup: JBPopup
-        val panel = PromptPanel(e.project!!) { popup.cancel() }
-        popup = JBPopupFactory.getInstance().createComponentPopupBuilder(panel, panel.prompt)
-            .setRequestFocus(true).setResizable(true).setMovable(true).setCancelOnClickOutside(true)
-            .createPopup()
-        popup.showCenteredInCurrentWindow(e.project!!)
-    }
+    override fun actionPerformed(e: AnActionEvent) = showPromptPopup(e.project!!)
+}
+
+/** The panel in a popup centered in [project]'s window, opened [from] a configuration when given. */
+fun showPromptPopup(project: Project, from: Preset? = null) {
+    lateinit var popup: JBPopup
+    val panel = PromptPanel(project, { popup.cancel() }, from)
+    popup = JBPopupFactory.getInstance().createComponentPopupBuilder(panel, panel.prompt)
+        .setRequestFocus(true).setResizable(true).setMovable(true).setCancelOnClickOutside(true)
+        .createPopup()
+    popup.showCenteredInCurrentWindow(project)
 }

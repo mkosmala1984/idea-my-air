@@ -20,6 +20,7 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.NEW_SESSION_ICON
 import dev.myair.editor.projectBase
+import dev.myair.prompt.showPromptPopup
 import dev.myair.store.Preset
 import dev.myair.store.PresetStore
 import dev.myair.store.continuationPrompt
@@ -71,7 +72,8 @@ class PresetAction(private val preset: Preset) : DumbAwareAction(preset.name, pr
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.project?.basePath != null
     }
-    override fun actionPerformed(e: AnActionEvent) = startPreset(e.project!!, preset, popupPoint(e))
+    override fun actionPerformed(e: AnActionEvent) =
+        if (preset.askMore) showPromptPopup(e.project!!, preset) else startPreset(e.project!!, preset, popupPoint(e), preset.prompt)
 }
 
 /**
