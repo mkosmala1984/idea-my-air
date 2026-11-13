@@ -64,7 +64,7 @@ fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, brief
     return buildString {
         append("# My Air plan: ${folder.name}\n\n")
         append("This session works in the plan \"${folder.name}\" (folder path \"$path\", the plan argument of my_air_plan_apply). ")
-        append("Below are its descriptions as of the session's start; read current statuses and next steps with my_air_plan_get.\n")
+        append("Below are its descriptions as they were when this was written; read current statuses and next steps with my_air_plan_get.\n")
         plan.description?.let { append("\n$it\n") }
         if (task != null) {
             val milestone = plan.milestones.first { task in it.tasks }

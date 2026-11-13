@@ -79,6 +79,13 @@ class SessionPane(private val project: Project, val file: ClaudeSessionVirtualFi
         return true
     }
 
+    /** Sends [text] to the process as a message, pasted whole (so its lines stay one message) and submitted; false when the pane shows no process. */
+    fun send(text: String): Boolean {
+        val view = view ?: return false
+        view.createSendTextBuilder().useBracketedPasteMode().shouldExecute().send(text)
+        return true
+    }
+
     /** What a restored tab shows instead of starting: its directory is gone, or its session already runs elsewhere. */
     private fun restoreBlocker(): JComponent? {
         if (!file.cwd.isDirectory()) return notice("Session directory no longer exists:\n${file.cwd}")

@@ -92,6 +92,8 @@ class PlanFiles {
     val store = PlanManagerStore(Homes.myAir.resolve("plan-managers.json"))
     private val files = ConcurrentHashMap<String, PlanVirtualFile>()
     private val managers = ConcurrentHashMap<String, ClaudeSessionVirtualFile>()
+    /** A message for a plan's manager, by folder id, sent as the first prompt when [startManager] next builds its file. */
+    private val firstMessages = ConcurrentHashMap<String, String>()
 
     fun file(folderId: String): PlanVirtualFile = files.computeIfAbsent(folderId, ::PlanVirtualFile)
 
@@ -113,13 +115,31 @@ class PlanFiles {
         lateinit var args: List<String>
         val manager = store.update { stored ->
             val (manager, start) = managerStart(stored.byFolder[folder.id], newId, cwd, cwd) { hasTranscript(it, Homes.claude) }
-            args = start
+            args = start + firstMessages.remove(folder.id).let { if (it == null) emptyList() else listOf("--", it) }
             stored.prune(structure.all().map { it.id }.toSet()).set(folder.id, manager)
         }.byFolder.getValue(folder.id)
         if (manager.session == newId) ClaudeSessionsService.getInstance().updateFolders(ChangeSource.AUTO) { it.assign(newId, folder.id) }
         val file = ClaudeSessionVirtualFile(manager.session, manager.cwd, manager.project, NEW_SESSION_TITLE, args, planStart = PlanStart(folder.id, null))
         managers[folder.id] = file
         return file
+    }
+
+    /**
+     * Makes [manager]'s session, which manages no plan yet, the manager of the plan of [folderId]. [running] is the file of
+     * its process in this IDE, kept as the manager's file so the plan tab binds that process rather than starting another;
+     * without one, [message] goes to the session as the first prompt of the process the plan tab starts.
+     */
+    fun adopt(folderId: String, manager: PlanManager, running: ClaudeSessionVirtualFile?, message: String) {
+        ThreadingAssertions.assertEventDispatchThread()
+        store.update { stored ->
+            check(stored.folderOf(manager.session) == null) { "session ${manager.session} manages plan ${stored.folderOf(manager.session)} already" }
+            stored.set(folderId, manager)
+        }
+        if (running == null) firstMessages[folderId] = message
+        else {
+            check(running.sessionId == manager.session && SessionTerminals.getInstance().runs(running)) { "no process of session ${manager.session} in ${running.sessionId}'s file" }
+            managers[folderId] = running
+        }
     }
 
     /** The plan whose manager [file] is; null for a session tab's file. */

@@ -294,7 +294,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 NewSessionInDirAction("New Claude Session", false, selectedDir, { tree.selectionPaths?.singleOrNull()?.let(::nodeProject) }, editing::selectedPlanStart) { editing.selectedFolder()?.id },
                 NewSessionInDirAction("New Claude Session in Worktree...", true, { selectedDir().takeUnless { selectedItem() is WorktreeRow } }, selectedDir, editing::selectedPlanStart) { editing.selectedFolder()?.id },
                 openInIdeaAction(selectedOpenDir), openInTerminalAction(selectedOpenDir), Separator.getInstance(),
-                pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree),
+                pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree), TurnIntoPlanAction(inTree),
                 Separator.getInstance(), newFolder, rename, delete, Separator.getInstance(), *planActions.toTypedArray(),
             ),
             "ClaudeSessionsPopup",
@@ -313,7 +313,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         remove.registerCustomShortcutSet(CommonShortcuts.getDelete(), pinned)
         val inList = { pinned.selectedValuesList }
         val pinnedPopup = DefaultActionGroup(
-            pinAction(service, inList), settleAction(service, inList), remove, Separator.getInstance(), SameSettingsAction(inList), SaveAsPresetAction(inList), ShowChangesVsBaseAction(inList),
+            pinAction(service, inList), settleAction(service, inList), remove, Separator.getInstance(), SameSettingsAction(inList), SaveAsPresetAction(inList), ShowChangesVsBaseAction(inList), TurnIntoPlanAction(inList),
         )
         pinned.addMouseListener(object : PopupHandler() {
             override fun invokePopup(comp: Component, x: Int, y: Int) {

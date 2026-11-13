@@ -211,18 +211,20 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
         return Messages.showInputDialog(project, label, title, null, initial, validator)?.trim()
     }
 
-    /** A trimmed name no other folder under [parentId] has, or null when cancelled. */
-    private fun askName(title: String, initial: String, parentId: String?, except: String?): String? {
-        val validator = object : InputValidatorEx {
-            override fun getErrorText(input: String) = when {
-                input.isBlank() -> "Name cannot be empty"
-                '/' in input -> "Name cannot contain /, which separates folders in a path"
-                service.folders.nameTaken(parentId, input, except) -> "A folder named \"${input.trim()}\" already exists here"
-                else -> null
-            }
+    private fun askName(title: String, initial: String, parentId: String?, except: String?) = askFolderName(project, title, initial, parentId, except)
+}
+
+/** A trimmed name no other folder under [parentId] has, or null when cancelled. */
+fun askFolderName(project: Project, title: String, initial: String, parentId: String?, except: String?): String? {
+    val validator = object : InputValidatorEx {
+        override fun getErrorText(input: String) = when {
+            input.isBlank() -> "Name cannot be empty"
+            '/' in input -> "Name cannot contain /, which separates folders in a path"
+            ClaudeSessionsService.getInstance().folders.nameTaken(parentId, input, except) -> "A folder named \"${input.trim()}\" already exists here"
+            else -> null
         }
-        return Messages.showInputDialog(project, "Name:", title, null, initial, validator)?.trim()
     }
+    return Messages.showInputDialog(project, "Name:", title, null, initial, validator)?.trim()
 }
 
 /** Deletes [milestone] after the user confirms; one with open tasks is refused, naming them. */
