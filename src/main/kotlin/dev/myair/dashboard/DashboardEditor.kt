@@ -58,7 +58,7 @@ class DashboardEditorProvider : FileEditorProvider, DumbAware {
  */
 class DashboardEditor(private val project: Project, private val file: DashboardVirtualFile) : UserDataHolderBase(), FileEditor {
     private val service = ClaudeSessionsService.getInstance()
-    private val facts = GitFacts()
+    private val facts = GitFacts(Homes.myAir.resolve("dashboard-git.json"))
     // The landed facts with the session each was read for: a session that wrote on since counts as not read (R15).
     private var git: Map<String, Pair<ClaudeSession, Result<SessionGit>>> = emptyMap()
     private var inFlight: List<ClaudeSession>? = null

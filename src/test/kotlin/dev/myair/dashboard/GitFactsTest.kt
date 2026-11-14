@@ -39,6 +39,28 @@ class GitFactsTest {
     }
 
     @Test
+    fun `facts read once are kept in a file, so a new reader starts without running git`() {
+        val file = dir.resolve("facts.json")
+        val repo = init("repo")
+        Git.run(repo, "branch", "x")
+        val written = repo.resolve("a.txt").apply { writeText("a") }
+        val sessions = listOf(session("s", "2026-11-12T10:00:00Z", written).copy(lastBranch = "x", workDir = repo))
+        val first = GitFacts(file).read(sessions)
+        val second = GitFacts(file)
+        assertEquals(first, second.read(sessions))
+        assertEquals(0, second.reads)
+    }
+
+    @Test
+    fun `a facts file of another format is read again from git`() {
+        val file = dir.resolve("facts.json").apply { writeText("""{"format":0}""") }
+        val written = init("repo").resolve("a.txt").apply { writeText("a") }
+        val facts = GitFacts(file)
+        facts.read(listOf(session("s", "2026-11-12T10:00:00Z", written)))
+        assertEquals(1, facts.reads)
+    }
+
+    @Test
     fun `a branch is read on its own, so an old session's branch in a busy repository does not hold back newer sessions`() {
         val busy = init("busy")
         listOf("x", "y").forEach { Git.run(busy, "branch", it) }
