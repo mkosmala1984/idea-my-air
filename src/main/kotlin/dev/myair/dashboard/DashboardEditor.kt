@@ -63,6 +63,7 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
     private var git: Map<String, Pair<ClaudeSession, Result<SessionGit>>> = emptyMap()
     private var inFlight: List<ClaudeSession>? = null
     private var finishedOpen = false
+    private var checkingOpen = false
     private val pool = AppExecutorUtil.createBoundedApplicationPoolExecutor("Sessions dashboard git", 1)
     private val store = AnalysisStore(Homes.myAir.resolve("analysis"))
     private var analyses: Map<String, Analysis> = emptyMap()
@@ -136,7 +137,7 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
         nothingToAnalyze = false
         storeReads.request(Unit)
         val board = model()
-        val asked = board.unfinished.flatMap { it.rows } + board.finished
+        val asked = board.checking + board.unfinished.flatMap { it.rows } + board.finished
         val sessions = asked.map { it.session }
         // A read of the same sessions still under way answers this change too; queueing another would only delay it.
         if (sessions != inFlight) {
@@ -170,6 +171,11 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
         ))
         section("Now", board.now.size)
         board.now.forEach { content.add(row(it, emptyList(), now)) }
+        if (board.checking.isNotEmpty()) {
+            content.add(Box.createVerticalStrut(JBUI.scale(16)))
+            content.add(line(ActionLink((if (checkingOpen) "▾ " else "▸ ") + "Checking git (${board.checking.size})") { checkingOpen = !checkingOpen; rebuild() }))
+            if (checkingOpen) board.checking.forEach { content.add(row(it.session, it.chips, now, it.analysis)) }
+        }
         section("Unfinished", board.unfinished.sumOf { it.rows.size })
         board.unfinished.forEach { area ->
             content.add(line(JBLabel(area.name).apply { font = font.deriveFont(java.awt.Font.BOLD) }).apply { border = JBUI.Borders.emptyTop(8) })
@@ -200,7 +206,7 @@ class DashboardEditor(private val project: Project, private val file: DashboardV
             rebuild(board)
             return
         }
-        val rows = (board.unfinished.flatMap { it.rows } + board.finished).associateBy { it.session.id }
+        val rows = (board.checking + board.unfinished.flatMap { it.rows } + board.finished).associateBy { it.session.id }
         val folders = service.folders
         fun later(action: () -> Unit) = ApplicationManager.getApplication().invokeLater(action) { project.isDisposed }
         lateinit var started: AnalysisRun

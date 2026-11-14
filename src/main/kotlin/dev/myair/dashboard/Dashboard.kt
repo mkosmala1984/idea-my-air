@@ -53,10 +53,13 @@ data class Row(val session: ClaudeSession, val chips: List<Chip>, val analysis: 
 data class Area(val name: String, val rows: List<Row>)
 
 /**
- * [now]: needing input, then working, then unread; [unfinished]: sessions with an open signal by area; [finished]: the
- * rest; [recent]/[older]: sessions not settled whose last message is within / before [RECENT] of the time asked.
+ * [now]: needing input, then working, then unread; [checking]: sessions whose git is still being read, which may yet
+ * show them merged; [unfinished]: sessions with an open signal by area; [finished]: the rest; [recent]/[older]: sessions
+ * not settled whose last message is within / before [RECENT] of the time asked.
  */
-data class Dashboard(val now: List<ClaudeSession>, val unfinished: List<Area>, val finished: List<Row>, val recent: Int, val older: Int)
+data class Dashboard(
+    val now: List<ClaudeSession>, val checking: List<Row>, val unfinished: List<Area>, val finished: List<Row>, val recent: Int, val older: Int,
+)
 
 private val RECENT = Duration.ofDays(2)
 
@@ -85,10 +88,11 @@ fun dashboardOf(
             else -> Row(session, chips)
         }
     }
-    val (open, done) = rows.partition { row -> row.chips.any { it !is Chip.Merged && it !is Chip.Verdict && it !is Chip.AnalysisFailed } }
+    val (checking, known) = rows.partition { row -> row.chips.any { it is Chip.Pending } }
+    val (open, done) = known.partition { row -> row.chips.any { it !is Chip.Merged && it !is Chip.Verdict && it !is Chip.AnalysisFailed } }
     val areas = open.groupBy { areaOf(it.session, folders) }.map { (name, rows) -> Area(name, rows) }
     val recent = shown.count { it.lastMessage > now - RECENT }
-    return Dashboard(current, areas, done, recent, shown.size - recent)
+    return Dashboard(current, checking, areas, done, recent, shown.size - recent)
 }
 
 /** The chips of a session not in Now: its open signals, Pending or GitError while git is unknown, Merged when merged. */
@@ -117,7 +121,7 @@ private fun chips(session: ClaudeSession, folders: SessionFolders, git: Result<S
 /** The sessions an analysis run takes: listed out of Now, not known merged (a first git read of every work tree takes minutes), no current analysis, last message within [days] (null: any). */
 fun analysisCandidates(board: Dashboard, days: Int?, now: Instant): List<ClaudeSession> {
     val since = days?.let { now - Duration.ofDays(it.toLong()) }
-    return (board.unfinished.flatMap { it.rows } + board.finished)
+    return (board.checking + board.unfinished.flatMap { it.rows } + board.finished)
         .filter { row -> row.chips.none { it is Chip.Merged } && row.analysis !is RowAnalysis.Current }
         .map { it.session }.filter { since == null || it.lastMessage > since }.sortedByDescending { it.lastMessage }
 }

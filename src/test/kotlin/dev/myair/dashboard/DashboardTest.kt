@@ -47,10 +47,12 @@ class DashboardTest {
         assertEquals(
             mapOf(
                 "brief" to listOf("brief 1/2"), "asks" to listOf("asks"),
-                "mergedDirty" to listOf("uncommitted", "PR #7617"), "unknown" to listOf("…"),
+                "mergedDirty" to listOf("uncommitted", "PR #7617"),
             ),
             unfinished.rows.associate { row -> row.session.id to row.chips.map(::chipText) },
         )
+        // Git still being read may yet show the branch merged, so the session is neither unfinished nor finished yet.
+        assertEquals(listOf("unknown"), board.checking.map { it.session.id })
         assertEquals(listOf("merged", "done"), board.finished.map { it.session.id })
         assertEquals(2 to 6, board.recent to board.older)
     }
