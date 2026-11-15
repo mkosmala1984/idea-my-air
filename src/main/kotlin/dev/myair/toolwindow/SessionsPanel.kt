@@ -98,6 +98,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private var singleClick = PropertiesComponent.getInstance().getBoolean(SINGLE_CLICK)
     /** The tree selects, and both lists scroll to, the session of the window's active session tab when it changes. */
     private var followActive = PropertiesComponent.getInstance().getBoolean(FOLLOW_ACTIVE, true)
+    /** A search also looks in what was said in the sessions ([searchContent]), not only in their titles, directories and branches. */
+    private var inConversations = PropertiesComponent.getInstance().getBoolean(IN_CONVERSATIONS, true)
     /** The session of this window's active session tab ([ActiveSession]); its rows carry a bar and its pinned row a tint. */
     private var activeId: String? = null
     /** A session [followActive] has yet to select, as the tree did not show it yet; selected by the [render] that shows it. */
@@ -191,6 +193,14 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             override fun textChanged(e: DocumentEvent) = render()
         })
     }
+    /** A search of the conversations' text: for [query] as the index stood at [generation] ([ClaudeSessionsService.indexGeneration]). */
+    private data class Search(val query: String, val generation: Int)
+
+    private var requested: Search? = null
+
+    /** The transcripts the index found for the query the text answers, once its search has landed; a search that has not keeps the sessions it matches by title. */
+    private var found: Pair<String, Set<Path>>? = null
+
     /** The toolbar, or the search field in its place. */
     private val top = JPanel(CardLayout())
 
@@ -356,7 +366,18 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 Separator.getInstance(), refresh,
             )
         }
-        val search = object : DumbAwareAction("Search", "Filter sessions by title, project path or branch", AllIcons.Actions.Search) {
+        val conversations = object : ToggleAction(
+            "Search in Conversations", "Also find sessions by what was said in them, not only by title, project path and branch", AllIcons.Toolwindows.ToolWindowMessages,
+        ), DumbAware {
+            override fun getActionUpdateThread() = ActionUpdateThread.EDT
+            override fun isSelected(e: AnActionEvent) = inConversations
+            override fun setSelected(e: AnActionEvent, state: Boolean) {
+                inConversations = state
+                PropertiesComponent.getInstance().setValue(IN_CONVERSATIONS, state, true)
+                render()
+            }
+        }
+        val search = object : DumbAwareAction("Search", "Filter sessions by title, project path, branch or conversation", AllIcons.Actions.Search) {
             override fun actionPerformed(e: AnActionEvent) = showSearch(true)
         }
         search.registerCustomShortcutSet(CommonShortcuts.getFind(), this)
@@ -376,7 +397,10 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         top.add(JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(2, 4)
             add(filter, BorderLayout.CENTER)
-            add(close, BorderLayout.EAST)
+            add(JPanel(BorderLayout()).apply {
+                add(bar("ClaudeSessionsSearch", conversations), BorderLayout.CENTER)
+                add(close, BorderLayout.EAST)
+            }, BorderLayout.EAST)
         }, SEARCH_CARD)
         toolbar = top
         // With a single click the first click of a double-click has already toggled a group row, so the second must not.
@@ -624,12 +648,41 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     /** The work tree the tree is narrowed to: [windowRoot] while [workTreeOnly] is on, else null. */
     private fun workTreeRoot() = windowRoot.takeIf { workTreeOnly }
 
-    /** What the tree keeps of [treeSessions]: those of [workTreeRoot] matching [query]; null keeps all. */
+    /**
+     * What the tree keeps of [treeSessions]: those of [workTreeRoot] matching [query] by title, directory or branch, or by
+     * a message of theirs ([searchContent]); null keeps all.
+     */
     private fun treeFilter(query: String): ((ClaudeSession) -> Boolean)? {
         val root = workTreeRoot()
         if (root == null && query.isEmpty()) return null
         val heads = service.heads
-        return { (root == null || inWorkTree(it, root, heads)) && it.matches(query, service.branchOf(it)) }
+        val inConversation = found?.takeIf { it.first == query }?.second.orEmpty()
+        return {
+            (root == null || inWorkTree(it, root, heads)) &&
+                (it.matches(query, service.branchOf(it)) || it.transcript?.let(inConversation::contains) == true)
+        }
+    }
+
+    /**
+     * Asks the conversation index, off the EDT, for the sessions whose messages hold [query] and renders again when it
+     * answers; asks again when the index has grown since, but not twice for the same question.
+     */
+    private fun searchContent(query: String) {
+        val ask = Search(query, service.indexGeneration)
+        if (ask == requested) return
+        requested = ask
+        if (query.isEmpty()) {
+            found = null
+            return
+        }
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val hits = service.searchContent(query).keys
+            ApplicationManager.getApplication().invokeLater({
+                if (requested != ask) return@invokeLater
+                found = query to hits
+                render()
+            }, project.disposed)
+        }
     }
 
     private fun shownSessions() = service.pins.shown(service.listed, showSettled)
@@ -717,6 +770,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private fun render() {
         shown = snapshot()
         val query = filter.text.trim()
+        searchContent(if (inConversations) query else "")
         val error = service.foldersError.takeIf { foldersMode }
         tree.emptyText.text = when {
             !service.loaded -> LOADING
@@ -765,6 +819,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         private const val EDGE = 5
         private const val SINGLE_CLICK = "dev.myair.singleClick"
         private const val FOLLOW_ACTIVE = "dev.myair.followActiveTab"
+        private const val IN_CONVERSATIONS = "dev.myair.searchConversations"
         private const val TOOLBAR_CARD = "toolbar"
         private const val SEARCH_CARD = "search"
         private const val LOADING = "Loading sessions..."

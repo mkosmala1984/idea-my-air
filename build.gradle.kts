@@ -29,6 +29,8 @@ dependencies {
         // Optional at runtime (my-air-branch-diff.xml); build it first with idea-branch-diff's buildPlugin.
         localPlugin("E:/dev/projects/personal/idea-branch-diff/build/distributions/branch-diff-tree-0.1.0.zip")
     }
+    // The conversation index (search/): SQLite with FTS5. The IDE's own copy is a library module no plugin can depend on.
+    implementation("org.xerial:sqlite-jdbc:3.53.4.0")
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

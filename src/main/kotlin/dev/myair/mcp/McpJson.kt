@@ -29,6 +29,7 @@ fun SessionPage.toJson(structure: SessionFolders, zone: ZoneId): String = gson.t
                 "folder" to structure.placeOf(session)?.let(structure::pathOf),
                 "prompts" to session.prompts.map { it.take(PROMPT_CHARS) },
                 "changedFiles" to session.changedFiles.size,
+                "match" to snippets[session.id],
             )
         },
     ),

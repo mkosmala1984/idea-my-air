@@ -504,7 +504,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             o.getAsJsonObject("message").getAsJsonArray("content").map { it.asJsonObject }.filter { it["type"].asString == "tool_use" }
 
         /** Returns the offset just past the last newline read. */
-        private fun forEachCompleteLine(file: Path, from: Long, action: (String) -> Unit): Long {
+        internal fun forEachCompleteLine(file: Path, from: Long, action: (String) -> Unit): Long {
             FileChannel.open(file).use { channel ->
                 val input = Channels.newInputStream(channel.position(from))
                 val buffer = ByteArray(1 shl 16)

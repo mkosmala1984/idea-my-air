@@ -36,7 +36,7 @@ data class ClaudeSession(
      */
     fun matches(query: String, branch: String?): Boolean {
         val fields = listOfNotNull(title, cwd.toString(), startBranch, branch)
-        return query.split(' ').filter { it.isNotEmpty() }.all { word -> fields.any { it.contains(word, true) } }
+        return queryWords(query).all { word -> fields.any { it.contains(word, true) } }
     }
 
     /** Whether the last message came less than [days] days before [now]. */
@@ -45,6 +45,9 @@ data class ClaudeSession(
     /** TreeState matches nodes by toString(), so a session keeps its selection while its title and time change. */
     override fun toString() = id
 }
+
+/** The words of a search [query]: what [ClaudeSession.matches] and the conversation index ([dev.myair.search.SessionIndex]) take it as. */
+fun queryWords(query: String): List<String> = query.split(' ').filter { it.isNotEmpty() }
 
 /** The tools a server waiting for a sign-in offers, and nothing else. */
 private val AUTH_TOOLS = setOf("authenticate", "complete_authentication")

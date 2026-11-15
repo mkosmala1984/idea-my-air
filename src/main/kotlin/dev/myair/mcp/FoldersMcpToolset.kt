@@ -44,7 +44,7 @@ class FoldersMcpToolset : McpToolset {
     @McpDescription(
         "Finds Claude Code sessions of the user, newest first, one page at a time. All filters are optional and combine. " +
         "Each session has id, title, project (the directory claude ran in), lastMessage (when its latest message was written), folder (its path in the user's " +
-        "folders: the plan folder of the task its brief names, else where the user filed it, else null when the user kept it in sessions, else the folder its brief names, else the folder its project is bound to; null when unfiled), its first human prompts (cut short) and the number of files it changed. The result " +
+        "folders: the plan folder of the task its brief names, else where the user filed it, else null when the user kept it in sessions, else the folder its brief names, else the folder its project is bound to; null when unfiled), its first human prompts (cut short), the number of files it changed and, when query was found in a message of the conversation, match: the text around it. The result " +
         "has total, the number of all matches: fetch the next page with offset until it is covered.",
     )
     suspend fun my_air_sessions_find(
@@ -52,7 +52,7 @@ class FoldersMcpToolset : McpToolset {
         since: String? = null,
         @McpDescription("Latest last message, inclusive, in the same forms; a date covers the whole day.")
         until: String? = null,
-        @McpDescription("Words that must each occur, ignoring case, in the title, the project path, the branch the session started on or the branch checked out where it works now.")
+        @McpDescription("Words that must each occur, ignoring case, in the title, the project path, the branch the session started on or the branch checked out where it works now; or all together in one message of the conversation (what the user and the agent said, not tool calls or their results), where a word may be any fragment of at least 3 characters and accents are ignored, but not ł.")
         query: String? = null,
         @McpDescription("Folder path such as rtm/fixes: sessions filed in it or any folder below it.")
         folder: String? = null,
@@ -62,9 +62,14 @@ class FoldersMcpToolset : McpToolset {
         offset: Int? = null,
         @McpDescription("Page size, default $DEFAULT_LIMIT, at most $MAX_LIMIT.")
         limit: Int? = null,
-    ): String = withFolders { service, folders ->
-        val now = ZonedDateTime.now()
-        findSessions(service.sessions, folders, now, since, until, query, folder, unfiled, offset, limit, service::branchOf).toJson(folders, now.zone)
+    ): String {
+        // Off the EDT: the index is a database file.
+        val content = query?.takeIf { it.isNotBlank() }
+            ?.let { withContext(Dispatchers.IO) { ClaudeSessionsService.getInstance().searchContent(it) } }.orEmpty()
+        return withFolders { service, folders ->
+            val now = ZonedDateTime.now()
+            findSessions(service.sessions, folders, now, since, until, query, folder, unfiled, offset, limit, content, service::branchOf).toJson(folders, now.zone)
+        }
     }
 
     @McpTool

@@ -18,8 +18,8 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
 - `BriefMcpToolset.kt`, `class BriefMcpToolset : McpToolset`:
   - `my_air_set_brief(goal, tasks, plan_task, folder, title)`
 - `SessionSearch.kt`:
-  - `data class SessionPage(total, offset, sessions)`
-  - `fun findSessions(...)`
+  - `data class SessionPage(total, offset, sessions, snippets)`
+  - `fun findSessions(...)`: a `query` also matches a session found in `content`, the conversation index's answer for it (`SessionIndex.search`, run by the tool off the EDT); `snippets` (and `match` in the JSON) give the text around the hit of each session on the page
   - `fun timeBound(text, now, end)`
   - Constants `DEFAULT_LIMIT = 50`, `MAX_LIMIT = 100` and `PROMPT_CHARS = 300`.
 - `SessionStart.kt`:
