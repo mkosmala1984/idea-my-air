@@ -27,7 +27,7 @@ dependencies {
         bundledModule("intellij.platform.vcs.core")
         bundledPlugin("com.intellij.platform.vcs")
         // Optional at runtime (my-air-branch-diff.xml); build it first with idea-branch-diff's buildPlugin.
-        localPlugin("E:/dev/projects/idea-branch-diff/build/distributions/branch-diff-tree-0.1.0.zip")
+        localPlugin("E:/dev/projects/personal/idea-branch-diff/build/distributions/branch-diff-tree-0.1.0.zip")
     }
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")

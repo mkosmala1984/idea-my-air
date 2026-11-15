@@ -101,4 +101,35 @@ class ContextCardsTest {
         assertTrue(title.x + title.width <= 300)
         assertTrue(title.height > title.getFontMetrics(title.font).height * 2)
     }
+
+    @Test
+    fun `wrapRows fills a row before starting the next and gives a part wider than the line a row of its own`() {
+        assertEquals(listOf(listOf(0, 1), listOf(2, 3), listOf(4)), wrapRows(listOf(40, 40, 50, 30, 10), 100, 10))
+        assertEquals(listOf(listOf(0), listOf(1), listOf(2)), wrapRows(listOf(150, 20, 150), 100, 10))
+        assertEquals(emptyList<List<Int>>(), wrapRows(emptyList(), 100, 10))
+    }
+
+    @Test
+    fun `a wrap line breaks into rows in a narrow pane, none of its parts leaving it`() {
+        val parts = listOf("IDEA", "Terminal", "Show diff", "Plannotator").map { JBLabel(it) }
+        val line = WrapLine(parts, hgap = 10, vgap = 2)
+        val oneRow = parts.maxOf { it.preferredSize.height }
+        layOut(line, 1000)
+        assertEquals(oneRow, line.preferredSize.height)
+        assertEquals(1, parts.map { it.y }.toSet().size)
+
+        layOut(line, 90)
+        assertTrue(line.preferredSize.height > oneRow)
+        assertTrue(parts.map { it.y }.toSet().size > 1)
+        parts.forEach { assertTrue(it.x + it.width <= 90, "${it.text} at ${it.x}+${it.width}") }
+    }
+
+    @Test
+    fun `a part wider than a wrap line is shortened to it`() {
+        val wide = JBLabel("a very long path to a folder ".repeat(5))
+        val line = WrapLine(listOf(JBLabel("icon"), wide))
+        layOut(line, 120)
+        assertEquals(120, wide.width)
+        assertEquals(0, line.minimumSize.width)
+    }
 }

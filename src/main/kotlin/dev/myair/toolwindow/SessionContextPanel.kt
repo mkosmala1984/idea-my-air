@@ -74,6 +74,7 @@ import dev.myair.service.LatestRead
 import dev.myair.planview.tabFileOf
 import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import java.awt.BorderLayout
+import java.awt.Font
 import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Point
@@ -186,14 +187,16 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         card("Environment") {
             // The project, the folder the session runs in when it is another one (a worktree as a rule), and opening that folder.
             row {
-                icon(AllIcons.Nodes.Folder)
-                label(context.project).applyToComponent { toolTipText = context.projectPath.toString() }
-                if (context.worktree) comment(fileLabel(context.cwd, context.projectPath)).applyToComponent { toolTipText = context.cwd.toString() }.shrinkable()
-                else comment(context.projectPath.toString()).shrinkable()
+                val parts = mutableListOf<JComponent>(JBLabel(AllIcons.Nodes.Folder), JBLabel(context.project).apply { toolTipText = context.projectPath.toString() })
+                parts.add(
+                    if (context.worktree) commentLabel(fileLabel(context.cwd, context.projectPath)).apply { toolTipText = context.cwd.toString() }
+                    else commentLabel(context.projectPath.toString()),
+                )
                 if (context.cwdExists) {
-                    link("IDEA") { openInIdea(project, context.cwd) }.applyToComponent { toolTipText = "Open in IDEA" }
-                    link("Terminal") { openInTerminal(project, context.cwd) }.applyToComponent { toolTipText = "Open in Terminal" }
+                    parts.add(ActionLink("IDEA") { openInIdea(project, context.cwd) }.apply { toolTipText = "Open in IDEA" })
+                    parts.add(ActionLink("Terminal") { openInTerminal(project, context.cwd) }.apply { toolTipText = "Open in Terminal" })
                 }
+                cell(WrapLine(parts)).align(AlignX.FILL)
             }
             context.git?.let { git ->
                 // The branch of that folder and the base its changes are counted against; the base gives way first.
@@ -237,40 +240,47 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     val added = shown.sumOf { it.value.added }
                     val removed = shown.sumOf { it.value.removed }
                     row {
-                        label("+$added").applyToComponent { foreground = FileStatus.ADDED.color }
-                        label("−$removed").applyToComponent { foreground = FileStatus.DELETED.color }
+                        val parts = mutableListOf<JComponent>(
+                            JBLabel("+$added").apply { foreground = FileStatus.ADDED.color },
+                            JBLabel("−$removed").apply { foreground = FileStatus.DELETED.color },
+                        )
                         if (changes.isNotEmpty()) {
-                            cell(InplaceButton(if (asTree) "Show as list" else "Show as tree", if (asTree) AllIcons.Actions.ListFiles else AllIcons.Actions.ShowAsTree) {
+                            parts.add(InplaceButton(if (asTree) "Show as list" else "Show as tree", if (asTree) AllIcons.Actions.ListFiles else AllIcons.Actions.ShowAsTree) {
                                 PropertiesComponent.getInstance().setValue(CHANGES_AS_TREE, !asTree)
                                 render()
-                            }).resizableColumn().align(AlignX.RIGHT)
-                            link("Show diff") { showCombinedBaseDiff(project, git) }
-                                .applyToComponent { toolTipText = "All files in one tab, against ${git.base}" }
-                            link("Tree") { showBaseChangesTree(project, git) }
-                                .applyToComponent { toolTipText = "The changed files as a tree of folders, against ${git.base}" }
-                            if (plannotator != null) link("Plannotator") { reviewInPlannotator(project, git) }
-                                .applyToComponent { toolTipText = "Review all changes against ${git.base} in Plannotator, in the browser" }
+                            })
+                            parts.add(ActionLink("Show diff") { showCombinedBaseDiff(project, git) }
+                                .apply { toolTipText = "All files in one tab, against ${git.base}" })
+                            parts.add(ActionLink("Tree") { showBaseChangesTree(project, git) }
+                                .apply { toolTipText = "The changed files as a tree of folders, against ${git.base}" })
+                            if (plannotator != null) parts.add(ActionLink("Plannotator") { reviewInPlannotator(project, git) }
+                                .apply { toolTipText = "Review all changes against ${git.base} in Plannotator, in the browser" })
                         }
+                        cell(WrapLine(parts)).align(AlignX.FILL)
                     }
                     // Which changes show, each choice with its count; the chosen one is plain text.
                     if (changes.isNotEmpty()) row {
-                        for (choice in ChangesFilter.entries) {
+                        val parts = ChangesFilter.entries.map<ChangesFilter, JComponent> { choice ->
                             val text = "${choice.label} ${changes.count(choice::shows)}"
-                            if (choice == filter) label(text).bold()
-                            else link(text) {
+                            if (choice == filter) JBLabel(text).apply { font = font.deriveFont(Font.BOLD) }
+                            else ActionLink(text) {
                                 PropertiesComponent.getInstance().setValue(CHANGES_FILTER, choice.name)
                                 render()
                             }
                         }
+                        cell(WrapLine(parts)).align(AlignX.FILL)
                     }
-                    if (added + removed > 0) row { cell(ChangeBar(added, removed)).align(AlignX.FILL) }
                     if (changes.isNotEmpty() && shown.isEmpty()) row { comment("No ${filter.label.lowercase()} changes") }
                     else if (asTree) {
-                        if (shown.isNotEmpty()) row { cell(wrapped(changesTree(git, changeTree(changes, filter)))).align(AlignX.FILL) }
+                        if (shown.isNotEmpty()) row { cell(wrapped(horizontallyScrolled(changesTree(git, changeTree(changes, filter))))).align(AlignX.FILL) }
                     } else paged("Changes", shown) { (index, change), _ ->
                         row {
                             label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = change.kind.status.color }
-                            link(change.path) { showBaseDiff(project, git, index) }.shrinkable()
+                            // The name stays whole; the folder gives way first.
+                            link(change.path.substringAfterLast('/')) { showBaseDiff(project, git, index) }
+                                .applyToComponent { toolTipText = change.path }
+                            val folder = change.path.substringBeforeLast('/', "")
+                            if (folder.isNotEmpty()) cell(commentLabel(folder)).applyToComponent { toolTipText = change.path }.shrinkable()
                             comment("+${change.added} −${change.removed}")
                         }
                     }
@@ -353,11 +363,11 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         if (context.mcpServers.isNotEmpty()) card("MCP servers") {
             paged("MCP servers", context.mcpServers) { server, _ -> row { icon(AllIcons.Nodes.Plugin); label(server).shrinkable() } }
         }
-        if (context.skills.isNotEmpty()) card("Skills", indent = false) {
+        if (context.skills.isNotEmpty()) card("Skills") {
             val (pinned, groups) = skillSections(context.skills, pinnedSkills())
             for (skill in pinned) skill(context.cwd to skill, pinned = true)
             for ((plugin, skills) in groups) {
-                section("$plugin (${skills.size})", key = "Skills/$plugin", expandedFirst = false, indent = false) {
+                section("$plugin (${skills.size})", key = "Skills/$plugin", expandedFirst = false) {
                     for (skill in skills) skill(context.cwd to skill, pinned = false)
                 }
             }
@@ -399,7 +409,10 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
      * [component] in a plain panel: the grid of a card makes room for what its cells paint past their bounds, and a
      * tree or a wrapped description made it move every row of the card to the right.
      */
-    private fun wrapped(component: JComponent) = JPanel(BorderLayout()).apply {
+    private fun wrapped(component: JComponent) = object : JPanel(BorderLayout()) {
+        // A tree is as wide as its longest row; the pane's width, not that, decides how wide the card is.
+        override fun getMinimumSize() = Dimension(0, super.getMinimumSize().height)
+    }.apply {
         isOpaque = false
         add(component, BorderLayout.CENTER)
     }
@@ -422,6 +435,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             isRootVisible = false
             showsRootHandles = true
             isOpaque = false
+            border = JBUI.Borders.empty()
             cellRenderer = object : ColoredTreeCellRenderer() {
                 override fun customizeCellRenderer(tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean) {
                     when (val change = (value as DefaultMutableTreeNode).userObject as ChangeNode) {
@@ -565,18 +579,19 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             }.customize(UnscaledGaps(bottom = 6)) // The text cell's default gaps without the top one, flush with the card's top.
         }
         row {
-            listOfNotNull(context.model?.let(::modelName), context.effort).forEach { cell(Chip(it)) }
+            val parts = listOfNotNull(context.model?.let(::modelName), context.effort).map<String, JComponent> { Chip(it) }.toMutableList()
             // The session is looked up at the click, as the tab is: the pane is not rebuilt for every change of it.
-            if (context.cwdExists) cell(InplaceButton("Continue in a new session: same model, effort and added directories, in ${context.cwd}", NEW_SESSION_ICON) {
+            if (context.cwdExists) parts.add(InplaceButton("Continue in a new session: same model, effort and added directories, in ${context.cwd}", NEW_SESSION_ICON) {
                 continueSession(project, service.sessions.first { it.id == shownId }, context.cwd)
             })
-            comment(shortAge(context.lastMessage, Instant.now())).align(AlignX.RIGHT)
+            parts.add(commentLabel(shortAge(context.lastMessage, Instant.now())))
+            cell(WrapLine(parts)).align(AlignX.FILL)
         }
     }.apply { isOpaque = false }
 
     /** A card holding a section that stays collapsed or expanded across renders. */
-    private fun JPanel.card(title: String, indent: Boolean = true, init: Panel.() -> Unit) {
-        add(ContextCard(panel { section(title, indent = indent, init = init) }.apply { isOpaque = false }))
+    private fun JPanel.card(title: String, init: Panel.() -> Unit) {
+        add(ContextCard(panel { section(title, init = init) }.apply { isOpaque = false }))
     }
 
     /**
@@ -620,8 +635,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
      * A collapsible group that stays collapsed or expanded across renders, sessions, windows and restarts, kept by [key]
      * in application properties; [expandedFirst] until toggled.
      */
-    private fun Panel.section(title: String, key: String = title, expandedFirst: Boolean = true, indent: Boolean = true, init: Panel.() -> Unit) =
-        collapsibleGroup(title, indent, init).apply {
+    private fun Panel.section(title: String, key: String = title, expandedFirst: Boolean = true, init: Panel.() -> Unit) =
+        collapsibleGroup(title, false, init).apply {
             expanded = sectionExpanded(sectionStates(), key) ?: expandedFirst
             addExpandedListener { setSectionStates(withSection(sectionStates(), key, it)) }
         }

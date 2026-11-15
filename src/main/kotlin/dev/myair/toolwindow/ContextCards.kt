@@ -1,8 +1,8 @@
 package dev.myair.toolwindow
 
-import com.intellij.openapi.vcs.FileStatus
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Cell
 import com.intellij.util.ui.GraphicsUtil
@@ -14,6 +14,10 @@ import java.awt.Graphics2D
 import java.awt.geom.RoundRectangle2D
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.JTree
+import javax.swing.SwingUtilities
+import javax.swing.event.TreeExpansionEvent
+import javax.swing.event.TreeExpansionListener
 
 private val CARD_BACKGROUND = JBColor.namedColor("Editor.background", JBColor(0xFFFFFF, 0x1E1F22))
 private val CHIP_BACKGROUND = JBColor(0xEBECF0, 0x393B40)
@@ -22,9 +26,12 @@ private val CHIP_BACKGROUND = JBColor(0xEBECF0, 0x393B40)
 class ContextCard(content: JComponent) : JPanel(BorderLayout()) {
     init {
         isOpaque = false
-        border = JBUI.Borders.empty(4, 8)
+        border = JBUI.Borders.empty(2, 4)
         add(content, BorderLayout.CENTER)
     }
+
+    // The card never asks for more width than the pane gives it: what does not fit inside is the content's to wrap or shorten.
+    override fun getMinimumSize() = Dimension(0, super.getMinimumSize().height)
 
     override fun paintComponent(g: Graphics) {
         val g2 = g.create() as Graphics2D
@@ -84,6 +91,101 @@ class ShrinkingLine(parts: List<JComponent>) : JPanel(null) {
     }
 }
 
+/**
+ * [tree] in a pane that scrolls sideways when the tree is wider than the card and never vertically: it is as high as the tree,
+ * inside the pane's own vertical scrolling, which keeps the wheel.
+ */
+fun horizontallyScrolled(tree: JComponent): JComponent = object : JBScrollPane(tree, VERTICAL_SCROLLBAR_NEVER, HORIZONTAL_SCROLLBAR_AS_NEEDED) {
+    override fun getPreferredSize(): Dimension {
+        val bar = if (horizontalScrollBar.isVisible) horizontalScrollBar.preferredSize.height else 0
+        return Dimension(0, tree.preferredSize.height + bar)
+    }
+
+    override fun getMinimumSize() = Dimension(0, preferredSize.height)
+}.apply {
+    border = JBUI.Borders.empty()
+    viewportBorder = JBUI.Borders.empty()
+    isOpaque = false
+    viewport.isOpaque = false
+    isWheelScrollingEnabled = false
+    // The pane is a validate root, so the tree growing or shrinking does not reach the card around it by itself.
+    (tree as? JTree)?.addTreeExpansionListener(object : TreeExpansionListener {
+        override fun treeExpanded(event: TreeExpansionEvent) = resized()
+        override fun treeCollapsed(event: TreeExpansionEvent) = resized()
+
+        private fun resized() = SwingUtilities.invokeLater {
+            invalidate()
+            parent?.revalidate()
+        }
+    })
+}
+
+/**
+ * The indexes of [widths] grouped into rows of at most [available] wide with [gap] between neighbours, each row filled before
+ * the next is started; a part wider than [available] stands alone in a row.
+ */
+fun wrapRows(widths: List<Int>, available: Int, gap: Int): List<List<Int>> {
+    val rows = ArrayList<MutableList<Int>>()
+    var used = 0
+    widths.forEachIndexed { i, w ->
+        if (rows.isEmpty() || used + gap + w > available) {
+            rows.add(mutableListOf(i))
+            used = w
+        } else {
+            rows.last().add(i)
+            used += gap + w
+        }
+    }
+    return rows
+}
+
+/**
+ * [parts] side by side, wrapping to the next row when the line is too narrow, so nothing is cut off at the right; a part wider
+ * than the line is shortened to it (a label ends in an ellipsis). It has no minimum width, only a height that follows its width.
+ */
+class WrapLine(parts: List<JComponent>, private val hgap: Int = JBUI.scale(10), private val vgap: Int = JBUI.scale(2)) : JPanel(null) {
+    private var laidOutHeight = -1
+
+    init {
+        isOpaque = false
+        parts.forEach(::add)
+    }
+
+    private fun rows(available: Int) = wrapRows(components.map { it.preferredSize.width }, available, hgap)
+
+    private fun heightOf(rows: List<List<Int>>) =
+        rows.sumOf { row -> row.maxOf { components[it].preferredSize.height } } + vgap * (rows.size - 1)
+
+    override fun getPreferredSize() = Dimension(
+        components.sumOf { it.preferredSize.width } + hgap * (componentCount - 1),
+        heightOf(rows(if (width > 0) width else Int.MAX_VALUE)),
+    )
+
+    override fun getMinimumSize() = Dimension(0, preferredSize.height)
+
+    override fun doLayout() {
+        val rows = rows(width)
+        var y = 0
+        for (row in rows) {
+            val rowHeight = row.maxOf { components[it].preferredSize.height }
+            var x = 0
+            for (i in row) {
+                val part = components[i]
+                val w = minOf(part.preferredSize.width, width)
+                part.setBounds(x, y + (rowHeight - part.preferredSize.height) / 2, w, part.preferredSize.height)
+                x += w + hgap
+            }
+            y += rowHeight + vgap
+        }
+        // The parent's layout asked for the height of the width it had before; a different one means it must ask again.
+        val height = heightOf(rows)
+        if (height != laidOutHeight) {
+            laidOutHeight = height
+            revalidate()
+        }
+    }
+}
+
 /** A small grey rounded label: the model and effort under a session's title. */
 class Chip(text: String) : JBLabel(text) {
     init {
@@ -103,33 +205,5 @@ class Chip(text: String) : JBLabel(text) {
             g2.dispose()
         }
         super.paintComponent(g)
-    }
-}
-
-/** The share of added and removed lines, as one bar: added green from the left, removed red after it. */
-class ChangeBar(private val added: Int, private val removed: Int) : JComponent() {
-    init {
-        require(added + removed > 0) { "No lines changed" }
-    }
-
-    override fun getPreferredSize() = Dimension(JBUI.scale(120), JBUI.scale(6))
-
-    override fun getMinimumSize() = Dimension(0, JBUI.scale(6))
-
-    override fun paintComponent(g: Graphics) {
-        val g2 = g.create() as Graphics2D
-        try {
-            GraphicsUtil.setupAAPainting(g2)
-            val h = JBUI.scale(6)
-            val y = (height - h) / 2
-            g2.clip(RoundRectangle2D.Float(0f, y.toFloat(), width.toFloat(), h.toFloat(), h.toFloat(), h.toFloat()))
-            val split = width * added / (added + removed)
-            g2.color = FileStatus.ADDED.color
-            g2.fillRect(0, y, split, h)
-            g2.color = FileStatus.DELETED.color
-            g2.fillRect(split, y, width - split, h)
-        } finally {
-            g2.dispose()
-        }
     }
 }
