@@ -26,6 +26,9 @@ class ContextCard(content: JComponent) : JPanel(BorderLayout()) {
         add(content, BorderLayout.CENTER)
     }
 
+    // The card never asks for more width than the pane gives it: what does not fit inside is the content's to wrap or shorten.
+    override fun getMinimumSize() = Dimension(0, super.getMinimumSize().height)
+
     override fun paintComponent(g: Graphics) {
         val g2 = g.create() as Graphics2D
         try {
@@ -80,6 +83,72 @@ class ShrinkingLine(parts: List<JComponent>) : JPanel(null) {
             val h = part.preferredSize.height
             part.setBounds(x, (height - h) / 2, widths[i], h)
             x += widths[i]
+        }
+    }
+}
+
+/**
+ * The indexes of [widths] grouped into rows of at most [available] wide with [gap] between neighbours, each row filled before
+ * the next is started; a part wider than [available] stands alone in a row.
+ */
+fun wrapRows(widths: List<Int>, available: Int, gap: Int): List<List<Int>> {
+    val rows = ArrayList<MutableList<Int>>()
+    var used = 0
+    widths.forEachIndexed { i, w ->
+        if (rows.isEmpty() || used + gap + w > available) {
+            rows.add(mutableListOf(i))
+            used = w
+        } else {
+            rows.last().add(i)
+            used += gap + w
+        }
+    }
+    return rows
+}
+
+/**
+ * [parts] side by side, wrapping to the next row when the line is too narrow, so nothing is cut off at the right; a part wider
+ * than the line is shortened to it (a label ends in an ellipsis). It has no minimum width, only a height that follows its width.
+ */
+class WrapLine(parts: List<JComponent>, private val hgap: Int = JBUI.scale(10), private val vgap: Int = JBUI.scale(2)) : JPanel(null) {
+    private var laidOutHeight = -1
+
+    init {
+        isOpaque = false
+        parts.forEach(::add)
+    }
+
+    private fun rows(available: Int) = wrapRows(components.map { it.preferredSize.width }, available, hgap)
+
+    private fun heightOf(rows: List<List<Int>>) =
+        rows.sumOf { row -> row.maxOf { components[it].preferredSize.height } } + vgap * (rows.size - 1)
+
+    override fun getPreferredSize() = Dimension(
+        components.sumOf { it.preferredSize.width } + hgap * (componentCount - 1),
+        heightOf(rows(if (width > 0) width else Int.MAX_VALUE)),
+    )
+
+    override fun getMinimumSize() = Dimension(0, preferredSize.height)
+
+    override fun doLayout() {
+        val rows = rows(width)
+        var y = 0
+        for (row in rows) {
+            val rowHeight = row.maxOf { components[it].preferredSize.height }
+            var x = 0
+            for (i in row) {
+                val part = components[i]
+                val w = minOf(part.preferredSize.width, width)
+                part.setBounds(x, y + (rowHeight - part.preferredSize.height) / 2, w, part.preferredSize.height)
+                x += w + hgap
+            }
+            y += rowHeight + vgap
+        }
+        // The parent's layout asked for the height of the width it had before; a different one means it must ask again.
+        val height = heightOf(rows)
+        if (height != laidOutHeight) {
+            laidOutHeight = height
+            revalidate()
         }
     }
 }

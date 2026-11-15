@@ -74,6 +74,9 @@ import dev.myair.service.LatestRead
 import dev.myair.planview.tabFileOf
 import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import java.awt.BorderLayout
+import java.awt.Font
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
 import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Point
@@ -120,6 +123,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     private val skillFolders = HashMap<Pair<Path, String>, MutableSet<Path>>()
     /** What the pane was last built from, by [render]. */
     private var rendered: Any? = null
+    /** Whether the pane is too narrow for the tree of changes, which then shows as a list; [render] reads it when the width crosses [NARROW]. */
+    private var narrow = false
 
     init {
         border = JBUI.Borders.empty(CARD_GAP)
@@ -128,6 +133,15 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         PaneFont.subscribe(parent) { render(force = true) }
         // A hidden pane reads nothing; it catches up when shown.
         addHierarchyListener { if (it.changeFlags and HierarchyEvent.SHOWING_CHANGED.toLong() != 0L && isShowing) update() }
+        addComponentListener(object : ComponentAdapter() {
+            override fun componentResized(e: ComponentEvent) {
+                val now = width in 1 until JBUI.scale(NARROW)
+                if (now != narrow) {
+                    narrow = now
+                    render()
+                }
+            }
+        })
         update()
     }
 
@@ -164,7 +178,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val session = service.sessions.firstOrNull { it.id == id }
         val context = session?.let { contextOf(it, it.workDir.exists(), it.id in service.live, git) }
         val plan = session?.let { planContextOf(it, service.folders, service.sessions) }
-        val shown = listOf(id, context, plan, context?.let { shortAge(it.lastMessage, Instant.now()) }, fullLists.toSet(), skills.toMap(), pinnedSkills(), changesAsTree(), changesFilter())
+        val shown = listOf(id, context, plan, context?.let { shortAge(it.lastMessage, Instant.now()) }, fullLists.toSet(), skills.toMap(), pinnedSkills(), changesAsTree(), changesFilter(), narrow)
         if (!force && shown == rendered) return
         rendered = shown
         val content = when {
@@ -186,14 +200,16 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         card("Environment") {
             // The project, the folder the session runs in when it is another one (a worktree as a rule), and opening that folder.
             row {
-                icon(AllIcons.Nodes.Folder)
-                label(context.project).applyToComponent { toolTipText = context.projectPath.toString() }
-                if (context.worktree) comment(fileLabel(context.cwd, context.projectPath)).applyToComponent { toolTipText = context.cwd.toString() }.shrinkable()
-                else comment(context.projectPath.toString()).shrinkable()
+                val parts = mutableListOf<JComponent>(JBLabel(AllIcons.Nodes.Folder), JBLabel(context.project).apply { toolTipText = context.projectPath.toString() })
+                parts.add(
+                    if (context.worktree) commentLabel(fileLabel(context.cwd, context.projectPath)).apply { toolTipText = context.cwd.toString() }
+                    else commentLabel(context.projectPath.toString()),
+                )
                 if (context.cwdExists) {
-                    link("IDEA") { openInIdea(project, context.cwd) }.applyToComponent { toolTipText = "Open in IDEA" }
-                    link("Terminal") { openInTerminal(project, context.cwd) }.applyToComponent { toolTipText = "Open in Terminal" }
+                    parts.add(ActionLink("IDEA") { openInIdea(project, context.cwd) }.apply { toolTipText = "Open in IDEA" })
+                    parts.add(ActionLink("Terminal") { openInTerminal(project, context.cwd) }.apply { toolTipText = "Open in Terminal" })
                 }
+                cell(WrapLine(parts)).align(AlignX.FILL)
             }
             context.git?.let { git ->
                 // The branch of that folder and the base its changes are counted against; the base gives way first.
@@ -229,7 +245,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         else context.git?.let { git ->
             card("Changes vs base") {
                 val changes = git.changes
-                val asTree = changesAsTree()
+                val asTree = changesAsTree() && !narrow
                 val filter = changesFilter()
                 if (changes == null) row { comment(checkNotNull(git.problem)) }
                 else {
@@ -237,31 +253,36 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     val added = shown.sumOf { it.value.added }
                     val removed = shown.sumOf { it.value.removed }
                     row {
-                        label("+$added").applyToComponent { foreground = FileStatus.ADDED.color }
-                        label("−$removed").applyToComponent { foreground = FileStatus.DELETED.color }
+                        val parts = mutableListOf<JComponent>(
+                            JBLabel("+$added").apply { foreground = FileStatus.ADDED.color },
+                            JBLabel("−$removed").apply { foreground = FileStatus.DELETED.color },
+                        )
                         if (changes.isNotEmpty()) {
-                            cell(InplaceButton(if (asTree) "Show as list" else "Show as tree", if (asTree) AllIcons.Actions.ListFiles else AllIcons.Actions.ShowAsTree) {
+                            // A narrow pane shows the list whatever was chosen, so there is nothing to toggle.
+                            if (!narrow) parts.add(InplaceButton(if (asTree) "Show as list" else "Show as tree", if (asTree) AllIcons.Actions.ListFiles else AllIcons.Actions.ShowAsTree) {
                                 PropertiesComponent.getInstance().setValue(CHANGES_AS_TREE, !asTree)
                                 render()
-                            }).resizableColumn().align(AlignX.RIGHT)
-                            link("Show diff") { showCombinedBaseDiff(project, git) }
-                                .applyToComponent { toolTipText = "All files in one tab, against ${git.base}" }
-                            link("Tree") { showBaseChangesTree(project, git) }
-                                .applyToComponent { toolTipText = "The changed files as a tree of folders, against ${git.base}" }
-                            if (plannotator != null) link("Plannotator") { reviewInPlannotator(project, git) }
-                                .applyToComponent { toolTipText = "Review all changes against ${git.base} in Plannotator, in the browser" }
+                            })
+                            parts.add(ActionLink("Show diff") { showCombinedBaseDiff(project, git) }
+                                .apply { toolTipText = "All files in one tab, against ${git.base}" })
+                            parts.add(ActionLink("Tree") { showBaseChangesTree(project, git) }
+                                .apply { toolTipText = "The changed files as a tree of folders, against ${git.base}" })
+                            if (plannotator != null) parts.add(ActionLink("Plannotator") { reviewInPlannotator(project, git) }
+                                .apply { toolTipText = "Review all changes against ${git.base} in Plannotator, in the browser" })
                         }
+                        cell(WrapLine(parts)).align(AlignX.FILL)
                     }
                     // Which changes show, each choice with its count; the chosen one is plain text.
                     if (changes.isNotEmpty()) row {
-                        for (choice in ChangesFilter.entries) {
+                        val parts = ChangesFilter.entries.map<ChangesFilter, JComponent> { choice ->
                             val text = "${choice.label} ${changes.count(choice::shows)}"
-                            if (choice == filter) label(text).bold()
-                            else link(text) {
+                            if (choice == filter) JBLabel(text).apply { font = font.deriveFont(Font.BOLD) }
+                            else ActionLink(text) {
                                 PropertiesComponent.getInstance().setValue(CHANGES_FILTER, choice.name)
                                 render()
                             }
                         }
+                        cell(WrapLine(parts)).align(AlignX.FILL)
                     }
                     if (added + removed > 0) row { cell(ChangeBar(added, removed)).align(AlignX.FILL) }
                     if (changes.isNotEmpty() && shown.isEmpty()) row { comment("No ${filter.label.lowercase()} changes") }
@@ -270,7 +291,11 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     } else paged("Changes", shown) { (index, change), _ ->
                         row {
                             label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = change.kind.status.color }
-                            link(change.path) { showBaseDiff(project, git, index) }.shrinkable()
+                            // The name stays whole; the folder gives way first.
+                            link(change.path.substringAfterLast('/')) { showBaseDiff(project, git, index) }
+                                .applyToComponent { toolTipText = change.path }
+                            val folder = change.path.substringBeforeLast('/', "")
+                            if (folder.isNotEmpty()) comment(folder).applyToComponent { toolTipText = change.path }.shrinkable()
                             comment("+${change.added} −${change.removed}")
                         }
                     }
@@ -399,7 +424,10 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
      * [component] in a plain panel: the grid of a card makes room for what its cells paint past their bounds, and a
      * tree or a wrapped description made it move every row of the card to the right.
      */
-    private fun wrapped(component: JComponent) = JPanel(BorderLayout()).apply {
+    private fun wrapped(component: JComponent) = object : JPanel(BorderLayout()) {
+        // A tree is as wide as its longest row; the pane's width, not that, decides how wide the card is.
+        override fun getMinimumSize() = Dimension(0, super.getMinimumSize().height)
+    }.apply {
         isOpaque = false
         add(component, BorderLayout.CENTER)
     }
@@ -565,12 +593,13 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             }.customize(UnscaledGaps(bottom = 6)) // The text cell's default gaps without the top one, flush with the card's top.
         }
         row {
-            listOfNotNull(context.model?.let(::modelName), context.effort).forEach { cell(Chip(it)) }
+            val parts = listOfNotNull(context.model?.let(::modelName), context.effort).map<String, JComponent> { Chip(it) }.toMutableList()
             // The session is looked up at the click, as the tab is: the pane is not rebuilt for every change of it.
-            if (context.cwdExists) cell(InplaceButton("Continue in a new session: same model, effort and added directories, in ${context.cwd}", NEW_SESSION_ICON) {
+            if (context.cwdExists) parts.add(InplaceButton("Continue in a new session: same model, effort and added directories, in ${context.cwd}", NEW_SESSION_ICON) {
                 continueSession(project, service.sessions.first { it.id == shownId }, context.cwd)
             })
-            comment(shortAge(context.lastMessage, Instant.now())).align(AlignX.RIGHT)
+            parts.add(commentLabel(shortAge(context.lastMessage, Instant.now())))
+            cell(WrapLine(parts)).align(AlignX.FILL)
         }
     }.apply { isOpaque = false }
 
@@ -642,6 +671,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         private fun setSectionStates(states: List<String>) = PropertiesComponent.getInstance().setList(SECTIONS, states)
         private const val FILES_SHOWN = 5
         private const val CARD_GAP = 4
+        /** Unscaled pane width below which the changes show as a list: a tree's indentation leaves too little for names. */
+        private const val NARROW = 320
         private val KIND_LETTERS = mapOf(Kind.ADDED to "A", Kind.MODIFIED to "M", Kind.DELETED to "D", Kind.UNTRACKED to "U")
         private val WHITESPACE = Regex("\\s+")
 
