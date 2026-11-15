@@ -16,7 +16,7 @@ Claude Sessions panel:
 - `SessionsPanel` (`SessionsPanel.kt`): pinned list (`TrailerList`, `PinnedRenderer`), tree (`DropLineTree`, `SessionRenderer`), toolbar, search and View Options (Folders mode, Show All Sessions, max age, `Density`, single click, follow active tab, This Work Tree).
 - Tree model (`SessionTree.kt`):
   - Builders: `projectsTree`, `foldersTree`.
-  - Row types: `ChangedFile`, `WorkDirRow`, `AddedDir`, `BranchRow`, `BriefGroup`, `BriefGoal`, `BriefTaskRow`, `FilesGroup`, `MilestoneRow`, `PlanTaskRow`, `NoTask`, `UnfiledSessions`, `RecentSessions` (`RECENT_COUNT` = 10), `WorktreesGroup`, `WorktreeRow`.
+  - Row types: `ChangedFile`, `WorkDirRow`, `AddedDir`, `BranchRow`, `BriefGroup`, `BriefGoal`, `BriefTaskRow`, `FilesGroup`, `MilestoneRow`, `PlanTaskRow`, `NoTask`, `UnfiledSessions`, `RecentSessions` (first in Folders mode; `RECENT_COUNT` = 10 by default, View Options offers `RECENT_COUNTS`), `WorktreesGroup`, `WorktreeRow`.
   - Helpers: `inWorkTree`, `Urgency`/`urgencyOf`, `FolderSummary`/`folderSummary`, `groupSessions`, `targetFolder`, `nodeDir`, `nodeProject`, `openDir`, `Drop`/`dropChange`, `projectName`.
 - Rendering:
   - `SessionRenderers.kt`: `SessionRenderer`, `Density` (COMPACT, LOOSE), `briefCount`, `BriefTask.line`, `PlanStatus.icon`, `statusText`, `tooltipLines`, `sessionTooltip`, `titleAttributes`.
@@ -72,7 +72,7 @@ Session Context panel:
 ## Side Effects
 
 - Application `PropertiesComponent` keys:
-  - Claude Sessions: `dev.myair.foldersMode`, `dev.myair.showSettled`, `dev.myair.maxAgeDays`, `dev.myair.density`, `dev.myair.singleClick`, `dev.myair.followActiveTab`, `dev.myair.pinnedMaxHeight`, `dev.myair.treeState.{projects|folders}[.workTree]`.
+  - Claude Sessions: `dev.myair.foldersMode`, `dev.myair.showSettled`, `dev.myair.maxAgeDays`, `dev.myair.recentCount`, `dev.myair.density`, `dev.myair.singleClick`, `dev.myair.followActiveTab`, `dev.myair.pinnedMaxHeight`, `dev.myair.treeState.{projects|folders}[.workTree]`.
   - Session Context: `dev.myair.context.sections`, `dev.myair.context.pinnedSkills`.
   - Both windows: `dev.myair.fontSize` (published on an application message bus topic).
 - Project `PropertiesComponent` key: `dev.myair.thisWorkTree`.

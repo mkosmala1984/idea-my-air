@@ -91,6 +91,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private var showSettled = PropertiesComponent.getInstance().getBoolean(SHOW_SETTLED)
     /** The tree hides sessions whose last message is this many days old or older; 0 hides none. */
     private var maxAgeDays = PropertiesComponent.getInstance().getInt(MAX_AGE_DAYS, 0)
+    /** How many sessions the tree's recent folder holds. */
+    private var recentCount = PropertiesComponent.getInstance().getInt(RECENT_COUNT_KEY, RECENT_COUNT)
     private var density = PropertiesComponent.getInstance().getValue(DENSITY)?.let(Density::valueOf) ?: Density.COMPACT
     /** A single click on a session's row opens it, as a double-click does. */
     private var singleClick = PropertiesComponent.getInstance().getBoolean(SINGLE_CLICK)
@@ -347,7 +349,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             templatePresentation.icon = AllIcons.Actions.Properties
             addAll(
                 mode, showAll, clickToOpen, follow, Separator.create("Hide Sessions Older Than"),
-                MaxAge(3), MaxAge(7), MaxAge(14), MaxAge(30), Separator.create("Density"),
+                MaxAge(3), MaxAge(7), MaxAge(14), MaxAge(30), Separator.create("Sessions in Recent"),
+                *RECENT_COUNTS.map(::RecentCountOption).toTypedArray(), Separator.create("Density"),
                 *Density.entries.map(::DensityOption).toTypedArray(), Separator.getInstance(),
                 FontSize("Increase Font Size") { it + 1 }, FontSize("Decrease Font Size") { it - 1 }, FontSize("Reset Font Size") { 0 },
                 Separator.getInstance(), refresh,
@@ -479,6 +482,17 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         override fun setSelected(e: AnActionEvent, state: Boolean) {
             maxAgeDays = if (state) days else 0
             PropertiesComponent.getInstance().setValue(MAX_AGE_DAYS, maxAgeDays, 0)
+            render()
+        }
+    }
+
+    /** Sets [recentCount] to [count]. */
+    private inner class RecentCountOption(private val count: Int) : ToggleAction("$count Sessions"), DumbAware {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+        override fun isSelected(e: AnActionEvent) = recentCount == count
+        override fun setSelected(e: AnActionEvent, state: Boolean) {
+            recentCount = count
+            PropertiesComponent.getInstance().setValue(RECENT_COUNT_KEY, count, RECENT_COUNT)
             render()
         }
     }
@@ -707,7 +721,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             tree.model = DefaultTreeModel(
                 when {
                     error != null -> DefaultMutableTreeNode()
-                    foldersMode -> foldersTree(service.folders, treeSessions(), branches::get, { worktrees[it].orEmpty() }, filter)
+                    foldersMode -> foldersTree(service.folders, treeSessions(), branches::get, { worktrees[it].orEmpty() }, recentCount, filter)
                     else -> projectsTree(filter?.let(treeSessions()::filter) ?: treeSessions(), branches::get)
                 },
             )
@@ -725,6 +739,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         private const val FOLDERS_MODE = "dev.myair.foldersMode"
         private const val SHOW_SETTLED = "dev.myair.showSettled"
         private const val MAX_AGE_DAYS = "dev.myair.maxAgeDays"
+        private const val RECENT_COUNT_KEY = "dev.myair.recentCount"
         private const val TREE_STATE = "dev.myair.treeState"
         private const val WORK_TREE_ONLY = "dev.myair.thisWorkTree"
         private const val DENSITY = "dev.myair.density"

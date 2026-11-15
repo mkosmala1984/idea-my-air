@@ -89,12 +89,15 @@ object UnfiledSessions {
     override fun toString() = "sessions"
 }
 
-/** The fixed folder of Folders mode above [UnfiledSessions]: the [RECENT_COUNT] sessions with the newest last message, wherever they are filed. */
+/** The fixed first folder of Folders mode: the sessions with the newest last message (by default [RECENT_COUNT]), wherever they are filed. */
 object RecentSessions {
     override fun toString() = "recent"
 }
 
 const val RECENT_COUNT = 10
+
+/** The numbers of sessions [RecentSessions] can hold, as View Options offers them. */
+val RECENT_COUNTS = listOf(RECENT_COUNT, 20, 50, 100)
 
 /** The group of [folder]'s linked worktrees, after its subfolders: a view, like [RecentSessions], that takes no drop. */
 class WorktreesGroup(val folder: Folder) {
@@ -113,8 +116,8 @@ data class WorktreeRow(val path: Path, val root: Path, val branch: String?, val 
 fun projectsTree(sessions: List<ClaudeSession>, branchOf: (Path) -> String?) = node(null, projectNodes(sessions, branchOf))
 
 /**
- * Folders mode: the user's folders in their order, each with its subfolders and then its sessions newest first (see
- * [SessionFolders.placeOf]), then [RecentSessions] and [UnfiledSessions] last. A plan folder holds, after its subfolders,
+ * Folders mode: [RecentSessions] first, then the user's folders in their order, each with its subfolders and then its sessions newest first (see
+ * [SessionFolders.placeOf]), then [UnfiledSessions] last. [RecentSessions] holds [recentCount] sessions. A plan folder holds, after its subfolders,
  * its milestones with their tasks, each task the sessions whose brief names it, then [NoTask] with its other sessions
  * when there are any. A folder bound to directories [worktreesOf] finds linked worktrees of holds, after its subfolders, a
  * [WorktreesGroup] of them all newest first, each with the sessions whose work dir or cwd lies in it (as text, as
@@ -126,6 +129,11 @@ fun projectsTree(sessions: List<ClaudeSession>, branchOf: (Path) -> String?) = n
 fun foldersTree(
     structure: SessionFolders, sessions: List<ClaudeSession>, branchOf: (Path) -> String?, worktreesOf: (Path) -> List<WorktreeRow>,
     filter: ((ClaudeSession) -> Boolean)?,
+) = foldersTree(structure, sessions, branchOf, worktreesOf, RECENT_COUNT, filter)
+
+fun foldersTree(
+    structure: SessionFolders, sessions: List<ClaudeSession>, branchOf: (Path) -> String?, worktreesOf: (Path) -> List<WorktreeRow>,
+    recentCount: Int, filter: ((ClaudeSession) -> Boolean)?,
 ): DefaultMutableTreeNode {
     val sessionNode = { session: ClaudeSession -> sessionNode(session, branchOf) }
     val shown = filter?.let(sessions::filter) ?: sessions
@@ -151,7 +159,7 @@ fun foldersTree(
     }
     return node(
         null,
-        structure.folders.mapNotNull(::folderNode) + node(RecentSessions, shown.take(RECENT_COUNT).map(sessionNode)) +
+        listOf(node(RecentSessions, shown.take(recentCount).map(sessionNode))) + structure.folders.mapNotNull(::folderNode) +
             node(UnfiledSessions, projectNodes(places[null].orEmpty(), branchOf)),
     )
 }
@@ -242,7 +250,7 @@ class Drop(val change: (SessionFolders) -> SessionFolders, val path: TreePath, v
  * milestone or task, which only a brief puts it under. A plan folder does not go into another. [childIndex] is JTree's: -1 drops onto the node, otherwise between its children.
  * Sessions land in the folder of whatever they are dropped on or into, and that folder is what the drop shows; under
  * [UnfiledSessions] they stay there ([SessionFolders.unfile]), whatever their project or brief say. A folder goes into a folder or the top level, before the folder it is dropped in front of, or after the last one;
- * the drop shows that spot, not the pointer's, since sessions, [RecentSessions] and [UnfiledSessions] always follow the folders. Nothing drops on or into [RecentSessions] or a [WorktreesGroup]. A project
+ * the drop shows that spot, not the pointer's, since [RecentSessions] always comes before the folders and [UnfiledSessions] after them. Nothing drops on or into [RecentSessions] or a [WorktreesGroup]. A project
  * lands the same way, as a new folder named after its directory and bound to it.
  */
 fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, childIndex: Int): Drop? {
@@ -284,9 +292,11 @@ fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, ch
     if (childIndex < 0) return Drop(place(siblings.size), path, -1)
     // A position in the tree, which a filter may have thinned, becomes the index of the folder it lands before.
     val items = target.children().toList().map { (it as DefaultMutableTreeNode).userObject }
+    // Above the fixed first row means first among the folders, which the line shows below it.
+    if (items.getOrNull(childIndex) == RecentSessions) return Drop(place(0), path, childIndex + 1)
     val before = items.getOrNull(childIndex) as? Folder
     if (before != null) return Drop(place(siblings.indexOfFirst { f -> f.id == before.id }), path, childIndex)
-    val afterFolders = items.indexOfFirst { it !is Folder }.takeIf { it >= 0 } ?: items.size
+    val afterFolders = maxOf(items.indexOfLast { it is Folder }, items.indexOf(RecentSessions)) + 1
     return Drop(place(siblings.size), path, afterFolders)
 }
 
