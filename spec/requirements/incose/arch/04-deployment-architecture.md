@@ -50,7 +50,7 @@ No Marketplace publishing, signing, CI pipeline or installer is configured in th
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Branch Diff's zip (`E:/dev/projects/idea-branch-diff/build/distributions/branch-diff-tree-0.1.0.zip`) must be built first with that project's `buildPlugin`. Searchable options are not built (`buildSearchableOptions = false`).
+Branch Diff's zip (`E:/dev/projects/personal/idea-branch-diff/build/distributions/branch-diff-tree-0.1.0.zip`) must be built first with that project's `buildPlugin`. Searchable options are not built (`buildSearchableOptions = false`).
 
 ### 2.2 Build Commands
 
