@@ -2,14 +2,18 @@ package dev.myair.mcp
 
 import dev.myair.claude.ClaudeSession
 import dev.myair.folders.SessionFolders
+import java.nio.file.Path
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import java.time.format.DateTimeParseException
 
-/** One page of [findSessions]: [total] counts every match, so a caller knows whether to ask for the next page. */
-data class SessionPage(val total: Int, val offset: Int, val sessions: List<ClaudeSession>)
+/**
+ * One page of [findSessions]: [total] counts every match, so a caller knows whether to ask for the next page. [snippets]
+ * give, by session id, the text around the query in a message of the sessions it was found in.
+ */
+data class SessionPage(val total: Int, val offset: Int, val sessions: List<ClaudeSession>, val snippets: Map<String, String> = emptyMap())
 
 const val DEFAULT_LIMIT = 50
 const val MAX_LIMIT = 100
@@ -20,14 +24,15 @@ const val PROMPT_CHARS = 300
 /**
  * The sessions matching every filter given, newest first, one page at a time. [since] and [until] bound the last
  * message inclusively (see [timeBound]); [query] is the tree's filter, [branchOf] giving the branch checked out where a
- * session works now ([ClaudeSession.matches]); [folder] keeps sessions filed in that folder
+ * session works now ([ClaudeSession.matches]), or a message of the session found in [content] (transcript to the text
+ * around the match, [dev.myair.search.SessionIndex.search]); [folder] keeps sessions filed in that folder
  * or below it; [unfiled] true keeps the ones under `sessions`, false the filed ones. Bad input throws
  * [IllegalArgumentException] naming it.
  */
 fun findSessions(
     sessions: List<ClaudeSession>, structure: SessionFolders, now: ZonedDateTime,
     since: String?, until: String?, query: String?, folder: String?, unfiled: Boolean?, offset: Int?, limit: Int?,
-    branchOf: (ClaudeSession) -> String?,
+    content: Map<Path, String> = emptyMap(), branchOf: (ClaudeSession) -> String?,
 ): SessionPage {
     val from = since?.let { timeBound(it, now, end = false) }
     val to = until?.let { timeBound(it, now, end = true) }
@@ -40,11 +45,14 @@ fun findSessions(
     val matches = sessions.sortedByDescending { it.lastMessage }.filter { session ->
         val at = session.lastMessage
         val place = structure.placeOf(session)
-        (from == null || at >= from) && (to == null || at <= to) && (query == null || session.matches(query, branchOf(session))) &&
+        (from == null || at >= from) && (to == null || at <= to) && (query == null || session.matches(query, branchOf(session)) || session.snippet(content) != null) &&
             (inFolder == null || place in inFolder) && (unfiled == null || unfiled == (place == null))
     }
-    return SessionPage(matches.size, skip, matches.drop(skip).take(size))
+    val page = matches.drop(skip).take(size)
+    return SessionPage(matches.size, skip, page, page.mapNotNull { s -> s.snippet(content)?.let { s.id to it } }.toMap())
 }
+
+private fun ClaudeSession.snippet(content: Map<Path, String>): String? = transcript?.let(content::get)
 
 private val RELATIVE = Regex("(\\d+)([dh])")
 

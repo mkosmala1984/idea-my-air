@@ -95,6 +95,30 @@ class FolderQueriesTest {
     }
 
     @Test
+    fun `a query also matches a session by a message found in its transcript, and the page carries the text around it`() {
+        val read = Path.of("/t/fix.jsonl")
+        val other = Path.of("/t/other.jsonl")
+        val withTranscripts = sessions.map { if (it.id == "fix") it.copy(transcript = read) else if (it.id == "new") it.copy(transcript = other) else it }
+        val content = mapOf(read to "…the NullPointerException came from…", Path.of("/t/gone.jsonl") to "no session reads this file")
+        // [content] is what the index found for the query, so it goes with the queries it answers only.
+        fun find(query: String?, hits: Map<Path, String> = emptyMap()) =
+            findSessions(withTranscripts, structure, now, null, null, query, null, null, null, null, hits) { null }
+        // By content (fix) and by title (Spike); a session found by neither stays out.
+        assertEquals(listOf("fix"), find("NullPointer", content).sessions.map { it.id })
+        assertEquals(mapOf("fix" to "…the NullPointerException came from…"), find("NullPointer", content).snippets)
+        assertEquals(listOf("new"), find("Spike").sessions.map { it.id })
+        assertEquals(emptyMap(), find("Spike").snippets)
+        assertEquals(emptyMap(), find(null).snippets)
+        // Only the page's sessions carry a snippet: "new" is the newest, the page holds it alone.
+        val both = mapOf(read to "in fix", other to "in new")
+        val first = findSessions(withTranscripts, structure, now, null, null, "in", null, null, null, 1, both) { null }
+        assertEquals(listOf("new"), first.sessions.map { it.id })
+        assertEquals(mapOf("new" to "in new"), first.snippets)
+        val json = JsonParser.parseString(find("NullPointer", content).toJson(structure, zone)).asJsonObject
+        assertEquals("…the NullPointerException came from…", json.getAsJsonArray("sessions")[0].asJsonObject["match"].asString)
+    }
+
+    @Test
     fun `the json gives each session its folder path or null, and prompts cut short`() {
         val long = "x".repeat(PROMPT_CHARS + 50)
         val page = SessionPage(1, 0, listOf(session("fix", "Fix", "/rtm", now, listOf(long, "b"))))

@@ -27,11 +27,13 @@ import dev.myair.folders.ChangeSource
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.StructureHistory
 import dev.myair.folders.StructureStore
+import dev.myair.search.SessionIndex
 import dev.myair.store.PinStore
 import dev.myair.store.Pins
 import dev.myair.store.pinnedSessions
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.isRegularFile
 
 /**
@@ -47,6 +49,9 @@ class ClaudeSessionsService : Disposable {
     private val desktop = DesktopSessionReader(Path.of(checkNotNull(System.getenv("LOCALAPPDATA")) { "LOCALAPPDATA is not set" }, "Claude-Data"))
     private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
     private val board = BoardWriter(structure.file.parent)
+
+    /** Opened on first use, off the EDT: creating the file loads sqlite's native library. */
+    private val index by lazy { SessionIndex(structure.file.parent.resolve("search.db")) }
 
     /** False until the first refresh lands; without a saved scan the first one reads every transcript and takes seconds. */
     var loaded = false
@@ -91,10 +96,18 @@ class ClaudeSessionsService : Disposable {
 
     val history: StructureHistory get() = structure.history
 
+    /** Counts the times the conversation index changed, so a search over it can tell its result is out of date. */
+    var indexGeneration = 0
+        private set
+
     private val listeners = ArrayList<() -> Unit>()
 
     /** One refresh at a time, so an older result never lands after a newer one. */
     private val refresher = AppExecutorUtil.createBoundedApplicationPoolExecutor("Claude sessions refresh", 1)
+
+    /** Indexing apart from refreshing: the first run reads every transcript. [toIndex] is the latest list, so refreshes during a run queue up as one. */
+    private val indexer = AppExecutorUtil.createBoundedApplicationPoolExecutor("Claude sessions index", 1)
+    private val toIndex = AtomicReference<List<Path>>()
 
     // File events drive refreshes; the 60 s rescan covers events the OS dropped, as Air's REREAD_INTERVAL does.
     private val watcher = ClaudeHomeWatcher(listOf(claudeHome.resolve("sessions"), structure.file.parent, board.seenStore.dir), claudeHome.resolve("projects")) { refresh() }
@@ -117,6 +130,7 @@ class ClaudeSessionsService : Disposable {
                 // With briefs turned off nothing downstream sees them: rows, tree, tooltips and the board.
                 val briefs = MyAirSettings.getInstance().briefs
                 val read = scanner.scan(desktop.read()).map { if (briefs) it else it.copy(brief = null) }
+                indexConversations(read.mapNotNull { it.transcript })
                 val current = registry.read()
                 val ids = read.mapTo(HashSet()) { it.id }
                 // Together, so a new session in a worktree finds its project among the directories the others ran in.
@@ -152,6 +166,29 @@ class ClaudeSessionsService : Disposable {
             }
         }
     }
+
+    private fun indexConversations(transcripts: List<Path>) {
+        toIndex.set(transcripts)
+        indexer.execute {
+            val wanted = toIndex.getAndSet(null) ?: return@execute
+            val wrote = try {
+                index.update(wanted)
+            } catch (e: Throwable) {
+                thisLogger().error("Conversation index update failed", e)
+                return@execute
+            }
+            if (wrote) ApplicationManager.getApplication().invokeLater {
+                indexGeneration++
+                changed()
+            }
+        }
+    }
+
+    /**
+     * The transcripts with a message holding every word of [query], each with the text around the match ([SessionIndex.search]).
+     * Off the EDT. Covers what has been indexed so far; [indexGeneration] changes as more is.
+     */
+    fun searchContent(query: String): Map<Path, String> = index.search(query)
 
     /** Called on the EDT when the user may look at a session: a tab selected, the IDE window activated. */
     fun lookedAt() {
