@@ -376,13 +376,15 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             add(close, BorderLayout.EAST)
         }, SEARCH_CARD)
         toolbar = top
-        onOpen(tree, tree.trailer, ::openSelected)
-        onOpen(pinned, pinned.trailer) { pinned.selectedValue?.let { ClaudeSessionOpener.open(project, it) } != null }
-        onClick(tree, tree.trailer, { tree.getRowForLocation(it.x, it.y) >= 0 }) {
-            tree.selectionPaths?.singleOrNull()?.let { sessionOf((it.lastPathComponent as DefaultMutableTreeNode).userObject) }
+        // With a single click the first click of a double-click has already toggled a group row, so the second must not.
+        onOpen(tree, tree.trailer, ::openSelected) {
+            val node = tree.selectionPath?.lastPathComponent as? DefaultMutableTreeNode
+            if (singleClick && node != null && sessionOf(node.userObject) == null && !node.isLeaf) true else openSelected()
         }
+        onOpen(pinned, pinned.trailer, { pinned.selectedValue?.let { ClaudeSessionOpener.open(project, it) } != null })
+        onClick(tree, tree.trailer, { tree.getRowForLocation(it.x, it.y) >= 0 }, ::clickTree)
         onClick(pinned, pinned.trailer, { p -> pinned.locationToIndex(p).let { it >= 0 && pinned.getCellBounds(it, it).contains(p) } }) {
-            pinned.selectedValuesList.singleOrNull()
+            pinned.selectedValuesList.singleOrNull()?.let { ClaudeSessionOpener.open(project, it) }
         }
         // Ages change with time alone, while the service notifies only on changes; with [maxAgeDays] they also drop sessions.
         val ages = Timer(60_000) {
@@ -484,9 +486,9 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     }
 
     /** Double-click and Enter on [component] run [open]; a double-click on a [trailer] button does not. */
-    private fun onOpen(component: JComponent, trailer: SessionTrailer, open: () -> Boolean) {
+    private fun onOpen(component: JComponent, trailer: SessionTrailer, open: () -> Boolean, doubleClick: () -> Boolean = open) {
         object : DoubleClickListener() {
-            override fun onDoubleClick(event: MouseEvent) = !trailer.isButton(event.point) && open()
+            override fun onDoubleClick(event: MouseEvent) = !trailer.isButton(event.point) && doubleClick()
         }.installOn(component)
         component.addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
@@ -496,16 +498,15 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     }
 
     /**
-     * While [singleClick] is on, a plain left click on a row of [component] ([onRow]) opens the session [selected] gives
-     * for the selection the click made; a click with a modifier extends the selection and a click on a [trailer] button
-     * runs it, so neither opens.
+     * While [singleClick] is on, a plain left click on a row of [component] ([onRow]) runs [act] on the selection the
+     * click made; a click with a modifier extends the selection and a click on a [trailer] button runs it, so neither acts.
      */
-    private fun onClick(component: JComponent, trailer: SessionTrailer, onRow: (Point) -> Boolean, selected: () -> ClaudeSession?) {
+    private fun onClick(component: JComponent, trailer: SessionTrailer, onRow: (Point) -> Boolean, act: () -> Unit) {
         component.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 if (!singleClick || e.clickCount != 1 || !SwingUtilities.isLeftMouseButton(e) || e.modifiersEx != 0) return
                 if (trailer.isButton(e.point) || !onRow(e.point)) return
-                selected()?.let { ClaudeSessionOpener.open(project, it) }
+                act()
             }
         })
     }
@@ -649,9 +650,22 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             session != null -> ClaudeSessionOpener.open(project, session)
             item is ChangedFile -> openFile(project, item.path)
             item is AgentRow -> item.task.output?.let { openFile(project, it) }
-            else -> if (tree.isExpanded(path)) tree.collapsePath(path) else tree.expandPath(path)
+            else -> toggle(path)
         }
         return true
+    }
+
+    private fun toggle(path: TreePath) = if (tree.isExpanded(path)) tree.collapsePath(path) else tree.expandPath(path)
+
+    /** A single click ([singleClick]): opens what a session row opens, and expands or collapses a row that has children. */
+    private fun clickTree() {
+        val path = tree.selectionPaths?.singleOrNull() ?: return
+        val node = path.lastPathComponent as DefaultMutableTreeNode
+        val session = sessionOf(node.userObject)
+        when {
+            session != null -> ClaudeSessionOpener.open(project, session)
+            !node.isLeaf -> toggle(path)
+        }
     }
 
     /** The session a row opens: a session's own, or that of a row about it other than a file; null for any other row. */
