@@ -75,8 +75,6 @@ import dev.myair.planview.tabFileOf
 import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import java.awt.BorderLayout
 import java.awt.Font
-import java.awt.event.ComponentAdapter
-import java.awt.event.ComponentEvent
 import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Point
@@ -123,8 +121,6 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     private val skillFolders = HashMap<Pair<Path, String>, MutableSet<Path>>()
     /** What the pane was last built from, by [render]. */
     private var rendered: Any? = null
-    /** Whether the pane is too narrow for the tree of changes, which then shows as a list; [render] reads it when the width crosses [NARROW]. */
-    private var narrow = false
 
     init {
         border = JBUI.Borders.empty(CARD_GAP)
@@ -133,15 +129,6 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         PaneFont.subscribe(parent) { render(force = true) }
         // A hidden pane reads nothing; it catches up when shown.
         addHierarchyListener { if (it.changeFlags and HierarchyEvent.SHOWING_CHANGED.toLong() != 0L && isShowing) update() }
-        addComponentListener(object : ComponentAdapter() {
-            override fun componentResized(e: ComponentEvent) {
-                val now = width in 1 until JBUI.scale(NARROW)
-                if (now != narrow) {
-                    narrow = now
-                    render()
-                }
-            }
-        })
         update()
     }
 
@@ -178,7 +165,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         val session = service.sessions.firstOrNull { it.id == id }
         val context = session?.let { contextOf(it, it.workDir.exists(), it.id in service.live, git) }
         val plan = session?.let { planContextOf(it, service.folders, service.sessions) }
-        val shown = listOf(id, context, plan, context?.let { shortAge(it.lastMessage, Instant.now()) }, fullLists.toSet(), skills.toMap(), pinnedSkills(), changesAsTree(), changesFilter(), narrow)
+        val shown = listOf(id, context, plan, context?.let { shortAge(it.lastMessage, Instant.now()) }, fullLists.toSet(), skills.toMap(), pinnedSkills(), changesAsTree(), changesFilter())
         if (!force && shown == rendered) return
         rendered = shown
         val content = when {
@@ -245,7 +232,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         else context.git?.let { git ->
             card("Changes vs base") {
                 val changes = git.changes
-                val asTree = changesAsTree() && !narrow
+                val asTree = changesAsTree()
                 val filter = changesFilter()
                 if (changes == null) row { comment(checkNotNull(git.problem)) }
                 else {
@@ -258,8 +245,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                             JBLabel("−$removed").apply { foreground = FileStatus.DELETED.color },
                         )
                         if (changes.isNotEmpty()) {
-                            // A narrow pane shows the list whatever was chosen, so there is nothing to toggle.
-                            if (!narrow) parts.add(InplaceButton(if (asTree) "Show as list" else "Show as tree", if (asTree) AllIcons.Actions.ListFiles else AllIcons.Actions.ShowAsTree) {
+                            parts.add(InplaceButton(if (asTree) "Show as list" else "Show as tree", if (asTree) AllIcons.Actions.ListFiles else AllIcons.Actions.ShowAsTree) {
                                 PropertiesComponent.getInstance().setValue(CHANGES_AS_TREE, !asTree)
                                 render()
                             })
@@ -287,7 +273,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                     if (added + removed > 0) row { cell(ChangeBar(added, removed)).align(AlignX.FILL) }
                     if (changes.isNotEmpty() && shown.isEmpty()) row { comment("No ${filter.label.lowercase()} changes") }
                     else if (asTree) {
-                        if (shown.isNotEmpty()) row { cell(wrapped(changesTree(git, changeTree(changes, filter)))).align(AlignX.FILL) }
+                        if (shown.isNotEmpty()) row { cell(wrapped(horizontallyScrolled(changesTree(git, changeTree(changes, filter))))).align(AlignX.FILL) }
                     } else paged("Changes", shown) { (index, change), _ ->
                         row {
                             label(KIND_LETTERS.getValue(change.kind)).applyToComponent { foreground = change.kind.status.color }
@@ -671,8 +657,6 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         private fun setSectionStates(states: List<String>) = PropertiesComponent.getInstance().setList(SECTIONS, states)
         private const val FILES_SHOWN = 5
         private const val CARD_GAP = 4
-        /** Unscaled pane width below which the changes show as a list: a tree's indentation leaves too little for names. */
-        private const val NARROW = 320
         private val KIND_LETTERS = mapOf(Kind.ADDED to "A", Kind.MODIFIED to "M", Kind.DELETED to "D", Kind.UNTRACKED to "U")
         private val WHITESPACE = Regex("\\s+")
 

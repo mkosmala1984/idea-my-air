@@ -3,6 +3,7 @@ package dev.myair.toolwindow
 import com.intellij.openapi.vcs.FileStatus
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Cell
 import com.intellij.util.ui.GraphicsUtil
@@ -85,6 +86,25 @@ class ShrinkingLine(parts: List<JComponent>) : JPanel(null) {
             x += widths[i]
         }
     }
+}
+
+/**
+ * [tree] in a pane that scrolls sideways when the tree is wider than the card and never vertically: it is as high as the tree,
+ * inside the pane's own vertical scrolling, which keeps the wheel.
+ */
+fun horizontallyScrolled(tree: JComponent): JComponent = object : JBScrollPane(tree, VERTICAL_SCROLLBAR_NEVER, HORIZONTAL_SCROLLBAR_AS_NEEDED) {
+    override fun getPreferredSize(): Dimension {
+        val bar = if (horizontalScrollBar.isVisible) horizontalScrollBar.preferredSize.height else 0
+        return Dimension(0, tree.preferredSize.height + bar)
+    }
+
+    override fun getMinimumSize() = Dimension(0, preferredSize.height)
+}.apply {
+    border = JBUI.Borders.empty()
+    viewportBorder = JBUI.Borders.empty()
+    isOpaque = false
+    viewport.isOpaque = false
+    isWheelScrollingEnabled = false
 }
 
 /**
