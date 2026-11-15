@@ -39,7 +39,7 @@ Session Context panel:
   - Skills: `skillGroups`, `skillSections`, `NO_PLUGIN`, `updateState`.
   - Formatting: `modelName`, `backgroundState`, `countText`, `durationText`, `fileLabel`.
   - `OUTPUT_EXTENSIONS` (`md`, `html`).
-- Cards (`ContextCards.kt`): `ContextCard`, `ShrinkingLine`, `Chip`, `ChangeBar`, `commentLabel`, `Cell.shrinkable`.
+- Cards (`ContextCards.kt`): `ContextCard`, `ShrinkingLine`, `Chip`, `commentLabel`, `Cell.shrinkable`.
 - Changes tree (`ChangeTree.kt`): `ChangesFilter` (All, Not pushed, Uncommitted), `openByDefault`, `changeTree(changes, filter): ChangeDir`, the changed files as folders (`ChangeDir`, with file and line counts) and files (`ChangeFile`, with its index in the list), single-folder chains merged as Branch Diff does.
 - `CommandDialog` (`CommandDialog.kt`): shows a full command or prompt, with a Copy button.
 - `PaneFont` (`PaneFont.kt`): the font-size offset shared by both windows (`points`, `RANGE` -4..12, `subscribe`, `grow`, `growAll`).
@@ -59,7 +59,6 @@ Session Context panel:
   - `folderSummary` throws on an unknown node type.
   - `insertLine` throws on a drop into a collapsed or hidden parent.
   - `inWorkTree` throws on a directory missing from `heads`.
-  - `ChangeBar` requires `added + removed > 0`.
   - `PaneFont.points` requires a value in `RANGE`.
 - Pinned list height (`pinnedHeight`): the dragged height, else the content capped at 40% of the panel (`PINNED_MAX_SHARE`). It is never less than one row and always leaves the tree 60 unscaled px (`TREE_MIN`). A drag never stores 0. The list and its edge are hidden only once the service has loaded and the list is empty.
 - Background reads (the newest result wins, and results land on the EDT):

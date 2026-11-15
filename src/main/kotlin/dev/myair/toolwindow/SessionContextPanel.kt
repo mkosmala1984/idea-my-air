@@ -270,7 +270,6 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                         }
                         cell(WrapLine(parts)).align(AlignX.FILL)
                     }
-                    if (added + removed > 0) row { cell(ChangeBar(added, removed)).align(AlignX.FILL) }
                     if (changes.isNotEmpty() && shown.isEmpty()) row { comment("No ${filter.label.lowercase()} changes") }
                     else if (asTree) {
                         if (shown.isNotEmpty()) row { cell(wrapped(horizontallyScrolled(changesTree(git, changeTree(changes, filter))))).align(AlignX.FILL) }
@@ -436,6 +435,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             isRootVisible = false
             showsRootHandles = true
             isOpaque = false
+            border = JBUI.Borders.empty()
             cellRenderer = object : ColoredTreeCellRenderer() {
                 override fun customizeCellRenderer(tree: JTree, value: Any?, selected: Boolean, expanded: Boolean, leaf: Boolean, row: Int, hasFocus: Boolean) {
                     when (val change = (value as DefaultMutableTreeNode).userObject as ChangeNode) {
