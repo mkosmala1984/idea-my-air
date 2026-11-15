@@ -22,7 +22,7 @@ private val CHIP_BACKGROUND = JBColor(0xEBECF0, 0x393B40)
 class ContextCard(content: JComponent) : JPanel(BorderLayout()) {
     init {
         isOpaque = false
-        border = JBUI.Borders.empty(4, 8)
+        border = JBUI.Borders.empty(2, 4)
         add(content, BorderLayout.CENTER)
     }
 

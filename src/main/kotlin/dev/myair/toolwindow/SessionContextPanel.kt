@@ -295,7 +295,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                             link(change.path.substringAfterLast('/')) { showBaseDiff(project, git, index) }
                                 .applyToComponent { toolTipText = change.path }
                             val folder = change.path.substringBeforeLast('/', "")
-                            if (folder.isNotEmpty()) comment(folder).applyToComponent { toolTipText = change.path }.shrinkable()
+                            if (folder.isNotEmpty()) cell(commentLabel(folder)).applyToComponent { toolTipText = change.path }.shrinkable()
                             comment("+${change.added} −${change.removed}")
                         }
                     }
@@ -378,11 +378,11 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         if (context.mcpServers.isNotEmpty()) card("MCP servers") {
             paged("MCP servers", context.mcpServers) { server, _ -> row { icon(AllIcons.Nodes.Plugin); label(server).shrinkable() } }
         }
-        if (context.skills.isNotEmpty()) card("Skills", indent = false) {
+        if (context.skills.isNotEmpty()) card("Skills") {
             val (pinned, groups) = skillSections(context.skills, pinnedSkills())
             for (skill in pinned) skill(context.cwd to skill, pinned = true)
             for ((plugin, skills) in groups) {
-                section("$plugin (${skills.size})", key = "Skills/$plugin", expandedFirst = false, indent = false) {
+                section("$plugin (${skills.size})", key = "Skills/$plugin", expandedFirst = false) {
                     for (skill in skills) skill(context.cwd to skill, pinned = false)
                 }
             }
@@ -604,8 +604,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
     }.apply { isOpaque = false }
 
     /** A card holding a section that stays collapsed or expanded across renders. */
-    private fun JPanel.card(title: String, indent: Boolean = true, init: Panel.() -> Unit) {
-        add(ContextCard(panel { section(title, indent = indent, init = init) }.apply { isOpaque = false }))
+    private fun JPanel.card(title: String, init: Panel.() -> Unit) {
+        add(ContextCard(panel { section(title, init = init) }.apply { isOpaque = false }))
     }
 
     /**
@@ -649,8 +649,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
      * A collapsible group that stays collapsed or expanded across renders, sessions, windows and restarts, kept by [key]
      * in application properties; [expandedFirst] until toggled.
      */
-    private fun Panel.section(title: String, key: String = title, expandedFirst: Boolean = true, indent: Boolean = true, init: Panel.() -> Unit) =
-        collapsibleGroup(title, indent, init).apply {
+    private fun Panel.section(title: String, key: String = title, expandedFirst: Boolean = true, init: Panel.() -> Unit) =
+        collapsibleGroup(title, false, init).apply {
             expanded = sectionExpanded(sectionStates(), key) ?: expandedFirst
             addExpandedListener { setSectionStates(withSection(sectionStates(), key, it)) }
         }
