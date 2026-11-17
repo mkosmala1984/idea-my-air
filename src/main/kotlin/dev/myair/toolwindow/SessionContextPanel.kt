@@ -255,7 +255,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                             PropertiesComponent.getInstance().setValue(CHANGES_AS_TREE, !asTree)
                             render()
                         } + InplaceButton("Review all changes against ${git.base}", AllIcons.Actions.More) {
-                            showChangesMenu(git, it.source as JComponent)
+                            // InplaceButton passes its mouse event as the action's source, not itself.
+                            showChangesMenu(git, (it.source as MouseEvent).component as JComponent)
                         }
                         cell(WrapLine(parts)).align(AlignX.FILL)
                     }
