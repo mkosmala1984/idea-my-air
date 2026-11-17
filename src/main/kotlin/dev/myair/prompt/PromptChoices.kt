@@ -14,20 +14,29 @@ val DEFAULT_PRESET = Preset("Default")
 /**
  * The panel's choices: [preset] gives the directories, and the rest start from it and may be changed. [newBranch]: the
  * worktree gets a new branch off the base, named in the panel. [project] is a directory chosen in place of the
- * configuration's own, null keeping it.
+ * configuration's own, null keeping it. [existing]: the session starts in a worktree of the project made before.
  */
 data class Choice(
     val preset: Preset, val model: String, val effort: String, val worktree: Boolean, val newBranch: Boolean = false,
-    val project: String? = null,
+    val project: String? = null, val existing: Boolean = false,
 ) {
     init {
         require(effort in EFFORTS) { "effort $effort is not one of $EFFORTS" }
         require(worktree || !newBranch) { "a new branch without a worktree" }
+        require(!(worktree && existing)) { "a new worktree and an existing one" }
     }
 
-    /** The preset to start: [base] only for a worktree, null meaning a base picked in the popup at start. */
-    fun toPreset(base: String?) =
-        preset.copy(model = model, effort = effort, worktree = worktree, base = base.takeIf { worktree }, project = project ?: preset.project)
+    /**
+     * The preset to start: [base] only for a worktree, null meaning a base picked in the popup at start; [existingDir],
+     * the existing worktree it starts in, given exactly when [existing].
+     */
+    fun toPreset(base: String?, existingDir: Path? = null): Preset {
+        require(existing == (existingDir != null)) { "existing worktree $existingDir for a choice with existing=$existing" }
+        return preset.copy(
+            model = model, effort = effort, worktree = worktree, base = base.takeIf { worktree },
+            project = existingDir?.toString() ?: project ?: preset.project,
+        )
+    }
 }
 
 fun choiceOf(preset: Preset) = Choice(preset, preset.model ?: DEFAULT_MODEL, preset.effort ?: DEFAULT_EFFORT, preset.worktree)
@@ -35,7 +44,7 @@ fun choiceOf(preset: Preset) = Choice(preset, preset.model ?: DEFAULT_MODEL, pre
 /** The choices of the last start, each null when never made; the configuration is kept by name. */
 data class LastChoice(
     val preset: String?, val model: String?, val effort: String?, val worktree: Boolean?, val newBranch: Boolean? = null,
-    val project: String? = null,
+    val project: String? = null, val existing: Boolean? = null,
 )
 
 /**
@@ -48,7 +57,7 @@ data class Draft(val text: String, val choice: LastChoice, val base: String?) {
     }
 }
 
-fun Choice.toLast() = LastChoice(preset.name, model, effort, worktree, newBranch, project)
+fun Choice.toLast() = LastChoice(preset.name, model, effort, worktree, newBranch, project, existing)
 
 /** The draft's choices when there is one, else the last start's. */
 fun opening(presets: List<Preset>, last: LastChoice, draft: Draft?) = restore(presets, draft?.choice ?: last)
@@ -57,7 +66,10 @@ fun opening(presets: List<Preset>, last: LastChoice, draft: Draft?) = restore(pr
 fun restore(presets: List<Preset>, last: LastChoice): Choice {
     val own = choiceOf(presets.firstOrNull { it.name == last.preset } ?: presets.first())
     val worktree = last.worktree ?: own.worktree
-    return Choice(own.preset, last.model ?: own.model, last.effort ?: own.effort, worktree, worktree && last.newBranch == true, last.project)
+    return Choice(
+        own.preset, last.model ?: own.model, last.effort ?: own.effort, worktree, worktree && last.newBranch == true, last.project,
+        !worktree && last.existing == true,
+    )
 }
 
 /** What the message field holds when [preset] is chosen: its prompt and a space to go on typing, else nothing. */

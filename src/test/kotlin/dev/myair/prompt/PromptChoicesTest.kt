@@ -48,6 +48,23 @@ class PromptChoicesTest {
     }
 
     @Test
+    fun `an existing worktree starts in its folder, with no new worktree nor base`() {
+        val existing = Choice(review, "sonnet", "high", false, existing = true)
+        val dir = Path.of("E:/dev/rtm/.claude/worktrees/fix")
+        assertEquals(review.copy(worktree = false, base = null, project = dir.toString()), existing.toPreset("origin/main", dir))
+        assertThrows<IllegalArgumentException> { existing.toPreset(null) }
+        assertThrows<IllegalArgumentException> { Choice(review, "sonnet", "high", false).toPreset(null, dir) }
+        assertThrows<IllegalArgumentException> { Choice(review, "sonnet", "high", true, existing = true) }
+    }
+
+    @Test
+    fun `an existing worktree is restored only without a new one`() {
+        assertEquals(Choice(review, "sonnet", "high", false, existing = true), restore(presets, LastChoice("Review", null, null, false, existing = true)))
+        assertEquals(choiceOf(review), restore(presets, LastChoice("Review", null, null, null, existing = true)))
+        assertEquals(true, Choice(DEFAULT_PRESET, "opus", "medium", false, existing = true).toLast().existing)
+    }
+
+    @Test
     fun `an unknown effort is refused`() {
         assertThrows<IllegalArgumentException> { Choice(DEFAULT_PRESET, "opus", "turbo", false) }
     }

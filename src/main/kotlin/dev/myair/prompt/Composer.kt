@@ -91,12 +91,13 @@ internal class Rounded(private val fill: JBColor, private val arc: Int, private 
     }
 }
 
-/** The round send button with an up arrow. */
+/** The round send button with an up arrow, its colours inverted under the pointer. */
 internal class SendButton(tooltip: String, click: () -> Unit) : JButton() {
     init {
         isContentAreaFilled = false
         isBorderPainted = false
         isFocusPainted = false
+        isRolloverEnabled = true
         toolTipText = tooltip
         addActionListener { click() }
     }
@@ -106,10 +107,11 @@ internal class SendButton(tooltip: String, click: () -> Unit) : JButton() {
     override fun paintComponent(g: Graphics) {
         val g2 = g.create() as Graphics2D
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-        g2.color = SEND
+        val hover = model.isRollover && isEnabled
+        g2.color = if (hover) UIUtil.getLabelForeground() else SEND
         g2.fillOval(0, 0, width - 1, height - 1)
         val (x, y, r) = Triple(width / 2, height / 2, JBUI.scale(6))
-        g2.color = UIUtil.getLabelForeground()
+        g2.color = if (hover) CARD else UIUtil.getLabelForeground()
         g2.stroke = BasicStroke(JBUI.scale(2f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
         g2.drawLine(x, y + r, x, y - r)
         g2.drawPolyline(intArrayOf(x - r + 1, x, x + r - 1), intArrayOf(y - 1, y - r, y - 1), 3)
