@@ -7,6 +7,10 @@ import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.ui.InplaceButton
+import com.intellij.ide.DataManager
+import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.project.DumbAwareAction
+import com.intellij.openapi.ui.popup.JBPopupFactory
 import dev.myair.editor.SessionPaneHost
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.sessionIcon
@@ -237,29 +241,9 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 if (changes == null) row { comment(checkNotNull(git.problem)) }
                 else {
                     val shown = changes.withIndex().filter { filter.shows(it.value) }
-                    val added = shown.sumOf { it.value.added }
-                    val removed = shown.sumOf { it.value.removed }
-                    row {
-                        val parts = mutableListOf<JComponent>(
-                            JBLabel("+$added").apply { foreground = FileStatus.ADDED.color },
-                            JBLabel("−$removed").apply { foreground = FileStatus.DELETED.color },
-                        )
-                        if (changes.isNotEmpty()) {
-                            parts.add(InplaceButton(if (asTree) "Show as list" else "Show as tree", if (asTree) AllIcons.Actions.ListFiles else AllIcons.Actions.ShowAsTree) {
-                                PropertiesComponent.getInstance().setValue(CHANGES_AS_TREE, !asTree)
-                                render()
-                            })
-                            parts.add(ActionLink("Show diff") { showCombinedBaseDiff(project, git) }
-                                .apply { toolTipText = "All files in one tab, against ${git.base}" })
-                            parts.add(ActionLink("Tree") { showBaseChangesTree(project, git) }
-                                .apply { toolTipText = "The changed files as a tree of folders, against ${git.base}" })
-                            if (plannotator != null) parts.add(ActionLink("Plannotator") { reviewInPlannotator(project, git) }
-                                .apply { toolTipText = "Review all changes against ${git.base} in Plannotator, in the browser" })
-                        }
-                        cell(WrapLine(parts)).align(AlignX.FILL)
-                    }
-                    // Which changes show, each choice with its count; the chosen one is plain text.
-                    if (changes.isNotEmpty()) row {
+                    // Which changes show, each choice with its count (the chosen one plain text), then the view toggle and the menu.
+                    if (changes.isEmpty()) row { comment("No changes") }
+                    else row {
                         val parts = ChangesFilter.entries.map<ChangesFilter, JComponent> { choice ->
                             val text = "${choice.label} ${changes.count(choice::shows)}"
                             if (choice == filter) JBLabel(text).apply { font = font.deriveFont(Font.BOLD) }
@@ -267,6 +251,11 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                                 PropertiesComponent.getInstance().setValue(CHANGES_FILTER, choice.name)
                                 render()
                             }
+                        } + InplaceButton(if (asTree) "Show as list" else "Show as tree", if (asTree) AllIcons.Actions.ListFiles else AllIcons.Actions.ShowAsTree) {
+                            PropertiesComponent.getInstance().setValue(CHANGES_AS_TREE, !asTree)
+                            render()
+                        } + InplaceButton("Review all changes against ${git.base}", AllIcons.Actions.More) {
+                            showChangesMenu(git, it.source as JComponent)
                         }
                         cell(WrapLine(parts)).align(AlignX.FILL)
                     }
@@ -609,6 +598,18 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
                 background(project, "Setting base branch", { Git.setBase(git.root, git.branch, base) }) { active.baseChanged() }
             }.show(under)
         }
+    }
+
+    /** Shows under [anchor] the ways to review all of [git]'s changes against its base. */
+    private fun showChangesMenu(git: GitState, anchor: JComponent) {
+        val group = DefaultActionGroup(listOfNotNull(
+            DumbAwareAction.create("Show Diff") { showCombinedBaseDiff(project, git) },
+            DumbAwareAction.create("Show as Folder Tree") { showBaseChangesTree(project, git) },
+            plannotator?.let { DumbAwareAction.create("Review in Plannotator") { reviewInPlannotator(project, git) } },
+        ))
+        JBPopupFactory.getInstance()
+            .createActionGroupPopup(null, group, DataManager.getInstance().getDataContext(anchor), JBPopupFactory.ActionSelectionAid.MNEMONICS, true)
+            .showUnderneathOf(anchor)
     }
 
     /** A row per file of [files], named by [label], opening it in the editor. */
