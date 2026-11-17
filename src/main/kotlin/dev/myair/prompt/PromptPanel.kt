@@ -16,6 +16,7 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.ui.popup.util.PopupUtil
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
@@ -36,6 +37,7 @@ import dev.myair.actions.summary
 import dev.myair.editor.CLAUDE_ICON
 import dev.myair.editor.projectBase
 import dev.myair.service.LatestRead
+import dev.myair.service.gitWorktrees
 import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.store.EFFORTS
 import dev.myair.store.Preset
@@ -46,6 +48,7 @@ import com.intellij.openapi.project.ProjectManager
 import kotlin.io.path.isDirectory
 import java.awt.BorderLayout
 import java.awt.Dimension
+import java.awt.GridBagLayout
 import java.awt.Point
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
@@ -57,19 +60,38 @@ import javax.swing.JPanel
 /** The choices of the last start, so the next panel opens on them, and under `.draft` a message not yet sent. */
 private const val LAST = "dev.myair.prompt"
 
-/** Where the session works: the configuration's directory, a new worktree on the base, or on a new branch off it. */
-private enum class Workspace(val text: String, val worktree: Boolean, val newBranch: Boolean) {
-    CHECKOUT("Current checkout", false, false),
-    WORKTREE("New worktree", true, false),
-    NEW_BRANCH("New worktree, new branch", true, true);
+/**
+ * Where the session works: the configuration's directory, a new worktree on the base, or on a new branch off it, or a
+ * worktree of the project made before.
+ */
+private enum class Workspace(
+    val text: String, val description: String, val worktree: Boolean, val newBranch: Boolean, val existing: Boolean,
+) {
+    CHECKOUT("Checkout", "the project's folder as it is", false, false, false),
+    WORKTREE("New worktree", "the base checked out in a new worktree", true, false, false),
+    NEW_BRANCH("New branch", "a new branch off the base, in a new worktree", true, true, false),
+    EXISTING("Existing worktree", "a worktree of the project made before", false, false, true);
 
     companion object {
-        fun of(choice: Choice) = entries.single { it.worktree == choice.worktree && it.newBranch == choice.newBranch }
+        fun of(choice: Choice) =
+            entries.single { it.worktree == choice.worktree && it.newBranch == choice.newBranch && it.existing == choice.existing }
     }
 }
 
-/** The repository of the configuration's directory: its branches and the one checked out. */
-private data class Repo(val git: GitRepo, val current: String)
+/** A linked worktree of the project and the branch checked out there, none when detached. */
+private data class Worktree(val path: Path, val branch: String?)
+
+/**
+ * The repository of the configuration's directory: its branches, the one checked out, and its linked worktrees whose
+ * folders exist, newest first.
+ */
+private data class Repo(val git: GitRepo, val current: String, val worktrees: List<Worktree>)
+
+private fun repoOf(dir: Path): Repo {
+    val git = Git.repo(dir)
+    val worktrees = gitWorktrees(git.mainRoot).filter { it.path.isDirectory() }.sortedByDescending { it.created }
+    return Repo(git, Git.currentBranch(dir), worktrees.map { Worktree(it.path, Git.headBranch(it.path)) })
+}
 
 /**
  * A first message and how the session starts: a configuration (Default, then `presets.json`), the model, the effort,
@@ -97,12 +119,18 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
     private var repo: Result<Repo>? = null
     private var base: String? = null
 
+    /** The existing worktree picked, kept while it is among those read, else the newest. */
+    private var existingDir: Path? = null
+
     /** Reads the repository of a configuration's directory into [repo], keeping the base while it is among its branches. */
     private val repoReads = LatestRead.onPool<Path, Repo>(
-        AppExecutorUtil.getAppExecutorService(), { ModalityState.stateForComponent(this) }, { Repo(Git.repo(it), Git.currentBranch(it)) },
+        AppExecutorUtil.getAppExecutorService(), { ModalityState.stateForComponent(this) }, ::repoOf,
     ) { _, read ->
         repo = read
-        read.getOrNull()?.let { base = base?.takeIf { b -> b in it.git.branches } ?: choicesOf(it).let { c -> c.items[c.selected] } }
+        read.getOrNull()?.let {
+            base = base?.takeIf { b -> b in it.git.branches } ?: choicesOf(it).let { c -> c.items[c.selected] }
+            existingDir = existingDir?.takeIf { d -> it.worktrees.any { w -> w.path == d } } ?: it.worktrees.firstOrNull()?.path
+        }
         update(choice)
     }
 
@@ -119,11 +147,11 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         choose(chip, EFFORTS, choice.effort, { it.replaceFirstChar(Char::uppercase) }) { update(choice.copy(effort = it)) }
     }
     private val workspaceChip = Chip(null) { chip ->
-        choose(chip, Workspace.entries, Workspace.of(choice), { it.text }, title = "Workspace") {
-            update(choice.copy(worktree = it.worktree, newBranch = it.newBranch))
+        choose(chip, Workspace.entries, Workspace.of(choice), { it.text }, { it.description }, title = "Workspace") {
+            update(choice.copy(worktree = it.worktree, newBranch = it.newBranch, existing = it.existing))
         }
     }
-    private val branchName = JBTextField(24).apply { emptyText.text = "TR-1234-short-description" }
+    private val branchName = JBTextField().apply { emptyText.text = "TR-1234-short-description" }
     private val suggestChip = Chip(AllIcons.Actions.Lightning) { chip -> suggest(chip) }.apply {
         text = "Suggest"
         chevron = false
@@ -131,8 +159,22 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
     }
     private val projectChip = Chip(null) { chip -> chooseProject(chip) }
     private val branchChip = Chip(AllIcons.Vcs.Branch) { chip -> chooseBase(chip) }
+    private val worktreeChip = Chip(AllIcons.Nodes.Folder) { chip -> chooseWorktree(chip) }
     private val send = SendButton("Start the session (Enter)") { start() }
     private val error = JBLabel().apply { foreground = UIUtil.getErrorForeground() }
+
+    /** The new branch's name, a line of the bar of its own, shown only for a new branch. */
+    private val nameRow = JPanel(BorderLayout(JBUI.scale(8), 0)).apply {
+        isOpaque = false
+        border = JBUI.Borders.empty(0, 6, 4, 0)
+        add(JBLabel("New branch").apply { foreground = UIUtil.getContextHelpForeground() }, BorderLayout.WEST)
+        add(branchName, BorderLayout.CENTER)
+        // Centered at its own height: stretched to the field's, its text and hover background sat off the field's line.
+        add(JPanel(GridBagLayout()).apply { isOpaque = false; add(suggestChip) }, BorderLayout.EAST)
+    }
+
+    /** The content height a popup holding the panel was last fitted to. */
+    private var fittedHeight = -1
 
     init {
         isOpaque = false
@@ -150,8 +192,9 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         val bar = Rounded(BAR, JBUI.scale(12), squareTop = true).apply {
             layout = BorderLayout()
             border = JBUI.Borders.empty(2, 6)
-            add(row(workspaceChip, branchName, suggestChip), BorderLayout.WEST)
-            add(row(projectChip, branchChip), BorderLayout.EAST)
+            // Read as a phrase: in the project, a new branch (or worktree, or the checkout) off that base.
+            add(row(projectChip, step(), workspaceChip, step(), branchChip, worktreeChip), BorderLayout.NORTH)
+            add(nameRow, BorderLayout.SOUTH)
         }
         add(card)
         add(JPanel(BorderLayout()).apply { isOpaque = false; border = JBUI.Borders.empty(0, 24); add(bar) })
@@ -179,7 +222,32 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         ApplicationManager.getApplication().executeOnPooledThread { pruneImages(PASTED_IMAGES, Instant.now() - IMAGES_KEPT) }
     }
 
-    override fun getPreferredSize(): Dimension = super.getPreferredSize().apply { width = maxOf(width, JBUI.scale(720)) }
+    /**
+     * A fixed width, so the height changes only with the rows shown. The empty editor area centers the panel in a
+     * `GridBagLayout`, which lays it out at its minimum size once the area is narrower than the preferred one; a
+     * minimum below the preferred height squeezed the bar there, so the minimum is the preferred size.
+     */
+    override fun getPreferredSize(): Dimension = Dimension(JBUI.scale(720), super.getPreferredSize().height)
+
+    override fun getMinimumSize(): Dimension = preferredSize
+
+    private fun step() = JBLabel("›").apply { foreground = UIUtil.getContextHelpForeground() }
+
+    private fun showError(text: String) {
+        error.text = text
+        error.isVisible = text.isNotEmpty()
+        relayout()
+    }
+
+    /** A popup keeps the size it opened with, so it is fitted again whenever a row shows or hides. */
+    private fun relayout() {
+        revalidate()
+        repaint()
+        val height = preferredSize.height
+        if (height == fittedHeight) return
+        fittedHeight = height
+        PopupUtil.getPopupContainerFor(this)?.pack(false, true)
+    }
 
     /**
      * A configuration brings its own directory, whose repository is read again. [wanted] becomes the base while it is
@@ -209,8 +277,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         effortChip.text = new.effort.replaceFirstChar(Char::uppercase)
         workspaceChip.icon = if (new.worktree) AllIcons.Actions.NewFolder else AllIcons.Nodes.Folder
         workspaceChip.text = Workspace.of(new).text
-        branchName.isVisible = new.newBranch
-        suggestChip.isVisible = new.newBranch
+        nameRow.isVisible = new.newBranch
         val found = repo?.getOrNull()
         // In the checkout the branch is only shown; a worktree is made off the base picked here.
         branchChip.text = when {
@@ -220,17 +287,22 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
             else -> found.current
         }
         branchChip.chevron = new.worktree && found != null
+        branchChip.isVisible = !new.existing
+        worktreeChip.isVisible = new.existing
+        worktreeChip.text = when {
+            repo == null -> "Reading worktrees..."
+            found == null -> "No repository"
+            else -> existingDir?.let(::dirName) ?: "No worktrees"
+        }
+        worktreeChip.chevron = found?.worktrees?.isNotEmpty() == true
         val dir = dirOf(new)
         projectChip.text = dirName(dir)
         projectChip.icon = projectIcon(dir, dirName(dir), 16)
         workspaceChip.isEnabled = found != null
-        error.text = listOfNotNull(
-            repo?.exceptionOrNull()?.message?.takeIf { new.worktree },
+        showError(listOfNotNull(
+            repo?.exceptionOrNull()?.message?.takeIf { new.worktree || new.existing },
             read.exceptionOrNull()?.let { "Broken ${PresetStore.INSTANCE.file}: ${it.message}" },
-        ).joinToString("\n")
-        error.isVisible = error.text.isNotEmpty()
-        revalidate()
-        repaint()
+        ).joinToString("\n"))
         // With no message, another panel's draft stays: the empty editor area keeps its panel while a popup is used.
         if (prompt.text.isNotBlank()) message.flush()
     }
@@ -264,6 +336,14 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         }
     }
 
+    private fun chooseWorktree(chip: Chip) {
+        val found = repo?.getOrNull()?.takeIf { it.worktrees.isNotEmpty() } ?: return
+        choose(chip, found.worktrees, found.worktrees.firstOrNull { it.path == existingDir }, { dirName(it.path) }, { it.branch }, search = true) {
+            existingDir = it.path
+            update(choice)
+        }
+    }
+
     private fun <T> choose(
         chip: Chip, items: List<T>, selected: T?, text: (T) -> String, tag: (T) -> String? = { null },
         title: String? = null, search: Boolean = false, chosen: (T) -> Unit,
@@ -288,25 +368,21 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
             chip.isEnabled = true
             chip.text = "Suggest"
             result.onSuccess { branchName.text = it }
-            error.text = result.exceptionOrNull()?.message.orEmpty()
-            error.isVisible = error.text.isNotEmpty()
+            showError(result.exceptionOrNull()?.message.orEmpty())
         }
     }
 
     private fun start() {
         val branch = branchName.text.trim().takeIf { choice.newBranch }
-        if (branch?.isEmpty() == true) {
-            error.text = "Name the new branch, or let Suggest name it from the message"
-            error.isVisible = true
-            return
+        if (branch?.isEmpty() == true) return showError("Name the new branch, or let Suggest name it from the message")
+        if (choice.existing && existingDir == null) {
+            return showError(if (repo == null) "The worktrees are still being read" else "The project has no worktree to start in")
         }
-        val start = choice.toPreset(base)
+        val start = choice.toPreset(base, existingDir.takeIf { choice.existing })
         val missing = start.missingDirs(start.dir(projectBase(project)))
         if (missing.isNotEmpty()) {
             // Before anything is stored or cleared, so the message stays to be started elsewhere.
-            error.text = "No longer exists: ${missing.joinToString()}; choose another project"
-            error.isVisible = true
-            return
+            return showError("No longer exists: ${missing.joinToString()}; choose another project")
         }
         val text = prompt.text.trim().ifEmpty { null }
         saveChoice(LAST, choice.toLast())
@@ -322,7 +398,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
 private fun loadChoice(key: String) = PropertiesComponent.getInstance().run {
     LastChoice(
         getValue("$key.preset"), getValue("$key.model"), getValue("$key.effort"), getValue("$key.worktree")?.toBooleanStrict(),
-        getValue("$key.newBranch")?.toBooleanStrict(), getValue("$key.project"),
+        getValue("$key.newBranch")?.toBooleanStrict(), getValue("$key.project"), getValue("$key.existing")?.toBooleanStrict(),
     ).present { Path.of(it).isDirectory() }
 }
 
@@ -334,6 +410,7 @@ private fun saveChoice(key: String, choice: LastChoice?) = PropertiesComponent.g
     setValue("$key.worktree", choice?.worktree?.toString())
     setValue("$key.newBranch", choice?.newBranch?.toString())
     setValue("$key.project", choice?.project)
+    setValue("$key.existing", choice?.existing?.toString())
 }
 
 private fun loadDraft(): Draft? {
