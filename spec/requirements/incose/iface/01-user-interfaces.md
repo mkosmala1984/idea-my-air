@@ -156,7 +156,7 @@ Detailed information about the session of the active session tab (`SessionContex
 | **Model/Effort** | Model and effort chips with the age |
 | **Continue** | Button that starts a new session continuing this one (its model, effort, added directories, in its work tree; first message names the old session id and transcript) |
 | **Environment** | Project, folder relative to it, branch → base (base changeable from a popup), start folder and branch, worktree, Desktop, added directories with branches |
-| **Changes vs base** | Files changed since the merge base, Show diff, Tree, Plannotator |
+| **Changes vs base** | Files changed since the merge base; filters, list/tree toggle and a menu with Show Diff, Show as Folder Tree, Review in Plannotator on one line |
 | **Files outside the repo** | Files written outside the work tree ("Files" until git was read) |
 | **Outputs** | `md`/`html` files written, newest first |
 | **Artifacts** | Published artifacts, opened in the browser |
