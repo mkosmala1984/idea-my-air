@@ -132,6 +132,19 @@ class SessionFoldersTest {
     }
 
     @Test
+    fun `a new plan goes into the folder bound to its project, beside a plan bound there, else at the top level`() {
+        val app = Path.of("/app")
+        val bound = tree.createFolder(null, "app", "app", dirs = listOf(app.toString()))
+            .createFolder("rtm", "p", "p", dirs = listOf(Path.of("/q").toString()), plan = Plan())
+            .createFolder(null, "top", "top", dirs = listOf(Path.of("/t").toString()), plan = Plan())
+        assertEquals("app", bound.planParentFor(app))
+        assertEquals("app", bound.planParentFor(app.resolve(".claude/worktrees/x")))
+        assertEquals("rtm", bound.planParentFor(Path.of("/q")))
+        assertNull(bound.planParentFor(Path.of("/t")))
+        assertNull(bound.planParentFor(Path.of("/elsewhere")))
+    }
+
+    @Test
     fun `a version 1 file reads as folders without projects`() {
         assertEquals(SessionFolders().createFolder(null, "a", "a"), SessionFolders.parse("""{"version":1,"folders":[{"id":"a","name":"a","folders":[],"items":[]}]}"""))
     }

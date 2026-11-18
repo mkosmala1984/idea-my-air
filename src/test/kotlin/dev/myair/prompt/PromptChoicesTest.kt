@@ -142,4 +142,11 @@ class PromptChoicesTest {
         assertEquals("E:/x", choiceOf(own).copy(project = "E:/x").toPreset(null).project)
         assertEquals("E:/p", choiceOf(own).toPreset(null).project)
     }
+
+    @Test
+    fun `the plan toggle is restored from the last start and a draft`() {
+        assertEquals(true, restore(presets, LastChoice("Review", null, null, null, plan = true)).plan)
+        assertEquals(false, restore(presets, LastChoice("Review", null, null, null)).plan)
+        assertEquals(true, Choice(review, "opus", "low", false, plan = true).toLast().plan)
+    }
 }

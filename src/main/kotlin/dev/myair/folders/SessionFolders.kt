@@ -102,6 +102,16 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         return bound + all().filter { f -> f.plan != null && f.workdir?.let(dir::isAtOrUnder) == true && f !in bound }
     }
 
+    /**
+     * Where a new plan for sessions of [dir] goes: the folder bound to it, or the parent of the plan folder that folder is or
+     * lies in, as plans do not nest; null (the top level) when no folder is bound to it or the plan folder is at the top.
+     */
+    fun planParentFor(dir: Path): String? {
+        val bound = projectFolder(dir) ?: return null
+        val plan = planFolderAt(bound.id) ?: return bound.id
+        return ancestry(plan.id).dropLast(1).lastOrNull()?.id
+    }
+
     fun findTask(id: String) = all().firstNotNullOfOrNull { f -> f.plan?.tasks()?.firstOrNull { it.id == id }?.let { f to it } }
 
     fun findMilestone(id: String) = all().firstNotNullOfOrNull { f -> f.plan?.milestones?.firstOrNull { it.id == id }?.let { f to it } }

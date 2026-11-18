@@ -14,11 +14,12 @@ val DEFAULT_PRESET = Preset("Default")
 /**
  * The panel's choices: [preset] gives the directories, and the rest start from it and may be changed. [newBranch]: the
  * worktree gets a new branch off the base, named in the panel. [project] is a directory chosen in place of the
- * configuration's own, null keeping it. [existing]: the session starts in a worktree of the project made before.
+ * configuration's own, null keeping it. [existing]: the session starts in a worktree of the project made before. [plan]: the
+ * session starts as the manager of a new plan, named in the panel.
  */
 data class Choice(
     val preset: Preset, val model: String, val effort: String, val worktree: Boolean, val newBranch: Boolean = false,
-    val project: String? = null, val existing: Boolean = false,
+    val project: String? = null, val existing: Boolean = false, val plan: Boolean = false,
 ) {
     init {
         require(effort in EFFORTS) { "effort $effort is not one of $EFFORTS" }
@@ -44,7 +45,7 @@ fun choiceOf(preset: Preset) = Choice(preset, preset.model ?: DEFAULT_MODEL, pre
 /** The choices of the last start, each null when never made; the configuration is kept by name. */
 data class LastChoice(
     val preset: String?, val model: String?, val effort: String?, val worktree: Boolean?, val newBranch: Boolean? = null,
-    val project: String? = null, val existing: Boolean? = null,
+    val project: String? = null, val existing: Boolean? = null, val plan: Boolean? = null,
 )
 
 /**
@@ -57,7 +58,7 @@ data class Draft(val text: String, val choice: LastChoice, val base: String?) {
     }
 }
 
-fun Choice.toLast() = LastChoice(preset.name, model, effort, worktree, newBranch, project, existing)
+fun Choice.toLast() = LastChoice(preset.name, model, effort, worktree, newBranch, project, existing, plan)
 
 /** The draft's choices when there is one, else the last start's. */
 fun opening(presets: List<Preset>, last: LastChoice, draft: Draft?) = restore(presets, draft?.choice ?: last)
@@ -68,7 +69,7 @@ fun restore(presets: List<Preset>, last: LastChoice): Choice {
     val worktree = last.worktree ?: own.worktree
     return Choice(
         own.preset, last.model ?: own.model, last.effort ?: own.effort, worktree, worktree && last.newBranch == true, last.project,
-        !worktree && last.existing == true,
+        !worktree && last.existing == true, last.plan == true,
     )
 }
 
