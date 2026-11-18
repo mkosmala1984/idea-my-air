@@ -9,7 +9,15 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.claude.Brief
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
+import dev.myair.folders.Blocker
+import dev.myair.folders.Decision
+import dev.myair.folders.EvalKind
+import dev.myair.folders.Milestone
 import dev.myair.folders.Plan
+import dev.myair.folders.PlanTask
+import dev.myair.folders.Requirement
+import dev.myair.folders.Review
+import dev.myair.folders.ReviewStatus
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.SessionFolders
 import org.junit.jupiter.api.Test
@@ -165,6 +173,46 @@ class FolderQueriesTest {
         val sessions = task.getAsJsonArray("sessions").map { it.asJsonObject }
         assertEquals(listOf("a" to "working", "bb" to null), sessions.map { it["id"].asString to it["status"].takeUnless { s -> s.isJsonNull }?.asString })
         assertEquals("0/1 tasks done", JsonParser.parseString(planned.treeJson()).asJsonArray[1].asJsonObject["plan"].asString)
+    }
+
+    @Test
+    fun `a plan's sections come out with derived requirement statuses`() {
+        val plan = Plan(
+            milestones = listOf(Milestone("M1", "m", tasks = listOf(PlanTask("T2", "t")))),
+            constraints = "no fallbacks",
+            decisions = listOf(Decision("D1", "2026-11-18", "use Gson", "s1")),
+            requirements = listOf(
+                Requirement("R1", "one", EvalKind.ASSERT, listOf("T2"), listOf("commit abcdef1")),
+                Requirement("R2", "two", EvalKind.JUDGE, evidence = listOf("not done: later")),
+                Requirement("R3", "three", EvalKind.CODE),
+            ),
+            review = Review(ReviewStatus.IN_PROGRESS, "abcdef1", "2026-11-18", listOf(Blocker("B1", "fix it", true))),
+            next = mapOf("R" to 4, "D" to 2, "B" to 2),
+        )
+        val planned = structure.copy(nextId = 3).createFolder(null, "p", "plan", dirs = listOf(Path.of("/plan").toString()), plan = plan)
+        val json = JsonParser.parseString(planned.planJson(planned.find("p")!!, emptyList(), emptyMap(), PlanManagers(), zone)).asJsonObject
+        assertEquals("no fallbacks", json["constraints"].asString)
+        val decision = json.getAsJsonArray("decisions").single().asJsonObject
+        assertEquals(listOf("D1", "2026-11-18", "use Gson", "s1"), listOf("id", "date", "text", "session").map { decision[it].asString })
+        val requirements = json.getAsJsonArray("requirements").map { it.asJsonObject }
+        assertEquals(listOf("proven", "not_done", "unproven"), requirements.map { it["status"].asString })
+        assertEquals(listOf("assert", "judge", "code"), requirements.map { it["eval"].asString })
+        assertEquals(listOf("T2"), requirements[0].getAsJsonArray("tasks").map { it.asString })
+        assertEquals(listOf("commit abcdef1"), requirements[0].getAsJsonArray("evidence").map { it.asString })
+        val review = json["review"].asJsonObject
+        assertEquals(listOf("in_progress", "abcdef1", "2026-11-18"), listOf("status", "commit", "date").map { review[it].asString })
+        val blocker = review.getAsJsonArray("blockers").single().asJsonObject
+        assertEquals(listOf("B1", "fix it", true), listOf(blocker["id"].asString, blocker["text"].asString, blocker["resolved"].asBoolean))
+    }
+
+    @Test
+    fun `a plan without sections has null constraints and review and empty lists`() {
+        val planned = structure.createFolder(null, "p", "plan", dirs = listOf(Path.of("/plan").toString()), plan = Plan())
+        val json = JsonParser.parseString(planned.planJson(planned.find("p")!!, emptyList(), emptyMap(), PlanManagers(), zone)).asJsonObject
+        assertEquals(true, json["constraints"].isJsonNull)
+        assertEquals(true, json["review"].isJsonNull)
+        assertEquals(0, json.getAsJsonArray("decisions").size())
+        assertEquals(0, json.getAsJsonArray("requirements").size())
     }
 
     @Test

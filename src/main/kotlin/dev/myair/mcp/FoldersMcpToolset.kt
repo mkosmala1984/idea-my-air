@@ -188,7 +188,11 @@ class FoldersMcpToolset : McpToolset {
             "directory (or to one above it) is or lies in, else every plan folder below that bound folder; then every plan folder whose workdir is " +
             "the directory or one above it. Each plan has folder " +
             "(its path, the plan's name, which my_air_plan_apply takes), its directories, manager (the id of the session the plan's tab shows beside it, null before the tab first opened), description (Markdown, as for " +
-            "milestones and tasks), and milestones (id, title, description, status open or done) with their tasks (id, title, description, status: pending, in_progress, waiting for the user, blocked by someone else, done or " +
+            "milestones and tasks), constraints (Markdown the work in the plan follows, or null), decisions (id D<n>, date, text, session: " +
+            "the id of the session that took it or null; in the order added), requirements (id R<n>, text, eval: assert, code, questions or judge, " +
+            "tasks: ids of the plan's tasks delivering it, evidence: the items proving it, status derived from the evidence: unproven when it " +
+            "is empty, not_done when any item starts with 'not done: ', else proven), review (status not_done, in_progress or done, commit, date, " +
+            "blockers with id B<n>, text and resolved; null before a review), and milestones (id, title, description, status open or done) with their tasks (id, title, description, status: pending, in_progress, waiting for the user, blocked by someone else, done or " +
             "canceled; next: the next step), each task with the sessions whose brief names it. Fails when the directory has no plan.",
     )
     suspend fun my_air_plan_get(@McpDescription("A directory of the project, normally the session's working directory.") dir: String): String =
