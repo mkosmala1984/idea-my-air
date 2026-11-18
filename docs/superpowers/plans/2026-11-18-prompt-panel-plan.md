@@ -9,9 +9,9 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
+| 1 | done | `5749fef` |
+| 2 | done | `b8121ee` |
+| 3 | in progress | `24c5d04` |
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -41,19 +41,19 @@
 
 | R | Task | Evidence |
 |---|---|---|
-| R1 | 3 | |
-| R2 | 3 | |
-| R3 | 3 | |
-| R4 | 1, 2 | |
-| R5 | 2 | |
-| R6 | 2 | |
-| R7 | 2 | |
-| R8 | 2 | |
-| R9 | 2 | |
-| R10 | 2 | |
-| R11 | 1 | |
-| R12 | 2 | |
-| R13 | 2 | |
+| R1 | 3 | commit 24c5d04; not done: sandbox walk not run |
+| R2 | 3 | commit 24c5d04; not done: sandbox walk not run |
+| R3 | 3 | commit 24c5d04; not done: sandbox walk not run |
+| R4 | 1, 2 | test `SessionFoldersTest` › `a new plan goes into the folder bound to its project, beside a plan bound there, else at the top level`; commit b8121ee |
+| R5 | 2 | commit b8121ee; not done: sandbox walk not run |
+| R6 | 2 | commit b8121ee; not done: sandbox walk not run |
+| R7 | 2 | commit b8121ee; not done: sandbox walk not run |
+| R8 | 2 | commit b8121ee; not done: sandbox walk not run |
+| R9 | 2 | checked: startManager builds the manager file with PlanStart as before, nothing added to args but the panel's; commit b8121ee |
+| R10 | 2 | checked: managerStart gives only --resume <id> for a session with a transcript and pendingArgs is removed at the first start; commit b8121ee |
+| R11 | 1, 3 | test `PromptChoicesTest` › `the plan toggle is restored from the last start and a draft`; commit 24c5d04 |
+| R12 | 2 | checked: TurnIntoPlan and FoldersMcpToolset pass listOf("--", message); commit b8121ee |
+| R13 | 2 | checked: startAsPlan runs only from the opener, after allExist and createWorktree succeed; commit b8121ee |
 
 ---
 
@@ -67,13 +67,13 @@
 **Interfaces:**
 - Produces: `SessionFolders.planParentFor(dir: Path): String?`; `Choice.plan: Boolean = false`; `LastChoice.plan: Boolean? = null`.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
   - `SessionFoldersTest` › `a new plan goes into the folder bound to its project, beside a plan bound there, else at the top level`: bound folder `app` (dirs `/app`) gives `"app"` for `/app` and `/app/.claude/worktrees/x`; with a plan folder `p` bound to `/q` under `rtm`, `/q` gives `"rtm"`; a plan folder bound at the top level gives `null`; an unbound directory gives `null`.
   - `PromptChoicesTest` › `the plan toggle is restored from the last start and a draft`: `restore(presets, LastChoice("Review", null, null, null, plan = true)).plan` is true; `plan = null` gives false; `Choice(review, "opus", "low", false, plan = true).toLast().plan` is true.
-- [ ] **Step 2:** `./gradlew test --tests dev.myair.folders.SessionFoldersTest --tests dev.myair.prompt.PromptChoicesTest` fails to compile.
-- [ ] **Step 3:** Implement: `planParentFor` = bound folder (`projectFolder`), replaced by the parent of `planFolderAt(bound)` when there is one; `plan` threaded through `Choice`, `LastChoice`, `toLast`, `restore` (`last.plan == true`).
-- [ ] **Step 4:** Same command passes.
-- [ ] **Step 5:** Commit with `Plan-Task: 1/3` and `Plan:` trailers.
+- [x] **Step 2:** `./gradlew test --tests dev.myair.folders.SessionFoldersTest --tests dev.myair.prompt.PromptChoicesTest` fails to compile.
+- [x] **Step 3:** Implement: `planParentFor` = bound folder (`projectFolder`), replaced by the parent of `planFolderAt(bound)` when there is one; `plan` threaded through `Choice`, `LastChoice`, `toLast`, `restore` (`last.plan == true`).
+- [x] **Step 4:** Same command passes.
+- [x] **Step 5:** Commit with `Plan-Task: 1/3` and `Plan:` trailers.
 
 ### Task 2: Starting a session as a new plan's manager
 
@@ -87,19 +87,19 @@
 - Consumes: `SessionFolders.planParentFor` (Task 1).
 - Produces: `PlanFiles.adopt(folderId: String, manager: PlanManager, running: ClaudeSessionVirtualFile?, firstArgs: List<String>): String?` (`firstArgs` used only when `running` is null, appended after `managerStart`'s arguments); `startAsPlan(project: Project, name: String, sessionProject: Path, cwd: Path, id: String, args: List<String>)` (EDT); `startPreset(project, preset, where, prompt = null, branch = null, planName: String? = null)`; `startInWorktree(..., open: (cwd: Path, id: String, args: List<String>) -> Unit = <startNew as today>)`.
 
-- [ ] **Step 1:** `PlanFiles`: `firstArgs: ConcurrentHashMap<String, List<String>>`; `startManager` appends `firstArgs.remove(folder.id).orEmpty()`; `adopt` takes `firstArgs`. Turn into Plan and the MCP tool pass `listOf("--", message)`.
-- [ ] **Step 2:** `startAsPlan`: create the plan folder (`Plan()`) under `planParentFor(sessionProject)` with the session assigned (`ChangeSource.UI`), `check` it exists, `adopt(folderId, PlanManager(id, cwd, sessionProject), null, args)`, `PlanOpener.open(project, folderId)`.
-- [ ] **Step 3:** `startInWorktree` calls `open(path, id, claudeArgs)` where it called `startNew`; `startPreset` picks `startAsPlan` as the opener when `planName` is given, `startNew` otherwise, for both the checkout and the worktree path.
-- [ ] **Step 4:** `./gradlew test` passes (no behaviour test: IDE services; `PlanFilesTest` and `SessionSystemPromptTest` stay green).
-- [ ] **Step 5:** Commit with `Plan-Task: 2/3`.
+- [x] **Step 1:** `PlanFiles`: `firstArgs: ConcurrentHashMap<String, List<String>>`; `startManager` appends `firstArgs.remove(folder.id).orEmpty()`; `adopt` takes `firstArgs`. Turn into Plan and the MCP tool pass `listOf("--", message)`.
+- [x] **Step 2:** `startAsPlan`: create the plan folder (`Plan()`) under `planParentFor(sessionProject)` with the session assigned (`ChangeSource.UI`), `check` it exists, `adopt(folderId, PlanManager(id, cwd, sessionProject), null, args)`, `PlanOpener.open(project, folderId)`.
+- [x] **Step 3:** `startInWorktree` calls `open(path, id, claudeArgs)` where it called `startNew`; `startPreset` picks `startAsPlan` as the opener when `planName` is given, `startNew` otherwise, for both the checkout and the worktree path.
+- [x] **Step 4:** `./gradlew test` passes (no behaviour test: IDE services; `PlanFilesTest` and `SessionSystemPromptTest` stay green).
+- [x] **Step 5:** Commit with `Plan-Task: 2/3`.
 
 ### Task 3: The `Plan` chip and the name row; docs; sandbox check
 
 **Files:**
 - Modify: `src/main/kotlin/dev/myair/prompt/Composer.kt` (`Chip.selected`), `src/main/kotlin/dev/myair/prompt/PromptPanel.kt`, `CLAUDE.md` (the `PromptPanel` paragraph)
 
-- [ ] **Step 1:** `Chip.selected: Boolean` paints the pressed background while on. `planChip` (icon `AllIcons.Nodes.Target`, text `Plan`, no chevron, tooltip) after `effortChip` toggles `choice.plan`; `planRow` (`Plan name` label + `planName` field) in the bar under `nameRow`, visible with `choice.plan`.
-- [ ] **Step 2:** `start()`: with `choice.plan` a blank name shows `Name the plan` and returns before anything is stored; else passes `planName` to `startPreset` and clears the field.
-- [ ] **Step 3:** `CLAUDE.md`: the toggle in the `PromptPanel` paragraph.
+- [x] **Step 1:** `Chip.selected: Boolean` paints the pressed background while on. `planChip` (icon `AllIcons.Nodes.Target`, text `Plan`, no chevron, tooltip) after `effortChip` toggles `choice.plan`; `planRow` (`Plan name` label + `planName` field) in the bar under `nameRow`, visible with `choice.plan`.
+- [x] **Step 2:** `start()`: with `choice.plan` a blank name shows `Name the plan` and returns before anything is stored; else passes `planName` to `startPreset` and clears the field.
+- [x] **Step 3:** `CLAUDE.md`: the toggle in the `PromptPanel` paragraph.
 - [ ] **Step 4:** `./gradlew test buildPlugin` passes; in the sandbox: Plan on, blank name refused; named, Checkout → plan tab with the manager running the message; New branch → worktree made, manager runs there.
-- [ ] **Step 5:** Commit with `Plan-Task: 3/3`; fill the evidence table.
+- [x] **Step 5:** Commit with `Plan-Task: 3/3`; fill the evidence table.
