@@ -6,7 +6,7 @@
 | 2 | done | `b04711a` |
 | 3 | done | `871cf90` |
 | 4 | done | `f7dedc1` |
-| 5 | | |
+| 5 | done | `3cdcf8e` |
 | 6 | | |
 | 7 | | |
 
@@ -202,15 +202,15 @@ Layout after the intro sentence: `## Ideal state` + description (when set), `## 
   - `fun PlanEdit.apply(folderId: String, text: String, today: LocalDate): ((SessionFolders) -> SessionFolders)?`: a new requirement gets `EvalKind.CODE`; blank text refused for titles and new items, empty clears `Constraints`.
   - `PlanEdit.current(plan)` covers the new edits.
 
-- [ ] **Step 1: Write the failing tests**:
+- [x] **Step 1: Write the failing tests**:
 - `PlanViewTest` › `` `requirements start open, review open while a blocker is unresolved, other sections folded when they hold anything` ``: plan with constraints, one decision, review with one unresolved blocker: `open(REQUIREMENTS)` true, `open(REVIEW)` true, `open(CONSTRAINTS)` false, `open(DECISIONS)` false, `open(IDEAL)` false with a description and true without; after resolving: `open(REVIEW)` false; `toggle("constraints")` opens it.
 - `PlanViewTest` › `` `the header counts proven requirements and names the review` ``: `requirementsSummary` of 6 with 4 proven → `"R 4/6"`, empty → null; `reviewSummary(null) == "review: not done"`, two unresolved → `"review: 2 blockers"`, done with all resolved → `"review: done"`.
 - `PlanEditTest` › `` `new decision, requirement and blocker edits add items, blank refused` ``: `NewDecision.apply("p","Why",today)` gives `D1` dated today; `NewRequirement` gives `R1` with `CODE`; `NewBlocker` gives `B1`; blank → null.
 - `PlanEditTest` › `` `a title edit of a requirement, decision or blocker changes its text` `` and `` `an empty constraints edit clears them` ``.
-- [ ] **Step 2: Run** `./gradlew test --tests 'dev.myair.planview.*'` — Expected: FAIL.
-- [ ] **Step 3: Implement** in `PlanView.kt` and `PlanEdit.kt`; `planViewOf` fills `plan`.
-- [ ] **Step 4: Run** the same — Expected: PASS (`PlanPanel` compiles against the new `apply` signature by passing `LocalDate.now()`).
-- [ ] **Step 5: Commit** `Plan view model: sections, their folding, header summaries, edits of the new items` with `Plan-Task: 5/7`.
+- [x] **Step 2: Run** `./gradlew test --tests 'dev.myair.planview.*'` — Expected: FAIL.
+- [x] **Step 3: Implement** in `PlanView.kt` and `PlanEdit.kt`; `planViewOf` fills `plan`.
+- [x] **Step 4: Run** the same — Expected: PASS (`PlanPanel` compiles against the new `apply` signature by passing `LocalDate.now()`).
+- [x] **Step 5: Commit** `Plan view model: sections, their folding, header summaries, edits of the new items` with `Plan-Task: 5/7`.
 
 ### Task 6: Plan panel cards and sandbox walk
 
