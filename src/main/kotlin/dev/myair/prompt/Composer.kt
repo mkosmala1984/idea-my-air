@@ -29,7 +29,7 @@ internal fun row(vararg chips: JComponent) = JPanel(FlowLayout(FlowLayout.LEFT, 
     chips.forEach(::add)
 }
 
-/** A flat dropdown: icon, text and chevron, with a hover background; a click runs [click]. */
+/** A flat dropdown: icon, text and chevron, with a hover background, or a toggle with a background while [selected]; a click runs [click]. */
 internal class Chip(icon: Icon?, private val click: (Chip) -> Unit) : JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)) {
     private val label = JBLabel(icon)
     private val down = JBLabel(AllIcons.General.ChevronDown)
@@ -43,6 +43,8 @@ internal class Chip(icon: Icon?, private val click: (Chip) -> Unit) : JPanel(Flo
     var chevron: Boolean
         get() = down.isVisible
         set(value) { down.isVisible = value }
+    var selected = false
+        set(value) { field = value; repaint() }
 
     init {
         isOpaque = false
@@ -63,10 +65,10 @@ internal class Chip(icon: Icon?, private val click: (Chip) -> Unit) : JPanel(Flo
     }
 
     override fun paintComponent(g: Graphics) {
-        if (!hover || !isEnabled) return
+        if (!(hover || selected) || !isEnabled) return
         val g2 = g.create() as Graphics2D
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-        g2.color = JBUI.CurrentTheme.ActionButton.hoverBackground()
+        g2.color = if (selected) JBUI.CurrentTheme.ActionButton.pressedBackground() else JBUI.CurrentTheme.ActionButton.hoverBackground()
         g2.fillRoundRect(0, 0, width, height, JBUI.scale(8), JBUI.scale(8))
         g2.dispose()
     }

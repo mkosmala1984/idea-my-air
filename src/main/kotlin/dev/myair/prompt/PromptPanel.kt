@@ -137,7 +137,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
     private val presetChip = Chip(AllIcons.Actions.Lightning) { chip ->
         choose(chip, presets, choice.preset, { it.name }, { it.summary() }) {
             message.set(switchedMessage(prompt.text, choice.preset, it))
-            selectPreset(choiceOf(it))
+            selectPreset(choiceOf(it).copy(plan = choice.plan))
         }
     }
     private val modelChip = Chip(CLAUDE_ICON) { chip ->
@@ -160,6 +160,12 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
     private val projectChip = Chip(null) { chip -> chooseProject(chip) }
     private val branchChip = Chip(AllIcons.Vcs.Branch) { chip -> chooseBase(chip) }
     private val worktreeChip = Chip(AllIcons.Nodes.Folder) { chip -> chooseWorktree(chip) }
+    private val planChip = Chip(AllIcons.Nodes.Target) { update(choice.copy(plan = !choice.plan)) }.apply {
+        text = "Plan"
+        chevron = false
+        toolTipText = "Start the session as the manager of a new plan, opened in a plan tab"
+    }
+    private val planName = JBTextField().apply { emptyText.text = "Name of the new plan" }
     private val send = SendButton("Start the session (Enter)") { start() }
     private val error = JBLabel().apply { foreground = UIUtil.getErrorForeground() }
 
@@ -171,6 +177,14 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         add(branchName, BorderLayout.CENTER)
         // Centered at its own height: stretched to the field's, its text and hover background sat off the field's line.
         add(JPanel(GridBagLayout()).apply { isOpaque = false; add(suggestChip) }, BorderLayout.EAST)
+    }
+
+    /** The new plan's name, a line of the bar of its own, shown only with [planChip] on. */
+    private val planRow = JPanel(BorderLayout(JBUI.scale(8), 0)).apply {
+        isOpaque = false
+        border = JBUI.Borders.empty(0, 6, 4, 6)
+        add(JBLabel("Plan name").apply { foreground = UIUtil.getContextHelpForeground() }, BorderLayout.WEST)
+        add(planName, BorderLayout.CENTER)
     }
 
     /** The content height a popup holding the panel was last fitted to. */
@@ -185,7 +199,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
             add(JBScrollPane(prompt).apply { isOpaque = false; viewport.isOpaque = false; border = JBUI.Borders.empty() }, BorderLayout.CENTER)
             add(JPanel(BorderLayout()).apply {
                 isOpaque = false
-                add(row(presetChip, modelChip, effortChip), BorderLayout.WEST)
+                add(row(presetChip, modelChip, effortChip, planChip), BorderLayout.WEST)
                 add(send, BorderLayout.EAST)
             }, BorderLayout.SOUTH)
         }
@@ -194,7 +208,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
             border = JBUI.Borders.empty(2, 6)
             // Read as a phrase: in the project, a new branch (or worktree, or the checkout) off that base.
             add(row(projectChip, step(), workspaceChip, step(), branchChip, worktreeChip), BorderLayout.NORTH)
-            add(nameRow, BorderLayout.SOUTH)
+            add(JPanel(VerticalLayout(0)).apply { isOpaque = false; add(nameRow); add(planRow) }, BorderLayout.SOUTH)
         }
         add(card)
         add(JPanel(BorderLayout()).apply { isOpaque = false; border = JBUI.Borders.empty(0, 24); add(bar) })
@@ -278,6 +292,8 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         workspaceChip.icon = if (new.worktree) AllIcons.Actions.NewFolder else AllIcons.Nodes.Folder
         workspaceChip.text = Workspace.of(new).text
         nameRow.isVisible = new.newBranch
+        planChip.selected = new.plan
+        planRow.isVisible = new.plan
         val found = repo?.getOrNull()
         // In the checkout the branch is only shown; a worktree is made off the base picked here.
         branchChip.text = when {
@@ -375,6 +391,8 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
     private fun start() {
         val branch = branchName.text.trim().takeIf { choice.newBranch }
         if (branch?.isEmpty() == true) return showError("Name the new branch, or let Suggest name it from the message")
+        val plan = planName.text.trim().takeIf { choice.plan }
+        if (plan?.isEmpty() == true) return showError("Name the new plan")
         if (choice.existing && existingDir == null) {
             return showError(if (repo == null) "The worktrees are still being read" else "The project has no worktree to start in")
         }
@@ -390,8 +408,9 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         // started before its branches are read opens here.
         val where = RelativePoint.fromScreen(RelativePoint(send, Point(0, send.height)).screenPoint)
         message.set("")
+        planName.text = ""
         started()
-        startPreset(project, start, where, text, branch)
+        startPreset(project, start, where, text, branch, plan)
     }
 }
 
@@ -399,6 +418,7 @@ private fun loadChoice(key: String) = PropertiesComponent.getInstance().run {
     LastChoice(
         getValue("$key.preset"), getValue("$key.model"), getValue("$key.effort"), getValue("$key.worktree")?.toBooleanStrict(),
         getValue("$key.newBranch")?.toBooleanStrict(), getValue("$key.project"), getValue("$key.existing")?.toBooleanStrict(),
+        getValue("$key.plan")?.toBooleanStrict(),
     ).present { Path.of(it).isDirectory() }
 }
 
@@ -411,6 +431,7 @@ private fun saveChoice(key: String, choice: LastChoice?) = PropertiesComponent.g
     setValue("$key.newBranch", choice?.newBranch?.toString())
     setValue("$key.project", choice?.project)
     setValue("$key.existing", choice?.existing?.toString())
+    setValue("$key.plan", choice?.plan?.toString())
 }
 
 private fun loadDraft(): Draft? {
