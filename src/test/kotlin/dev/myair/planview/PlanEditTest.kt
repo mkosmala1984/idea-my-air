@@ -97,4 +97,32 @@ class PlanEditTest {
         assertEquals("", PlanEdit.Constraints.current(structure.plan()))
         assertNull(PlanEdit.Constraints.on("  ", set).plan().constraints)
     }
+
+    @Test
+    fun `an edit of a section's text or item belongs to that section, a milestone's or task's to none`() {
+        val sections = listOf(
+            PlanEdit.Description(null), PlanEdit.Constraints, PlanEdit.NewDecision, PlanEdit.Title("D3"),
+            PlanEdit.NewRequirement, PlanEdit.Title("R1"), PlanEdit.NewBlocker, PlanEdit.Title("B2"),
+            PlanEdit.Title("M1"), PlanEdit.Title("T2"), PlanEdit.Description("T2"), PlanEdit.Next("T2"), PlanEdit.NewTask("M1"), PlanEdit.NewMilestone,
+        ).map { it.section }
+        assertEquals(listOf(
+            Section.IDEAL, Section.CONSTRAINTS, Section.DECISIONS, Section.DECISIONS,
+            Section.REQUIREMENTS, Section.REQUIREMENTS, Section.REVIEW, Section.REVIEW,
+            null, null, null, null, null, null,
+        ), sections)
+    }
+
+    @Test
+    fun `descriptions, constraints and decisions are edited over several lines, titles and next steps on one`() {
+        val multi = listOf(PlanEdit.Description(null), PlanEdit.Description("T2"), PlanEdit.Constraints, PlanEdit.Title("D1"))
+        val single = listOf(PlanEdit.Title("T2"), PlanEdit.Title("R1"), PlanEdit.Title("B1"), PlanEdit.Next("T2"), PlanEdit.NewDecision, PlanEdit.NewRequirement)
+        assertEquals(List(4) { true } + List(6) { false }, (multi + single).map { it.multiline })
+    }
+
+    @Test
+    fun `only the edits adding an item are new`() {
+        val new = listOf(PlanEdit.NewTask("M1"), PlanEdit.NewMilestone, PlanEdit.NewDecision, PlanEdit.NewRequirement, PlanEdit.NewBlocker)
+        val old = listOf(PlanEdit.Title("T2"), PlanEdit.Title("R1"), PlanEdit.Next("T2"), PlanEdit.Description(null), PlanEdit.Constraints)
+        assertEquals(List(5) { true } + List(5) { false }, (new + old).map { it.isNew })
+    }
 }

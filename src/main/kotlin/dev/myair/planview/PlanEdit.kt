@@ -89,4 +89,27 @@ fun PlanEdit.current(plan: Plan): String? {
     }
 }
 
+/** The section card an edit is about, kept open while it is; null for a milestone's or task's. */
+val PlanEdit.section: Section?
+    get() = when (this) {
+        is PlanEdit.Title -> when (kind(id)) {
+            'R' -> Section.REQUIREMENTS
+            'D' -> Section.DECISIONS
+            'B' -> Section.REVIEW
+            else -> null
+        }
+        is PlanEdit.Description -> if (id == null) Section.IDEAL else null
+        PlanEdit.Constraints -> Section.CONSTRAINTS
+        PlanEdit.NewDecision -> Section.DECISIONS
+        PlanEdit.NewRequirement -> Section.REQUIREMENTS
+        PlanEdit.NewBlocker -> Section.REVIEW
+        is PlanEdit.Next, is PlanEdit.NewTask, PlanEdit.NewMilestone -> null
+    }
+
+/** Adds an item: its field stays open and empty after a save, for the next. */
+val PlanEdit.isNew get() = this is PlanEdit.NewTask || this == PlanEdit.NewMilestone || this == PlanEdit.NewDecision || this == PlanEdit.NewRequirement || this == PlanEdit.NewBlocker
+
+/** Edited in the area, as its text may hold several lines (Markdown): a description, the constraints, a decision. */
+val PlanEdit.multiline get() = this is PlanEdit.Description || this == PlanEdit.Constraints || this is PlanEdit.Title && kind(id) == 'D'
+
 private fun kind(id: String) = id.first().also { require(it in "MTRDB") { "not a milestone, task, requirement, decision or blocker id: $id" } }

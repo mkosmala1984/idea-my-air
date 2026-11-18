@@ -1,6 +1,8 @@
 package dev.myair.planview
 
 import dev.myair.claude.ClaudeSession
+import dev.myair.folders.Blocker
+import dev.myair.folders.Decision
 import dev.myair.folders.Folder
 import dev.myair.folders.Milestone
 import dev.myair.folders.Plan
@@ -18,7 +20,7 @@ data class TaskView(val task: PlanTask, val sessions: List<ClaudeSession>)
 data class MilestoneView(val milestone: Milestone, val progress: String, val tasks: List<TaskView>)
 
 /** [plan] is the folder's, read by the sections between the header and the milestones. */
-data class PlanView(val folder: Folder, val plan: Plan, val description: String?, val milestones: List<MilestoneView>)
+data class PlanView(val folder: Folder, val plan: Plan, val milestones: List<MilestoneView>)
 
 /** The cards between the plan's header and its milestones; [id] is the one [Folding.toggle] takes. */
 enum class Section(val id: String) { IDEAL("ideal"), CONSTRAINTS("constraints"), DECISIONS("decisions"), REQUIREMENTS("requirements"), REVIEW("review") }
@@ -82,12 +84,27 @@ fun reviewSummary(review: Review?): String {
     }
 }
 
+/** [decisions] newest first: by date, then by number, so `D10` comes before `D9`. */
+fun newestFirst(decisions: List<Decision>): List<Decision> =
+    decisions.sortedWith(compareByDescending<Decision> { it.date }.thenByDescending { it.id.drop(1).toInt() })
+
+/** The mark before a requirement: `○` unproven, `✗` not done, `✓` proven. */
+val RequirementStatus.glyph
+    get() = when (this) {
+        RequirementStatus.UNPROVEN -> "○"
+        RequirementStatus.NOT_DONE -> "✗"
+        RequirementStatus.PROVEN -> "✓"
+    }
+
+/** The mark before a blocker: `✓` resolved, else `✗`. */
+val Blocker.glyph get() = if (resolved) RequirementStatus.PROVEN.glyph else RequirementStatus.NOT_DONE.glyph
+
 /** The plan of [folderId] with the sessions under each task, [managerId] left out; null when the folder is gone or has no plan. */
 fun planViewOf(structure: SessionFolders, folderId: String, sessions: List<ClaudeSession>, managerId: String?): PlanView? {
     val folder = structure.find(folderId) ?: return null
     val plan = folder.plan ?: return null
     val workers = sessions.filter { it.id != managerId }
-    return PlanView(folder, plan, plan.description, plan.milestones.map { m ->
+    return PlanView(folder, plan, plan.milestones.map { m ->
         MilestoneView(m, progress(m.tasks), m.tasks.map { t -> TaskView(t, workers.filter { it.brief?.planTask == t.id }) })
     })
 }

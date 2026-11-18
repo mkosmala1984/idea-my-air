@@ -3,6 +3,7 @@ package dev.myair.planview
 import dev.myair.claude.Brief
 import dev.myair.claude.ClaudeSession
 import dev.myair.folders.Blocker
+import dev.myair.folders.Decision
 import dev.myair.folders.EvalKind
 import dev.myair.folders.Milestone
 import dev.myair.folders.Plan
@@ -10,6 +11,7 @@ import dev.myair.folders.PlanChanges
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.PlanTask
 import dev.myair.folders.Requirement
+import dev.myair.folders.RequirementStatus
 import dev.myair.folders.Review
 import dev.myair.folders.ReviewStatus
 import dev.myair.folders.SessionFolders
@@ -141,5 +143,19 @@ class PlanViewTest {
         assertEquals("1 in progress · 1 waiting for you", openWork(counts))
         assertEquals("3 blocked", openWork(mapOf(PlanStatus.BLOCKED to 3, PlanStatus.DONE to 1)))
         assertEquals("", openWork(statusCounts(emptyList())))
+    }
+
+    @Test
+    fun `decisions come newest first, by date and then by number`() {
+        val decisions = listOf(
+            Decision("D2", "2026-11-17", "b"), Decision("D9", "2026-11-18", "c"), Decision("D10", "2026-11-18", "d"), Decision("D1", "2026-11-19", "a"),
+        )
+        assertEquals(listOf("D1", "D10", "D9", "D2"), newestFirst(decisions).map { it.id })
+    }
+
+    @Test
+    fun `a requirement's glyph tells unproven, not done and proven apart, a blocker's resolved or not`() {
+        assertEquals(listOf("○", "✗", "✓"), listOf(RequirementStatus.UNPROVEN, RequirementStatus.NOT_DONE, RequirementStatus.PROVEN).map { it.glyph })
+        assertEquals(listOf("✗", "✓"), listOf(Blocker("B1", "a"), Blocker("B2", "b", resolved = true)).map { it.glyph })
     }
 }
