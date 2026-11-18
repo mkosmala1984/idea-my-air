@@ -2,7 +2,7 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
+| 1 | done | `55c675c`..`1296572` |
 | 2 | | |
 | 3 | | |
 | 4 | | |
@@ -80,7 +80,7 @@
   - `deleteEntry(folderId: String, id: String)` for an `R`/`D`/`B` id.
   - private `Plan.allocate(prefix: Char): Pair<String, Plan>`: id `"$prefix${next[prefix] ?: 1}"`, `next` bumped.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `PlanTest`:
 - `` `a requirement is unproven without evidence, not done with any not done item, else proven` ``: `Requirement("R1","x",EvalKind.CODE).status == UNPROVEN`; with `listOf("commit abc1234")` → `PROVEN`; with `listOf("commit abc1234", "not done: sandbox walk not run")` → `NOT_DONE`.
@@ -96,21 +96,21 @@ In `SessionFoldersTest`:
 - `` `a plan with new fields is written as version 5 and reads back equal` ``: one of each field set; round-trips; `"version": 5`.
 - `` `version 5 rejects unknown plan keys` ``: a v5 file with `"plan":{"milestones":[],"extra":1}` throws naming `extra`.
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `./gradlew test --tests dev.myair.folders.PlanTest --tests dev.myair.folders.SessionFoldersTest`
 Expected: compilation fails on the missing types.
 
-- [ ] **Step 3: Implement the model in `Plan.kt` and the edits in `SessionFolders.kt`**
+- [x] **Step 3: Implement the model in `Plan.kt` and the edits in `SessionFolders.kt`**
 
 `VERSION` becomes 5; `parse` accepts `version in 1..5` and for 5 the root and folder key sets of 4; `plan()` reads the new keys only when `version == 5` (pass the version down) and uses `only` with them. `toJson` writes `"version"` as `if (all().any { it.plan?.usesVersion5 == true }) 5 else 4` and serializes `Plan` with a `JsonSerializer<Plan>` registered on the `GsonBuilder` that leaves out `decisions`, `requirements`, `next` when empty (Gson already leaves out nulls), so a version-4 file is unchanged. `restore` additionally merges, for every plan folder present in the snapshot, `next` with the current plan's by `maxOf` per key. `deletePlanItem` maps the plan's requirements' `tasks` minus the deleted task ids. Update the version comment.
 
-- [ ] **Step 4: Run them to verify they pass**
+- [x] **Step 4: Run them to verify they pass**
 
 Run: `./gradlew test --tests 'dev.myair.folders.*'`
 Expected: PASS, the existing folder tests included.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/kotlin/dev/myair/folders/Plan.kt src/main/kotlin/dev/myair/folders/SessionFolders.kt src/test/kotlin/dev/myair/folders/PlanTest.kt src/test/kotlin/dev/myair/folders/SessionFoldersTest.kt
