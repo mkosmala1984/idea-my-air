@@ -1,8 +1,13 @@
 package dev.myair.planview
 
+import dev.myair.folders.Blocker
+import dev.myair.folders.Decision
+import dev.myair.folders.EvalKind
 import dev.myair.folders.Plan
+import dev.myair.folders.Requirement
 import dev.myair.folders.SessionFolders
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -12,14 +17,18 @@ class PlanEditTest {
         .createFolder(null, "f", "Plan", plan = Plan()).addMilestone("f", "First").addTask("M1", "A").addTask("M1", "B")
         .editTask("T2") { it.copy(next = "go", description = "about A") }
 
-    private fun PlanEdit.on(text: String) = checkNotNull(apply("f", text)) { "refused '$text'" }(structure)
+    private val today = LocalDate.of(2026, 11, 18)
+
+    private fun PlanEdit.on(text: String, on: SessionFolders = structure) = checkNotNull(apply("f", text, today)) { "refused '$text'" }(on)
+
+    private fun SessionFolders.plan() = find("f")!!.plan!!
 
     @Test
     fun `a title edit renames the task and refuses a blank title`() {
         assertEquals("Renamed", PlanEdit.Title("T2").on(" Renamed ").findTask("T2")!!.second.title)
         assertEquals("Stage", PlanEdit.Title("M1").on("Stage").findMilestone("M1")!!.second.title)
-        assertNull(PlanEdit.Title("T2").apply("f", "  "))
-        assertNull(PlanEdit.NewTask("M1").apply("f", ""))
+        assertNull(PlanEdit.Title("T2").apply("f", "  ", today))
+        assertNull(PlanEdit.NewTask("M1").apply("f", "", today))
     }
 
     @Test
@@ -41,7 +50,7 @@ class PlanEditTest {
     fun `an edit of a deleted task changes nothing`() {
         val deleted = structure.deletePlanItem("T2")
         for (edit in listOf(PlanEdit.Title("T2"), PlanEdit.Next("T2"), PlanEdit.Description("T2"))) {
-            assertEquals(deleted, edit.apply("f", "x")!!(deleted))
+            assertEquals(deleted, edit.apply("f", "x", today)!!(deleted))
         }
     }
 
@@ -54,5 +63,38 @@ class PlanEditTest {
         assertEquals("", PlanEdit.NewTask("M1").current(plan))
         assertNull(PlanEdit.Title("T9").current(plan))
         assertNull(PlanEdit.NewTask("M9").current(plan))
+    }
+
+    @Test
+    fun `new decision, requirement and blocker edits add items, blank refused`() {
+        assertEquals(listOf(Decision("D1", "2026-11-18", "Why")), PlanEdit.NewDecision.on(" Why ").plan().decisions)
+        assertEquals(listOf(Requirement("R1", "Holds", EvalKind.CODE)), PlanEdit.NewRequirement.on("Holds").plan().requirements)
+        assertEquals(listOf(Blocker("B1", "Race")), PlanEdit.NewBlocker.on("Race").plan().review!!.blockers)
+        for (edit in listOf(PlanEdit.NewDecision, PlanEdit.NewRequirement, PlanEdit.NewBlocker)) {
+            assertNull(edit.apply("f", " ", today))
+            assertEquals("", edit.current(structure.plan()))
+        }
+    }
+
+    @Test
+    fun `a title edit of a requirement, decision or blocker changes its text`() {
+        val filled = structure.addRequirement("f", "r", EvalKind.ASSERT).addDecision("f", "d", today).addBlocker("f", "b", today)
+        assertEquals("r2", PlanEdit.Title("R1").on(" r2 ", filled).plan().requirements.single().text)
+        assertEquals("d2", PlanEdit.Title("D1").on("d2", filled).plan().decisions.single().text)
+        assertEquals("b2", PlanEdit.Title("B1").on("b2", filled).plan().review!!.blockers.single().text)
+        assertEquals(listOf("r", "d", "b"), listOf("R1", "D1", "B1").map { PlanEdit.Title(it).current(filled.plan()) })
+        assertNull(PlanEdit.Title("R1").apply("f", " ", today))
+        val gone = filled.deleteEntry("f", "R1")
+        assertEquals(gone, PlanEdit.Title("R1").on("x", gone))
+        assertNull(PlanEdit.Title("R1").current(gone.plan()))
+    }
+
+    @Test
+    fun `an empty constraints edit clears them`() {
+        val set = PlanEdit.Constraints.on(" No new deps\n")
+        assertEquals("No new deps", set.plan().constraints)
+        assertEquals("No new deps", PlanEdit.Constraints.current(set.plan()))
+        assertEquals("", PlanEdit.Constraints.current(structure.plan()))
+        assertNull(PlanEdit.Constraints.on("  ", set).plan().constraints)
     }
 }

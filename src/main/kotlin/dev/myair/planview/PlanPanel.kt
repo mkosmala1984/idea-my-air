@@ -39,7 +39,6 @@ import dev.myair.editor.PlanStart
 import dev.myair.editor.projectBase
 import dev.myair.editor.sessionIcon
 import dev.myair.folders.ChangeSource
-import dev.myair.folders.Milestone
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
@@ -70,6 +69,7 @@ import java.awt.event.MouseEvent
 import java.awt.geom.RoundRectangle2D
 import java.nio.file.Path
 import java.time.Instant
+import java.time.LocalDate
 import javax.swing.Box
 import javax.swing.BoxLayout
 import javax.swing.Icon
@@ -162,8 +162,8 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
                 addActionListener { hideClosed = isSelected; render(force = true) }
             }
             actions(
-                action("Expand All", AllIcons.Actions.Expandall) { foldAll(true, milestones()) },
-                action("Collapse All", AllIcons.Actions.Collapseall) { foldAll(false, milestones()) },
+                action("Expand All", AllIcons.Actions.Expandall) { foldAll(true) },
+                action("Collapse All", AllIcons.Actions.Collapseall) { foldAll(false) },
                 more(action("Edit Description") { openEdit(PlanEdit.Description(null)) }),
             )
         }
@@ -358,8 +358,8 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
         rebuild(checkNotNull(view).milestones.filter { m -> m.milestone.id == id || m.tasks.any { it.task.id == id } })
     }
 
-    private fun foldAll(open: Boolean, milestones: List<Milestone>) {
-        folding = Folding.all(open, milestones)
+    private fun foldAll(open: Boolean) {
+        folding = Folding.all(open, checkNotNull(view).plan)
         rebuild(checkNotNull(view).milestones)
     }
 
@@ -390,7 +390,7 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
     /** Applies the open edit; a blank title is refused and its field stays. A new item's field stays open, empty, for the next. */
     private fun save() {
         val open = checkNotNull(open) { "nothing to save" }
-        val op = open.edit.apply(folderId, open.component.text) ?: return
+        val op = open.edit.apply(folderId, open.component.text, LocalDate.now()) ?: return
         if (open.edit is PlanEdit.NewTask || open.edit == PlanEdit.NewMilestone) {
             open.component.text = ""
             focusOpen = true
@@ -432,14 +432,14 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
 /** The gap between the parts of a head. */
 private const val HEAD_GAP = 8
 
-/** The milestone or task an edit is about; null for a new milestone. */
+/** The milestone or task an edit is about; null for a new milestone and the edits of the sections. */
 private val PlanEdit.itemId: String?
     get() = when (this) {
         is PlanEdit.Title -> id
         is PlanEdit.Next -> taskId
         is PlanEdit.Description -> id
         is PlanEdit.NewTask -> milestoneId
-        PlanEdit.NewMilestone -> null
+        PlanEdit.NewMilestone, PlanEdit.Constraints, PlanEdit.NewDecision, PlanEdit.NewRequirement, PlanEdit.NewBlocker -> null
     }
 
 /** A row with a rounded hover background that runs [click]; it gets the clicks of the components in it that take none. */

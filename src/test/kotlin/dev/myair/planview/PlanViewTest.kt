@@ -2,17 +2,24 @@ package dev.myair.planview
 
 import dev.myair.claude.Brief
 import dev.myair.claude.ClaudeSession
+import dev.myair.folders.Blocker
+import dev.myair.folders.EvalKind
 import dev.myair.folders.Milestone
 import dev.myair.folders.Plan
 import dev.myair.folders.PlanChanges
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.PlanTask
+import dev.myair.folders.Requirement
+import dev.myair.folders.Review
+import dev.myair.folders.ReviewStatus
 import dev.myair.folders.SessionFolders
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import java.time.Instant
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 class PlanViewTest {
     /** Plan folder f: M1 holds T2 and T3, M4 holds T5. */
@@ -73,8 +80,56 @@ class PlanViewTest {
             Milestone("M4", "d", tasks = listOf(PlanTask("T5", "e", status = PlanStatus.DONE))),
         )
         val all = { f: Folding -> milestones.map(f::open) + milestones.flatMap { it.tasks }.map(f::open) }
-        assertEquals(List(5) { true }, all(Folding.all(true, milestones)))
-        assertEquals(List(5) { false }, all(Folding.all(false, milestones)))
+        val plan = Plan(milestones = milestones)
+        assertEquals(List(5) { true }, all(Folding.all(true, plan)))
+        assertEquals(List(5) { false }, all(Folding.all(false, plan)))
+    }
+
+    @Test
+    fun `the view carries the folder's plan`() {
+        assertSame(structure.find("f")!!.plan, planViewOf(structure, "f", emptyList(), null)!!.plan)
+    }
+
+    @Test
+    fun `requirements start open, review open while a blocker is unresolved, other sections folded when they hold anything`() {
+        val today = LocalDate.of(2026, 11, 18)
+        val filled = structure.setConstraints("f", "No new deps").addDecision("f", "Use Gson", today).addBlocker("f", "Race", today)
+        val plan = filled.find("f")!!.plan!!
+        val folding = Folding()
+        assertEquals(true, folding.open(Section.REQUIREMENTS, plan))
+        assertEquals(true, folding.open(Section.REVIEW, plan))
+        assertEquals(false, folding.open(Section.CONSTRAINTS, plan))
+        assertEquals(false, folding.open(Section.DECISIONS, plan))
+        assertEquals(false, folding.open(Section.IDEAL, plan.copy(description = "Ideal")))
+        assertEquals(true, folding.open(Section.IDEAL, plan))
+        val resolved = filled.editBlocker("f", "B1") { it.copy(resolved = true) }.find("f")!!.plan!!
+        assertEquals(false, folding.open(Section.REVIEW, resolved))
+        assertEquals(true, folding.toggle("constraints").open(Section.CONSTRAINTS, plan))
+        val empty = structure.find("f")!!.plan!!
+        assertEquals(listOf(true, true, true, false), listOf(Section.CONSTRAINTS, Section.DECISIONS, Section.REQUIREMENTS, Section.REVIEW).map { folding.open(it, empty) })
+    }
+
+    @Test
+    fun `fold all opens or folds every section too`() {
+        val today = LocalDate.of(2026, 11, 18)
+        val plan = structure.setConstraints("f", "c").addBlocker("f", "b", today).find("f")!!.plan!!.copy(description = "d")
+        assertEquals(List(5) { true }, Section.entries.map { Folding.all(true, plan).open(it, plan) })
+        assertEquals(List(5) { false }, Section.entries.map { Folding.all(false, plan).open(it, plan) })
+    }
+
+    @Test
+    fun `the header counts proven requirements and names the review`() {
+        val proven = Requirement("R1", "r", EvalKind.CODE, evidence = listOf("commit abcdef1"))
+        val requirements = List(4) { proven.copy(id = "R${it + 1}") } +
+            proven.copy(id = "R5", evidence = emptyList()) + proven.copy(id = "R6", evidence = listOf("not done: later"))
+        assertEquals("R 4/6", requirementsSummary(requirements))
+        assertNull(requirementsSummary(emptyList()))
+        assertEquals("review: not done", reviewSummary(null))
+        assertEquals("review: not done", reviewSummary(Review(ReviewStatus.NOT_DONE, null, "2026-11-18")))
+        assertEquals("review: in progress", reviewSummary(Review(ReviewStatus.IN_PROGRESS, null, "2026-11-18")))
+        val blockers = listOf(Blocker("B1", "a"), Blocker("B2", "b"), Blocker("B3", "c", resolved = true))
+        assertEquals("review: 2 blockers", reviewSummary(Review(ReviewStatus.DONE, "abcdef1", "2026-11-18", blockers)))
+        assertEquals("review: done", reviewSummary(Review(ReviewStatus.DONE, "abcdef1", "2026-11-18", blockers.map { it.copy(resolved = true) })))
     }
 
     @Test
