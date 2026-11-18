@@ -107,6 +107,26 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
         }
     }
 
+    /**
+     * Lets [file]'s process run on without a pane, whatever [MyAirSettings.keepDetached] says, so the pane showing it may
+     * close next without ending it ([release] ignores a pane that is not the owner); nothing when it has no process.
+     */
+    fun detach(file: ClaudeSessionVirtualFile) {
+        ThreadingAssertions.assertEventDispatchThread()
+        val runtime = runtimes[file] ?: return
+        runtime.owner = null
+        runtime.detachedAt = Instant.now()
+        thisLogger().info("claude for session ${file.sessionId} (pid ${file.pid}) detached by a manager replacement")
+        // Other IDEs open a detached session here.
+        TabsSync.getInstance().publish()
+    }
+
+    /** [file]'s process is still starting: no view of it exists yet. */
+    fun starting(file: ClaudeSessionVirtualFile): Boolean {
+        ThreadingAssertions.assertEventDispatchThread()
+        return checkNotNull(runtimes[file]) { "no process of session ${file.sessionId}" }.session == null
+    }
+
     /** Ends [file]'s process now; nothing when it has none. */
     fun close(file: ClaudeSessionVirtualFile) {
         val runtime = runtimes.remove(file) ?: return

@@ -44,6 +44,7 @@ class PlanEditor(private val project: Project, private val file: PlanVirtualFile
     private val active = ActiveSession.getInstance(project)
     private val root = JPanel(BorderLayout())
     private var panel: PlanPanel? = null
+    private val splitter = OnePixelSplitter(false, "dev.myair.planView.split", 0.55f)
     private var manager: ClaudeSessionVirtualFile? = null
     override var pane: SessionPane? = null
         private set
@@ -70,16 +71,30 @@ class PlanEditor(private val project: Project, private val file: PlanVirtualFile
         title = view.folder.name
         panel?.let { return it.show(view) }
         val panel = PlanPanel(project, file.folderId, this).also { panel = it }
+        show(splitter.apply {
+            firstComponent = JBScrollPane(panel, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER)
+        })
+        bindManager()
+    }
+
+    /**
+     * Shows the plan's manager stored now, after [PlanFiles.adopt] replaced it: the pane of the previous one closes, its
+     * process already detached. Nothing before the plan first showed, which binds the new one then, or once it is gone.
+     */
+    fun showManager() {
+        if (gone || pane == null) return
+        pane?.let(Disposer::dispose)
+        bindManager()
+    }
+
+    private fun bindManager() {
         // Files a new manager in the plan folder, which notifies the service's listeners, this editor among them, now.
-        val manager = PlanFiles.getInstance().startManager(view.folder, service.folders, project).also { manager = it }
+        val manager = PlanFiles.getInstance().startManager(checkNotNull(service.folders.find(file.folderId)), service.folders, project).also { manager = it }
         // Checked whenever a process is about to start, not only for a restored tab; a detached one here is bound as it is.
         val pane = SessionPane(project, manager, checkFirst = !SessionTerminals.getInstance().runs(manager)).also { pane = it }
         Disposer.register(this, pane)
-        show(OnePixelSplitter(false, "dev.myair.planView.split", 0.55f).apply {
-            firstComponent = JBScrollPane(panel, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER)
-            secondComponent = pane.component
-        })
-        panel.show(checkNotNull(planViewOf(service.folders, file.folderId, service.sessions, manager.sessionId)))
+        splitter.secondComponent = pane.component
+        checkNotNull(panel).show(checkNotNull(planViewOf(service.folders, file.folderId, service.sessions, manager.sessionId)))
         active.tabFileChanged()
     }
 

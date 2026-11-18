@@ -38,7 +38,7 @@ class SessionSystemPromptTest {
     @Test
     fun `both prompts name every folder tool`() {
         val tools = FoldersMcpToolset::class.java.declaredMethods.filter { it.isAnnotationPresent(McpTool::class.java) }.map { it.name }.toSet()
-        assertEquals(setOf("my_air_sessions_find", "my_air_session_start", "my_air_folders_get", "my_air_folders_apply", "my_air_plan_get", "my_air_plan_apply", "my_air_history_list", "my_air_history_restore"), tools)
+        assertEquals(setOf("my_air_sessions_find", "my_air_session_start", "my_air_folders_get", "my_air_folders_apply", "my_air_plan_get", "my_air_plan_apply", "my_air_plan_set_manager", "my_air_history_list", "my_air_history_restore"), tools)
         settings.forEach { (briefs, filing) -> tools.forEach { assertTrue(it in appendedSystemPrompt(briefs, filing), it) } }
     }
 

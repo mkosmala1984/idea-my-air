@@ -1,6 +1,11 @@
 package dev.myair.planview
 
+import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
 import dev.myair.store.PlanManager
+import dev.myair.store.PlanManagers
+import java.time.Instant
+import org.junit.jupiter.api.Assertions.assertNull
 import java.nio.file.Path
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -26,4 +31,28 @@ class PlanFilesTest {
         assertEquals("3f2a9c1e-0000-4000-8000-000000000001", parsePlanTabPath("3f2a9c1e-0000-4000-8000-000000000001"))
         for (bad in listOf("", "a/b", "a?b", "a&b")) assertThrows<IllegalArgumentException>(bad) { parsePlanTabPath(bad) }
     }
+
+    private val managers = PlanManagers().set("p", PlanManager("old", cwd, cwd)).set("q", PlanManager("other", cwd, cwd))
+    private fun live(job: String? = null) = LiveSession(7, "cli", SessionStatus.IDLE, null, Instant.EPOCH, cwd, Instant.EPOCH, job)
+    private fun refusal(session: String = "s", known: Boolean = true, live: LiveSession? = null, runsHere: Boolean = false, starting: Boolean = false) =
+        managerRefusal(managers, "p", session, known, live, runsHere, starting) { "plans/$it" }
+
+    @Test fun `a known session not running anywhere may manage a plan`() = assertNull(refusal())
+
+    @Test fun `a session running in this IDE and started may manage a plan`() = assertNull(refusal(live = live(), runsHere = true))
+
+    @Test fun `the plan's own manager is refused`() = assertEquals("session old manages this plan already", refusal("old"))
+
+    @Test fun `the manager of another plan is refused, naming that plan`() = assertEquals("session other manages the plan 'plans/q'", refusal("other"))
+
+    @Test fun `an unknown session is refused`() = assertEquals("no session s", refusal(known = false))
+
+    @Test fun `a background job is refused even when a view of it runs here`() =
+        assertEquals("session s is run by the background job j", refusal(live = live("j"), runsHere = true))
+
+    @Test fun `a session running outside this IDE is refused`() =
+        assertEquals("session s runs outside this IDE (pid 7); it must end there first", refusal(live = live()))
+
+    @Test fun `a process here still starting is refused`() =
+        assertEquals("session s is still starting; call again in a few seconds", refusal(live = live(), runsHere = true, starting = true))
 }
