@@ -338,6 +338,14 @@ class SessionFoldersTest {
     }
 
     @Test
+    fun `an entry edit naming an id of another kind throws`() {
+        val full = plans.addRequirement("p", "a", EvalKind.CODE).addDecision("p", "d", today)
+        assertThrows<IllegalArgumentException> { full.editBlocker("p", "R1") { it.copy(resolved = true) } }
+        assertThrows<IllegalArgumentException> { full.editRequirement("p", "D1") { it.copy(text = "x") } }
+        assertThrows<IllegalArgumentException> { full.editDecision("p", "R1") { it.copy(text = "x") } }
+    }
+
+    @Test
     fun `a blocker on a plan with no review starts one not done`() {
         val blocked = plans.addBlocker("p", "b", today)
         assertEquals(Review(ReviewStatus.NOT_DONE, null, "2026-11-18", listOf(Blocker("B1", "b"))), blocked.plan("p").review)
