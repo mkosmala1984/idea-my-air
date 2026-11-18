@@ -3,6 +3,7 @@ package dev.myair.editor
 import com.intellij.mcpserver.annotations.McpTool
 import dev.myair.claude.Brief
 import dev.myair.claude.ClaudeSession
+import dev.myair.folders.EvalKind
 import dev.myair.folders.Plan
 import dev.myair.folders.SessionFolders
 import dev.myair.mcp.FoldersMcpToolset
@@ -88,10 +89,36 @@ class SessionSystemPromptTest {
         val folder = structure.find("a")!!
         val task = structure.findTask("T2")!!.second
         val prompt = planPrompt(structure, folder, task, briefs = true)
-        listOf("rtm/a", "Plan **a**", "Task T2: Fields", "Map \"every\" <field>\n\n- dates", "Milestone M1: Export", "plan_task").forEach { assertTrue(it in prompt, it) }
+        listOf("rtm/a", "## Ideal state", "Plan **a**", "Task T2: Fields", "Map \"every\" <field>\n\n- dates", "Milestone M1: Export", "plan_task").forEach { assertTrue(it in prompt, it) }
         assertFalse("pending" in prompt)
         assertFalse("plan_task" in planPrompt(structure, folder, task, briefs = false))
         assertFalse("Task" in planPrompt(structure, structure.find("b")!!, null, briefs = true))
+    }
+
+    private val sectioned = structure
+        .setConstraints("a", "No new dependencies")
+        .addRequirement("a", "Fields map", EvalKind.CODE, listOf("T2"))
+        .addRequirement("a", "Checks run", EvalKind.ASSERT, listOf("T3"))
+
+    @Test
+    fun `a task session gets the ideal state, constraints and only the requirements of its task`() {
+        val prompt = planPrompt(sectioned, sectioned.find("a")!!, sectioned.findTask("T2")!!.second, briefs = true)
+        listOf("## Ideal state", "## Constraints", "No new dependencies", "- **R1** (code) Fields map").forEach { assertTrue(it in prompt, it) }
+        assertFalse("R2" in prompt)
+    }
+
+    @Test
+    fun `a manager gets every requirement and the rules for decisions, evidence and review`() {
+        val prompt = planPrompt(sectioned, sectioned.find("a")!!, null, briefs = true, manager = true)
+        listOf("- **R1** (code) Fields map", "- **R2** (assert) Checks run", "add_decision", "add_evidence", "set_review", "add_blocker").forEach { assertTrue(it in prompt, it) }
+    }
+
+    @Test
+    fun `a plan without sections has no empty headings`() {
+        val prompt = planPrompt(structure, structure.find("a")!!, null, briefs = true)
+        assertFalse("## Constraints" in prompt)
+        assertFalse("## Requirements" in prompt)
+        assertFalse("## Requirements" in planPrompt(sectioned, sectioned.find("a")!!, null, briefs = true))
     }
 
     @Test

@@ -67,7 +67,13 @@ fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, brief
         append("# My Air plan: ${folder.name}\n\n")
         append("This session works in the plan \"${folder.name}\" (folder path \"$path\", the plan argument of my_air_plan_apply). ")
         append("Below are its descriptions as they were when this was written; read current statuses and next steps with my_air_plan_get.\n")
-        plan.description?.let { append("\n$it\n") }
+        plan.description?.let { append("\n## Ideal state\n\n$it\n") }
+        plan.constraints?.let { append("\n## Constraints\n\n$it\n") }
+        val requirements = plan.requirements.filter { manager || (task != null && task.id in it.tasks) }
+        if (requirements.isNotEmpty()) {
+            append("\n## Requirements\n\n")
+            requirements.forEach { append("- **${it.id}** (${it.eval.label}) ${it.text}\n") }
+        }
         if (task != null) {
             val milestone = plan.milestones.first { task in it.tasks }
             append("\n## Task ${task.id}: ${task.title}\n\n")
@@ -81,6 +87,10 @@ fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, brief
             append("This session manages this plan: the user sees the plan beside this session, in the same tab, and asks it to ")
             append("reorganise the plan. Change the plan with my_air_plan_apply; the view shows each change as it lands. ")
             append("Add and edit milestones and tasks freely, but delete or move them only after the user agreed.\n")
+            append("Record a decision with add_decision whenever the ideal state, constraints or requirements change. ")
+            append("Add evidence to a requirement with add_evidence as tasks close, as a test, a commit, a check or a not done reason. ")
+            append("After a code review set it with set_review and its blockers with add_blocker. ")
+            append("Delete requirements, decisions or blockers only after the user agreed.\n")
         }
     }
 }
