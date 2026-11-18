@@ -20,23 +20,29 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.NEW_SESSION_ICON
 import dev.myair.editor.projectBase
+import dev.myair.planview.startAsPlan
 import dev.myair.prompt.showPromptPopup
 import dev.myair.store.Preset
 import dev.myair.store.PresetStore
 import dev.myair.store.continuationPrompt
 import dev.myair.store.presetOf
 import java.nio.file.Path
+import java.util.UUID
 
 /**
  * Starts a session as [preset] says, with [prompt] as its first message, in a worktree on a new [branch] when given;
- * a missing directory is reported instead.
+ * a missing directory is reported instead. With [planName] the session starts as the manager of a new plan of that name,
+ * in a plan tab ([startAsPlan]), rather than in a session tab.
  */
-fun startPreset(project: Project, preset: Preset, where: RelativePoint, prompt: String? = null, branch: String? = null) {
+fun startPreset(project: Project, preset: Preset, where: RelativePoint, prompt: String? = null, branch: String? = null, planName: String? = null) {
     require(branch == null || preset.worktree) { "new branch $branch without a worktree" }
     val dir = preset.dir(projectBase(project))
     if (!allExist(project, preset, dir)) return
-    if (preset.worktree) startInWorktree(project, dir, preset.base, preset.claudeArgs(prompt), where, branch = branch)
-    else ClaudeSessionOpener.startNew(project, dir, args = preset.claudeArgs(prompt))
+    val open: (Path, String, List<String>) -> Unit =
+        if (planName == null) { cwd, id, args -> ClaudeSessionOpener.startNew(project, dir, cwd, id, args) }
+        else { cwd, id, args -> startAsPlan(project, planName, dir, cwd, id, args) }
+    if (preset.worktree) startInWorktree(project, dir, preset.base, preset.claudeArgs(prompt), where, branch = branch, open = open)
+    else open(dir, UUID.randomUUID().toString(), preset.claudeArgs(prompt))
 }
 
 /**

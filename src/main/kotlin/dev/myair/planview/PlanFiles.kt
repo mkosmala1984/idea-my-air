@@ -113,8 +113,11 @@ class PlanFiles {
     val store = PlanManagerStore(Homes.myAir.resolve("plan-managers.json"))
     private val files = ConcurrentHashMap<String, PlanVirtualFile>()
     private val managers = ConcurrentHashMap<String, ClaudeSessionVirtualFile>()
-    /** A message for a plan's manager, by folder id, sent as the first prompt when [startManager] next builds its file. */
-    private val firstMessages = ConcurrentHashMap<String, String>()
+    /**
+     * Arguments for a plan's manager, by folder id, added after `--session-id`/`--resume` when [startManager] next builds
+     * its file: the first prompt after `--`, and for a new session the flags it starts with.
+     */
+    private val pendingArgs = ConcurrentHashMap<String, List<String>>()
 
     fun file(folderId: String): PlanVirtualFile = files.computeIfAbsent(folderId, ::PlanVirtualFile)
 
@@ -136,7 +139,7 @@ class PlanFiles {
         lateinit var args: List<String>
         val manager = store.update { stored ->
             val (manager, start) = managerStart(stored.byFolder[folder.id], newId, cwd, cwd) { hasTranscript(it, Homes.claude) }
-            args = start + firstMessages.remove(folder.id).let { if (it == null) emptyList() else listOf("--", it) }
+            args = start + pendingArgs.remove(folder.id).orEmpty()
             stored.prune(structure.all().map { it.id }.toSet()).set(folder.id, manager)
         }.byFolder.getValue(folder.id)
         if (manager.session == newId) ClaudeSessionsService.getInstance().updateFolders(ChangeSource.AUTO) { it.assign(newId, folder.id) }
@@ -148,11 +151,11 @@ class PlanFiles {
     /**
      * Makes [manager]'s session, which manages no plan yet, the manager of the plan of [folderId], replacing the one it had,
      * whose id it returns. [running] is the file of its process in this IDE, kept as the manager's file so the plan tab binds
-     * that process rather than starting another; without one, [message] goes to the session as the first prompt of the
-     * process the plan tab starts. The previous manager's process runs on detached, whatever the settings say: it may be the
+     * that process rather than starting another; without one, the process the plan tab starts gets [firstArgs] (a first prompt
+     * after `--`, flags before it). The previous manager's process runs on detached, whatever the settings say: it may be the
      * caller of the replacement, waiting for its answer. Open plan tabs show the new manager after [PlanEditor.showManager].
      */
-    fun adopt(folderId: String, manager: PlanManager, running: ClaudeSessionVirtualFile?, message: String): String? {
+    fun adopt(folderId: String, manager: PlanManager, running: ClaudeSessionVirtualFile?, firstArgs: List<String>): String? {
         ThreadingAssertions.assertEventDispatchThread()
         var previous: String? = null
         store.update { stored ->
@@ -161,10 +164,10 @@ class PlanFiles {
             stored.set(folderId, manager)
         }
         managers.remove(folderId)?.let(SessionTerminals.getInstance()::detach)
-        if (running == null) firstMessages[folderId] = message
+        if (running == null) pendingArgs[folderId] = firstArgs
         else {
             check(running.sessionId == manager.session && SessionTerminals.getInstance().runs(running)) { "no process of session ${manager.session} in ${running.sessionId}'s file" }
-            firstMessages.remove(folderId)
+            pendingArgs.remove(folderId)
             managers[folderId] = running
         }
         return previous

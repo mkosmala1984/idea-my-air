@@ -252,7 +252,7 @@ class FoldersMcpToolset : McpToolset {
             service.updateFolders(ChangeSource.MCP) { it.assign(session, folder.id) }
             val filed = service.folders
             val message = planPrompt(filed, checkNotNull(filed.find(folder.id)), null, MyAirSettings.getInstance().briefs, manager = true)
-            val previous = files.adopt(folder.id, manager, running, message)
+            val previous = files.adopt(folder.id, manager, running, listOf("--", message))
             PlanOpener.editors(folder.id).forEach(PlanEditor::showManager)
             val editor = PlanOpener.openHere(project, folder.id)
             if (running != null) check(editor.pane?.send(message) == true) { "the plan tab of '$plan' shows no process of session $session" }

@@ -49,11 +49,13 @@ fun popupPoint(e: AnActionEvent): RelativePoint {
  * gives a new branch `worktree-<base>-<date>-<id4>` off it), in the worktrees directory of [MyAirSettings],
  * with the `.worktreeinclude` files of the main checkout copied in. A [branch] given is made off the base instead
  * ([Git.addBranchWorktree]) in `<worktrees dir>/<branch>`; with [askBranch] a popup offers that after the base, its name
- * typed or suggested in [showNewBranchPopup]. The session belongs to [dir], and to [plan] if given.
+ * typed or suggested in [showNewBranchPopup]. The session belongs to [dir], and to [plan] if given. [open] starts it once
+ * the worktree is made, by default in a session tab.
  */
 fun startInWorktree(
     project: Project, dir: Path, base: String?, args: List<String>, where: RelativePoint, plan: PlanStart? = null,
     branch: String? = null, askBranch: Boolean = false, folderId: String? = plan?.folderId,
+    open: (cwd: Path, id: String, args: List<String>) -> Unit = { cwd, id, args -> ClaudeSessionOpener.startNew(project, dir, cwd, id, args, plan, folderId) },
 ) = background(project, "Reading branches", { Git.repo(dir) }) { repo ->
     require(branch == null || !askBranch) { "a branch named and asked for" }
     fun create(base: String, branch: String?, prompt: String? = null) {
@@ -63,7 +65,7 @@ fun startInWorktree(
         val claudeArgs = if (prompt == null) args else args + listOf("--", prompt)
         background(project, "Creating worktree", { createWorktree(repo, base, branch, id, running) }) { path ->
             rememberBase(repo, base)
-            ClaudeSessionOpener.startNew(project, dir, path, id, claudeArgs, plan, folderId)
+            open(path, id, claudeArgs)
         }
     }
     fun picked(base: String) =
