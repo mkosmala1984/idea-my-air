@@ -161,4 +161,20 @@ class PlanTest {
             """{"version":2,"nextId":1,"folders":[]}""",
         ).forEach { text -> assertThrows<Exception>(text) { SessionFolders.parse(text) } }
     }
+
+    @Test
+    fun `a requirement is unproven without evidence, not done with any not done item, else proven`() {
+        assertEquals(RequirementStatus.UNPROVEN, Requirement("R1", "x", EvalKind.CODE).status)
+        assertEquals(RequirementStatus.PROVEN, Requirement("R1", "x", EvalKind.CODE, evidence = listOf("commit abc1234")).status)
+        assertEquals(RequirementStatus.NOT_DONE, Requirement("R1", "x", EvalKind.CODE, evidence = listOf("commit abc1234", "not done: sandbox walk not run")).status)
+    }
+
+    @Test
+    fun `evidence must be one of the four formats exactly`() {
+        listOf("test PlanFilesTest › a plan without a manager", "commit 4c91271d91", "checked: opened the plan", "not done: no sandbox").forEach(::requireEvidence)
+        listOf("commit ABC1234", "commit abc", "checked:x", "checked: x ", "test PlanFilesTest", "commit abc1234\n", "commit abc1234 ").forEach {
+            val e = assertThrows<IllegalArgumentException>(it) { requireEvidence(it) }
+            assertTrue("not done: <text>" in e.message!!, e.message)
+        }
+    }
 }

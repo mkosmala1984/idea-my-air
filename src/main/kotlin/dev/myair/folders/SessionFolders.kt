@@ -4,9 +4,13 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.JsonSerializationContext
+import com.google.gson.JsonSerializer
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.isAtOrUnder
+import java.lang.reflect.Type
 import java.nio.file.Path
+import java.time.LocalDate
 
 /**
  * A user folder of Folders mode; toString() is the node id TreeState keeps expansion and selection by. A folder bound to
@@ -286,20 +290,78 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         }
     }
 
-    /** Deletes a task, or a milestone whose tasks are all done or canceled. */
+    /** Deletes a task, or a milestone whose tasks are all done or canceled, taking the deleted tasks out of every requirement. */
     fun deletePlanItem(id: String): SessionFolders {
         findTask(id)?.let { (folder, task) ->
-            return editPlan(folder.id) { plan -> plan.copy(milestones = plan.milestones.map { m -> m.copy(tasks = m.tasks - task) }) }
+            return editPlan(folder.id) { it.withoutTasks(setOf(task.id)) }
         }
         val (folder, milestone) = findMilestone(id) ?: return this
         require(milestone.tasks.all { it.status.closed }) { "milestone $id has open tasks ${milestone.tasks.filterNot { it.status.closed }.map { it.id }}" }
-        return editPlan(folder.id) { plan -> plan.copy(milestones = plan.milestones - milestone) }
+        return editPlan(folder.id) { plan -> plan.withoutTasks(milestone.tasks.map { it.id }.toSet()).let { it.copy(milestones = it.milestones.filter { m -> m.id != id }) } }
     }
 
-    /** [snapshot] in place of this structure, keeping the higher [nextId], so ids handed out since it was taken are not handed out again. */
-    fun restore(snapshot: SessionFolders) = snapshot.copy(nextId = maxOf(nextId, snapshot.nextId))
+    fun setConstraints(folderId: String, constraints: String?) = editPlan(folderId) { it.copy(constraints = constraints) }
 
-    fun toJson(): String = GsonBuilder().setPrettyPrinting().create().toJson(linkedMapOf("version" to VERSION, "nextId" to nextId, "folders" to folders, "unfiled" to unfiled))
+    /** Adds decision `D<n>` dated [today], taken in [session] when one is named. */
+    fun addDecision(folderId: String, text: String, today: LocalDate, session: String? = null) = editPlan(folderId) { plan ->
+        plan.allocate('D').let { (id, p) -> p.copy(decisions = p.decisions + Decision(id, today.toString(), text, session)) }
+    }
+
+    /** Adds requirement `R<n>` at [index] (last for null), delivered by [tasks] of the same plan. */
+    fun addRequirement(folderId: String, text: String, eval: EvalKind, tasks: List<String> = emptyList(), index: Int? = null) = editPlan(folderId) { plan ->
+        plan.allocate('R').let { (id, p) -> p.copy(requirements = p.requirements.inserted(Requirement(id, text, eval, tasks), index)) }
+    }
+
+    fun editRequirement(folderId: String, id: String, change: (Requirement) -> Requirement) = editPlan(folderId) { plan ->
+        plan.copy(requirements = plan.requirements.map { if (it.id == id) change(it) else it })
+    }
+
+    fun editDecision(folderId: String, id: String, change: (Decision) -> Decision) = editPlan(folderId) { plan ->
+        plan.copy(decisions = plan.decisions.map { if (it.id == id) change(it) else it })
+    }
+
+    /** Sets the review's status at [commit] as of [today], keeping its blockers. */
+    fun setReview(folderId: String, status: ReviewStatus, commit: String?, today: LocalDate) = editPlan(folderId) { plan ->
+        plan.copy(review = Review(status, commit, today.toString(), plan.review?.blockers.orEmpty()))
+    }
+
+    /** Adds blocker `B<n>` to the review, starting one not done as of [today] when the plan has none. */
+    fun addBlocker(folderId: String, text: String, today: LocalDate) = editPlan(folderId) { plan ->
+        plan.allocate('B').let { (id, p) ->
+            val review = p.review ?: Review(ReviewStatus.NOT_DONE, null, today.toString())
+            p.copy(review = review.copy(blockers = review.blockers + Blocker(id, text)))
+        }
+    }
+
+    fun editBlocker(folderId: String, id: String, change: (Blocker) -> Blocker) = editPlan(folderId) { plan ->
+        plan.copy(review = plan.review?.let { r -> r.copy(blockers = r.blockers.map { if (it.id == id) change(it) else it }) })
+    }
+
+    /** Deletes the requirement, decision or blocker [id]; its number is not handed out again. */
+    fun deleteEntry(folderId: String, id: String) = editPlan(folderId) { plan ->
+        when (id.take(1)) {
+            "R" -> plan.copy(requirements = plan.requirements.filter { it.id != id })
+            "D" -> plan.copy(decisions = plan.decisions.filter { it.id != id })
+            "B" -> plan.copy(review = plan.review?.let { r -> r.copy(blockers = r.blockers.filter { it.id != id }) })
+            else -> throw IllegalArgumentException("'$id' is no requirement, decision or blocker id")
+        }
+    }
+
+    /**
+     * [snapshot] in place of this structure, keeping the higher [nextId] and, per plan and prefix, the higher [Plan.next],
+     * so ids handed out since it was taken are not handed out again.
+     */
+    fun restore(snapshot: SessionFolders) = snapshot.copy(nextId = maxOf(nextId, snapshot.nextId), folders = snapshot.folders.map {
+        it.mapSubtree { f ->
+            val now = find(f.id)?.plan
+            if (f.plan == null || now == null) f
+            else f.copy(plan = f.plan.copy(next = (f.plan.next.keys + now.next.keys).associateWith { k -> maxOf(f.plan.next[k] ?: 1, now.next[k] ?: 1) }))
+        }
+    })
+
+    /** Version 4 unless a plan holds something version 5 brought, so a structure without it stays readable by builds before it. */
+    fun toJson(): String = GsonBuilder().setPrettyPrinting().registerTypeAdapter(Plan::class.java, PlanSerializer).create()
+        .toJson(linkedMapOf("version" to if (all().any { it.plan?.usesVersion5 == true }) VERSION else 4, "nextId" to nextId, "folders" to folders, "unfiled" to unfiled))
 
     private fun editPlan(folderId: String, change: (Plan) -> Plan?): SessionFolders {
         val folder = find(folderId) ?: return this
@@ -316,21 +378,24 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         const val SESSION = "session"
         /**
          * Version 2 added a folder's bound `project`; version 3 made it a list, [Folder.dirs], and added [Folder.plan] and
-         * [nextId]; version 4 added [unfiled] and later an optional [Folder.workdir], written only when set. Older files read as the same structure without what came later.
+         * [nextId]; version 4 added [unfiled] and later an optional [Folder.workdir], written only when set; version 5 added
+         * a plan's constraints, decisions, requirements, review and next, and is written only while a plan holds one of them.
+         * Older files read as the same structure without what came later.
          */
-        private const val VERSION = 4
+        private const val VERSION = 5
         private val FOLDER_FIELDS = mapOf(1 to setOf("id", "name", "folders", "items"), 2 to setOf("id", "name", "folders", "items", "project"), 3 to setOf("id", "name", "folders", "items", "dirs", "plan"), 4 to setOf("id", "name", "folders", "items", "dirs", "plan", "workdir"))
+            .let { it + (5 to it.getValue(4)) }
 
         /** Reads `structure.json`, throwing on anything it does not know rather than skipping it. */
         fun parse(text: String): SessionFolders {
             val root = JsonParser.parseString(text).asJsonObject
             val version = root.field("version").asInt
             require(version in 1..VERSION) { "unsupported structure version $version" }
-            root.only(when (version) { 4 -> setOf("version", "nextId", "folders", "unfiled"); 3 -> setOf("version", "nextId", "folders"); else -> setOf("version", "folders") })
+            root.only(when (version) { 4, 5 -> setOf("version", "nextId", "folders", "unfiled"); 3 -> setOf("version", "nextId", "folders"); else -> setOf("version", "folders") })
             return SessionFolders(
                 root.field("folders").asJsonArray.map { folder(it.asJsonObject, version) },
                 if (version >= 3) root.field("nextId").asInt else 1,
-                if (version == 4) root.field("unfiled").asJsonArray.map { it.asString } else emptyList(),
+                if (version >= 4) root.field("unfiled").asJsonArray.map { it.asString } else emptyList(),
             )
         }
 
@@ -343,17 +408,41 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
                 json.field("items").asJsonArray.map { it.asJsonObject.let { item -> Item(item.field("type").asString, item.field("id").asString) } },
                 // Gson leaves out nulls: version 2 wrote `project` only on bound folders, version 3 `plan` only on plan folders.
                 when (version) {
-                    3, 4 -> json.field("dirs").asJsonArray.map { it.asString }
+                    3, 4, 5 -> json.field("dirs").asJsonArray.map { it.asString }
                     else -> listOfNotNull(json.get("project")?.asString)
                 },
-                json.get("plan")?.asJsonObject?.let(::plan),
+                json.get("plan")?.asJsonObject?.let { plan(it, version) },
                 json.get("workdir")?.asString,
             )
         }
 
-        // Descriptions, like `next`, are written only when set, so a file without any stays readable by builds before them.
-        private fun plan(json: JsonObject) = json.only(setOf("description", "milestones")).let {
-            Plan(json.get("description")?.asString, json.field("milestones").asJsonArray.map { m -> milestone(m.asJsonObject) })
+        // Descriptions, like a task's `next`, are written only when set, so a file without any stays readable by builds before them.
+        private fun plan(json: JsonObject, version: Int): Plan {
+            json.only(if (version == 5) setOf("description", "milestones", "constraints", "decisions", "requirements", "review", "next") else setOf("description", "milestones"))
+            return Plan(
+                json.get("description")?.asString, json.field("milestones").asJsonArray.map { milestone(it.asJsonObject) },
+                json.get("constraints")?.asString, json.get("decisions")?.asJsonArray?.map { decision(it.asJsonObject) }.orEmpty(),
+                json.get("requirements")?.asJsonArray?.map { requirement(it.asJsonObject) }.orEmpty(), json.get("review")?.asJsonObject?.let(::review),
+                json.get("next")?.asJsonObject?.entrySet()?.associate { it.key to it.value.asInt }.orEmpty(),
+            )
+        }
+
+        private fun requirement(json: JsonObject) = json.only(setOf("id", "text", "eval", "tasks", "evidence")).let {
+            Requirement(
+                json.field("id").asString, json.field("text").asString, EvalKind.of(json.field("eval").asString),
+                json.field("tasks").asJsonArray.map { it.asString }, json.field("evidence").asJsonArray.map { it.asString },
+            )
+        }
+
+        private fun decision(json: JsonObject) = json.only(setOf("id", "date", "text", "session")).let {
+            Decision(json.field("id").asString, json.field("date").asString, json.field("text").asString, json.get("session")?.asString)
+        }
+
+        private fun review(json: JsonObject) = json.only(setOf("status", "commit", "date", "blockers")).let {
+            Review(
+                ReviewStatus.of(json.field("status").asString), json.get("commit")?.asString, json.field("date").asString,
+                json.field("blockers").asJsonArray.map { b -> b.asJsonObject.let { o -> o.only(setOf("id", "text", "resolved")); Blocker(o.field("id").asString, o.field("text").asString, o.field("resolved").asBoolean) } },
+            )
         }
 
         private fun milestone(json: JsonObject) = json.only(setOf("id", "title", "done", "tasks", "description")).let {
@@ -372,6 +461,29 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         private fun JsonObject.only(fields: Set<String>) = require(keySet().all { it in fields }) { "unknown fields ${keySet() - fields} in $this" }
     }
 }
+
+/** A plan as Gson writes it, leaving out the lists and map of version 5 while empty, as it leaves out nulls. */
+private object PlanSerializer : JsonSerializer<Plan> {
+    override fun serialize(plan: Plan, type: Type, context: JsonSerializationContext) = JsonObject().apply {
+        plan.description?.let { addProperty("description", it) }
+        add("milestones", context.serialize(plan.milestones))
+        plan.constraints?.let { addProperty("constraints", it) }
+        if (plan.decisions.isNotEmpty()) add("decisions", context.serialize(plan.decisions))
+        if (plan.requirements.isNotEmpty()) add("requirements", context.serialize(plan.requirements))
+        plan.review?.let { add("review", context.serialize(it)) }
+        if (plan.next.isNotEmpty()) add("next", context.serialize(plan.next))
+    }
+}
+
+/** A new id of entry kind [prefix] (`R`, `D`, `B`), with the plan numbering the next one after it. */
+private fun Plan.allocate(prefix: Char): Pair<String, Plan> {
+    val n = next[prefix.toString()] ?: 1
+    return "$prefix$n" to copy(next = next + (prefix.toString() to n + 1))
+}
+
+/** The plan without the [gone] tasks, taken out of their milestones and every requirement at once. */
+private fun Plan.withoutTasks(gone: Set<String>) =
+    copy(milestones = milestones.map { m -> m.copy(tasks = m.tasks.filter { it.id !in gone }) }, requirements = requirements.map { it.copy(tasks = it.tasks - gone) })
 
 private fun Folder.mapSubtree(change: (Folder) -> Folder): Folder = change(copy(folders = folders.map { it.mapSubtree(change) }))
 
