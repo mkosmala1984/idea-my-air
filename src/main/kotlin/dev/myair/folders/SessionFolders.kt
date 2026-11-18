@@ -312,11 +312,11 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         plan.allocate('R').let { (id, p) -> p.copy(requirements = p.requirements.inserted(Requirement(id, text, eval, tasks), index)) }
     }
 
-    fun editRequirement(folderId: String, id: String, change: (Requirement) -> Requirement) = editPlan(folderId) { plan ->
+    fun editRequirement(folderId: String, id: String, change: (Requirement) -> Requirement) = if (!hasEntry(folderId, id)) this else editPlan(folderId) { plan ->
         plan.copy(requirements = plan.requirements.map { if (it.id == id) change(it) else it })
     }
 
-    fun editDecision(folderId: String, id: String, change: (Decision) -> Decision) = editPlan(folderId) { plan ->
+    fun editDecision(folderId: String, id: String, change: (Decision) -> Decision) = if (!hasEntry(folderId, id)) this else editPlan(folderId) { plan ->
         plan.copy(decisions = plan.decisions.map { if (it.id == id) change(it) else it })
     }
 
@@ -333,19 +333,26 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         }
     }
 
-    fun editBlocker(folderId: String, id: String, change: (Blocker) -> Blocker) = editPlan(folderId) { plan ->
-        plan.copy(review = plan.review?.let { r -> r.copy(blockers = r.blockers.map { if (it.id == id) change(it) else it }) })
+    fun editBlocker(folderId: String, id: String, change: (Blocker) -> Blocker) = if (!hasEntry(folderId, id)) this else editPlan(folderId) { plan ->
+        plan.copy(review = plan.review!!.let { r -> r.copy(blockers = r.blockers.map { if (it.id == id) change(it) else it }) })
     }
 
     /** Deletes the requirement, decision or blocker [id]; its number is not handed out again. */
-    fun deleteEntry(folderId: String, id: String) = editPlan(folderId) { plan ->
-        when (id.take(1)) {
-            "R" -> plan.copy(requirements = plan.requirements.filter { it.id != id })
-            "D" -> plan.copy(decisions = plan.decisions.filter { it.id != id })
-            "B" -> plan.copy(review = plan.review?.let { r -> r.copy(blockers = r.blockers.filter { it.id != id }) })
-            else -> throw IllegalArgumentException("'$id' is no requirement, decision or blocker id")
+    fun deleteEntry(folderId: String, id: String): SessionFolders {
+        require(id.take(1) in Plan.ENTRY_PREFIXES) { "'$id' is no requirement, decision or blocker id" }
+        if (!hasEntry(folderId, id)) return this
+        return editPlan(folderId) { plan ->
+            plan.copy(
+                requirements = plan.requirements.filter { it.id != id }, decisions = plan.decisions.filter { it.id != id },
+                review = plan.review?.let { r -> r.copy(blockers = r.blockers.filter { it.id != id }) },
+            )
         }
     }
+
+    /** Whether the plan of [folderId] holds the requirement, decision or blocker [id]. */
+    private fun hasEntry(folderId: String, id: String) = find(folderId)?.plan?.let { p ->
+        p.requirements.any { it.id == id } || p.decisions.any { it.id == id } || p.review?.blockers.orEmpty().any { it.id == id }
+    } == true
 
     /**
      * [snapshot] in place of this structure, keeping the higher [nextId] and, per plan and prefix, the higher [Plan.next],

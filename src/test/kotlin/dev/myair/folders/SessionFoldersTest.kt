@@ -325,6 +325,19 @@ class SessionFoldersTest {
     }
 
     @Test
+    fun `entry edits on a gone folder or entry change nothing`() {
+        val full = plans.addRequirement("p", "a", EvalKind.CODE).addDecision("p", "d", today).addBlocker("p", "b", today)
+        listOf("R9", "D9", "B9").forEach { assertSame(full, full.deleteEntry("p", it), it) }
+        assertSame(full, full.editRequirement("p", "R9") { it.copy(text = "x") })
+        assertSame(full, full.editDecision("p", "D9") { it.copy(text = "x") })
+        assertSame(full, full.editBlocker("p", "B9") { it.copy(resolved = true) })
+        assertSame(full, full.editBlocker("q", "B1") { it.copy(resolved = true) })
+        assertSame(full, full.addRequirement("gone", "a", EvalKind.CODE))
+        assertSame(full, full.deleteEntry("gone", "R1"))
+        assertThrows<IllegalArgumentException> { full.deleteEntry("p", "T2") }
+    }
+
+    @Test
     fun `a blocker on a plan with no review starts one not done`() {
         val blocked = plans.addBlocker("p", "b", today)
         assertEquals(Review(ReviewStatus.NOT_DONE, null, "2026-11-18", listOf(Blocker("B1", "b"))), blocked.plan("p").review)

@@ -122,7 +122,7 @@ data class Plan(
     val usesVersion5 get() = constraints != null || decisions.isNotEmpty() || requirements.isNotEmpty() || review != null || next.isNotEmpty()
 
     companion object {
-        private val ENTRY_PREFIXES = setOf("R", "D", "B")
+        val ENTRY_PREFIXES = setOf("R", "D", "B")
     }
 }
 
