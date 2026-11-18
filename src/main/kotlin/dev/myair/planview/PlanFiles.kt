@@ -24,6 +24,8 @@ import dev.myair.service.NEW_SESSION_TITLE
 import dev.myair.store.Homes
 import dev.myair.store.PlanManager
 import dev.myair.store.PlanManagerStore
+import dev.myair.store.PlanManagers
+import dev.myair.claude.LiveSession
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -83,6 +85,25 @@ fun managerStart(existing: PlanManager?, newId: String, cwd: Path, project: Path
 }
 
 /**
+ * Why session [sessionId] cannot become the manager of the plan of folder [folderId], null when it can: it manages a plan
+ * already, it is unknown ([known]: scanned, or its process runs here), a background job runs it ([live]), it runs outside
+ * this IDE ([live] with no process here), or its process here is still [starting], so a message cannot reach it yet.
+ */
+fun managerRefusal(
+    managers: PlanManagers, folderId: String, sessionId: String, known: Boolean, live: LiveSession?, runsHere: Boolean, starting: Boolean,
+    pathOf: (String) -> String,
+): String? {
+    managers.folderOf(sessionId)?.let { return if (it == folderId) "session $sessionId manages this plan already" else "session $sessionId manages the plan '${pathOf(it)}'" }
+    return when {
+        !known -> "no session $sessionId"
+        live?.job != null -> "session $sessionId is run by the background job ${live.job}"
+        live != null && !runsHere -> "session $sessionId runs outside this IDE (pid ${live.pid}); it must end there first"
+        starting -> "session $sessionId is still starting; call again in a few seconds"
+        else -> null
+    }
+}
+
+/**
  * The tab file of each plan folder and the file of its manager session, one of each per folder per IDE. The manager's
  * file is never opened as a tab: the plan tab shows its terminal, and `SessionTerminals` keys processes by file identity,
  * so a reopened plan tab finds the same file and binds a detached process again.
@@ -125,21 +146,28 @@ class PlanFiles {
     }
 
     /**
-     * Makes [manager]'s session, which manages no plan yet, the manager of the plan of [folderId]. [running] is the file of
-     * its process in this IDE, kept as the manager's file so the plan tab binds that process rather than starting another;
-     * without one, [message] goes to the session as the first prompt of the process the plan tab starts.
+     * Makes [manager]'s session, which manages no plan yet, the manager of the plan of [folderId], replacing the one it had,
+     * whose id it returns. [running] is the file of its process in this IDE, kept as the manager's file so the plan tab binds
+     * that process rather than starting another; without one, [message] goes to the session as the first prompt of the
+     * process the plan tab starts. The previous manager's process runs on detached, whatever the settings say: it may be the
+     * caller of the replacement, waiting for its answer. Open plan tabs show the new manager after [PlanEditor.showManager].
      */
-    fun adopt(folderId: String, manager: PlanManager, running: ClaudeSessionVirtualFile?, message: String) {
+    fun adopt(folderId: String, manager: PlanManager, running: ClaudeSessionVirtualFile?, message: String): String? {
         ThreadingAssertions.assertEventDispatchThread()
+        var previous: String? = null
         store.update { stored ->
             check(stored.folderOf(manager.session) == null) { "session ${manager.session} manages plan ${stored.folderOf(manager.session)} already" }
+            previous = stored.byFolder[folderId]?.session
             stored.set(folderId, manager)
         }
+        managers.remove(folderId)?.let(SessionTerminals.getInstance()::detach)
         if (running == null) firstMessages[folderId] = message
         else {
             check(running.sessionId == manager.session && SessionTerminals.getInstance().runs(running)) { "no process of session ${manager.session} in ${running.sessionId}'s file" }
+            firstMessages.remove(folderId)
             managers[folderId] = running
         }
+        return previous
     }
 
     /** The plan whose manager [file] is; null for a session tab's file. */

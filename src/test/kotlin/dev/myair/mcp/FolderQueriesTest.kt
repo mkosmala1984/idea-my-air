@@ -1,6 +1,8 @@
 package dev.myair.mcp
 
 import com.google.gson.JsonParser
+import dev.myair.store.PlanManager
+import dev.myair.store.PlanManagers
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.Brief
 import dev.myair.claude.LiveSession
@@ -147,8 +149,11 @@ class FolderQueriesTest {
         fun briefed(id: String, task: String?) = session(id, id, "/elsewhere", now.minusHours(id.length.toLong())).copy(brief = Brief("g", emptyList(), task))
         val live = mapOf("a" to LiveSession(1, "cli", SessionStatus.WORKING, null, java.time.Instant.EPOCH, Path.of("/p"), java.time.Instant.EPOCH))
         val sessionList = listOf(briefed("a", "T2"), briefed("bb", "T2"), briefed("c", null))
-        val json = JsonParser.parseString(planned.planJson(planned.find("p")!!, sessionList, live, zone)).asJsonObject
-        assertEquals(json, JsonParser.parseString(planned.plansJson(listOf(planned.find("p")!!), sessionList, live, zone)).asJsonArray.single())
+        val managers = PlanManagers().set("p", PlanManager("m", Path.of("/plan"), Path.of("/plan")))
+        val json = JsonParser.parseString(planned.planJson(planned.find("p")!!, sessionList, live, managers, zone)).asJsonObject
+        assertEquals(json, JsonParser.parseString(planned.plansJson(listOf(planned.find("p")!!), sessionList, live, managers, zone)).asJsonArray.single())
+        assertEquals("m", json["manager"].asString)
+        assertEquals(true, JsonParser.parseString(planned.planJson(planned.find("p")!!, sessionList, live, PlanManagers(), zone)).asJsonObject["manager"].isJsonNull)
         assertEquals("plan", json["folder"].asString)
         assertEquals("ship", json["description"].asString)
         val milestone = json.getAsJsonArray("milestones")[0].asJsonObject

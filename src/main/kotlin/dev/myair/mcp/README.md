@@ -13,6 +13,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - `my_air_folders_apply(changes)`
   - `my_air_plan_get(dir)`
   - `my_air_plan_apply(plan, changes)`
+  - `my_air_plan_set_manager(plan, session)`
   - `my_air_history_list()`
   - `my_air_history_restore(name)`
 - `BriefMcpToolset.kt`, `class BriefMcpToolset : McpToolset`:
@@ -31,6 +32,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - `SessionPage.toJson`
   - `SessionFolders.treeJson`
   - `StructureHistory.toJson`
+  - `managerSetJson`
   - `SessionFolders.planJson`
   - `SessionFolders.plansJson`
 
@@ -55,7 +57,8 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - drops the preset's base when `worktree=false`.
 - `my_air_session_start` refuses a `branch` without a worktree and a `folder` with no working or bound directory at or above it.
 - `requireTask` lists the open tasks when an id is unknown.
-- `planJson` and `plansJson` require a plan folder (`checkNotNull(folder.plan)`). Tasks are listed with their sessions, newest first.
+- `planJson` and `plansJson` require a plan folder (`checkNotNull(folder.plan)`). Tasks are listed with their sessions, newest first. `manager` is the plan's entry in `plan-managers.json`, null without one.
+- `my_air_plan_set_manager` refuses, before changing anything, what `managerRefusal` (`planview/PlanFiles.kt`) names: a session managing a plan already, unknown (neither scanned nor running here), run by a background job, running outside this IDE, or still starting here.
 
 ## Side Effects
 
@@ -65,6 +68,9 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - reads `~/.my-air/presets.json` (`PresetStore.INSTANCE`) when a `preset` is named;
   - for a worktree, runs `git` on `Dispatchers.IO` (`Git.repo`, `createWorktree`), which creates a worktree and possibly a branch, then records the base (`rememberBase`);
   - opens a new session tab in the calling project (`ClaudeSessionOpener.startNew`), and so starts a `claude` process.
+- `my_air_plan_set_manager`:
+  - files the session in the plan folder (`updateFolders(ChangeSource.MCP)`) and stores it in `~/.my-air/plan-managers.json` (`PlanFiles.adopt`), which the folder history does not cover;
+  - detaches the previous manager's process (`SessionTerminals.detach`), rebinds every open plan tab of the plan in this IDE (`PlanEditor.showManager`), opens the plan tab in the calling project, sends a running session `planPrompt(manager = true)` and closes its own tab.
 - The read tools have no side effects: `my_air_sessions_find`, `my_air_folders_get`, `my_air_plan_get` and `my_air_history_list`. `my_air_history_list` parses each snapshot file.
 
 ## Verification

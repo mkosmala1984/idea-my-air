@@ -7,6 +7,8 @@ import dev.myair.folders.Folder
 import dev.myair.folders.progress
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.StructureHistory
+import dev.myair.store.PlanManager
+import dev.myair.store.PlanManagers
 import java.nio.file.Path
 import java.time.ZoneId
 
@@ -67,23 +69,34 @@ fun StructureHistory.toJson(): String = gson.toJson(
 )
 
 /**
- * The plan of [folder]: its path, directories, description, and milestones with their tasks, each task with the sessions whose
- * brief names it, newest first, and their live status (null without a process).
+ * The plan of [folder]: its path, directories, manager session (null without one, from [managers]), description, and
+ * milestones with their tasks, each task with the sessions whose brief names it, newest first, and their live status (null
+ * without a process).
  */
-fun SessionFolders.planJson(folder: Folder, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, zone: ZoneId): String =
-    gson.toJson(planMap(folder, sessions, live, zone))
+fun SessionFolders.planJson(folder: Folder, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, managers: PlanManagers, zone: ZoneId): String =
+    gson.toJson(planMap(folder, sessions, live, managers, zone))
 
 /** The plans of [folders] as a JSON array, each as [planJson] gives it. */
-fun SessionFolders.plansJson(folders: List<Folder>, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, zone: ZoneId): String =
-    gson.toJson(folders.map { planMap(it, sessions, live, zone) })
+fun SessionFolders.plansJson(folders: List<Folder>, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, managers: PlanManagers, zone: ZoneId): String =
+    gson.toJson(folders.map { planMap(it, sessions, live, managers, zone) })
 
-private fun SessionFolders.planMap(folder: Folder, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, zone: ZoneId): Map<String, Any?> {
+/** What `my_air_plan_set_manager` returns: the plan's path, its new manager, and the previous manager's id. */
+fun managerSetJson(plan: String, manager: PlanManager, previous: String?): String = gson.toJson(
+    linkedMapOf(
+        "plan" to plan,
+        "manager" to linkedMapOf("id" to manager.session, "cwd" to manager.cwd.toString(), "project" to manager.project.toString()),
+        "previous" to previous,
+    ),
+)
+
+private fun SessionFolders.planMap(folder: Folder, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, managers: PlanManagers, zone: ZoneId): Map<String, Any?> {
     val plan = checkNotNull(folder.plan) { "folder ${folder.id} has no plan" }
     val byTask = sessions.filter { taskOf(it)?.first?.id == folder.id }.groupBy { it.brief!!.planTask!! }
     return linkedMapOf(
         "folder" to pathOf(folder.id),
         "dirs" to folder.dirs,
         "workdir" to folder.workdir,
+        "manager" to managers.byFolder[folder.id]?.session,
         "description" to plan.description,
         "milestones" to plan.milestones.map { m ->
             linkedMapOf(

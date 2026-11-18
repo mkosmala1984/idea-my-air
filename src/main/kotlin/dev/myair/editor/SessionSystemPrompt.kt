@@ -26,7 +26,9 @@ fun appendedSystemPrompt(briefs: Boolean, filing: Boolean): String = listOfNotNu
         "the working directory, and when it returns plans, tell the user which task fits the request or propose a new one" +
         (if (briefs) ", and name that task as plan_task in my_air_set_brief." else ".") +
         " Keep the task's status and next step current with my_air_plan_apply: waiting when the user has to act, done only when " +
-        "the work is finished. Add tasks freely, but delete or move milestones and tasks only after the user agreed.",
+        "the work is finished. Add tasks freely, but delete or move milestones and tasks only after the user agreed. " +
+        "my_air_plan_set_manager makes another session the plan's manager, for example one started in another directory, " +
+        "only when the user asks for it.",
     if (!briefs) null else "Call the my_air_set_brief tool once you understand the user's first request, and again whenever the " +
         "goal changes or a task starts or finishes.",
     if (!filing) null else "File and title this session through my_air_set_brief without asking: give title (at most " +

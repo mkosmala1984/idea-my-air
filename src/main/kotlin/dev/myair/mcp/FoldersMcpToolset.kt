@@ -12,6 +12,9 @@ import dev.myair.actions.createWorktree
 import dev.myair.actions.rememberBase
 import dev.myair.actions.runningDirs
 import dev.myair.editor.ClaudeSessionOpener
+import dev.myair.editor.ClaudeSessionVirtualFile
+import dev.myair.editor.SessionTerminals
+import dev.myair.editor.planPrompt
 import dev.myair.editor.PlanStart
 import dev.myair.editor.projectBase
 import dev.myair.folders.ChangeSource
@@ -20,6 +23,14 @@ import dev.myair.folders.FolderChanges
 import dev.myair.folders.PlanChanges
 import dev.myair.folders.SessionFolders
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.planview.PlanEditor
+import dev.myair.planview.PlanFiles
+import dev.myair.planview.PlanOpener
+import dev.myair.planview.managerRefusal
+import dev.myair.store.PlanManager
+import dev.myair.tabs.SessionHosts
+import dev.myair.MyAirSettings
+import com.intellij.openapi.fileEditor.FileEditorManager
 import dev.myair.store.Preset
 import dev.myair.store.PresetStore
 import kotlinx.coroutines.Dispatchers
@@ -174,12 +185,12 @@ class FoldersMcpToolset : McpToolset {
     @McpDescription(
         "The plans of the project a directory belongs to, as a JSON array: the plan folder that the folder bound to the " +
             "directory (or to one above it) is or lies in, else every plan folder below that bound folder. Each plan has folder " +
-            "(its path, the plan's name, which my_air_plan_apply takes), its directories, description (Markdown, as for " +
+            "(its path, the plan's name, which my_air_plan_apply takes), its directories, manager (the id of the session the plan's tab shows beside it, null before the tab first opened), description (Markdown, as for " +
             "milestones and tasks), and milestones (id, title, description, status open or done) with their tasks (id, title, description, status: pending, in_progress, waiting for the user, blocked by someone else, done or " +
             "canceled; next: the next step), each task with the sessions whose brief names it. Fails when the directory has no plan.",
     )
     suspend fun my_air_plan_get(@McpDescription("A directory of the project, normally the session's working directory.") dir: String): String =
-        withFolders { service, folders -> folders.plansJson(planFolders(folders, dir), service.sessions, service.live, ZoneId.systemDefault()) }
+        withFolders { service, folders -> folders.plansJson(planFolders(folders, dir), service.sessions, service.live, PlanFiles.getInstance().store.read(), ZoneId.systemDefault()) }
 
     @McpTool
     @McpDescription(
@@ -203,7 +214,51 @@ class FoldersMcpToolset : McpToolset {
     ): String = withFolders { service, folders ->
         val id = requireNotNull(folders.findByPath(plan)?.takeIf { it.plan != null }) { "no plan folder at '$plan'" }.id
         service.updateFolders(ChangeSource.MCP) { PlanChanges.apply(it, id, changes) }
-        service.folders.planJson(checkNotNull(service.folders.find(id)), service.sessions, service.live, ZoneId.systemDefault())
+        service.folders.planJson(checkNotNull(service.folders.find(id)), service.sessions, service.live, PlanFiles.getInstance().store.read(), ZoneId.systemDefault())
+    }
+
+    @McpTool
+    @McpDescription(
+        "Makes another session the manager of a plan: the session the plan's tab shows beside the plan, told that it manages it. " +
+            "Call it only when the user asked for it in this conversation. To move a manager to another directory, start a " +
+            "session there with my_air_session_start (folder: the plan's path) and pass its id here. The session must not " +
+            "manage a plan already, nor run outside this IDE or as a background job. It is filed in the plan folder and shows in " +
+            "the plan's tab, opened here, its own tab closing while its process runs on there; the previous manager's process " +
+            "runs on without a tab until it is idle, so the previous manager may call this itself. my_air_history_restore does " +
+            "not undo it: call this again with the previous manager. Returns the plan's path, manager (the new one's id, cwd " +
+            "and project) and previous (the previous manager's id, null when the plan had none).",
+    )
+    suspend fun my_air_plan_set_manager(
+        @McpDescription("The plan's folder path, as my_air_plan_get gives it.") plan: String,
+        @McpDescription("The id of the session to manage the plan.") session: String,
+    ): String {
+        val project = currentCoroutineContext().project
+        return withFolders { service, folders ->
+            val folder = requireNotNull(folders.findByPath(plan)?.takeIf { it.plan != null }) { "no plan folder at '$plan'" }
+            val files = PlanFiles.getInstance()
+            val terminals = SessionTerminals.getInstance()
+            // A session tab here, or the file of a process running on detached ([SessionHosts.findTab]).
+            val tab = SessionHosts.findTab(session)?.takeIf { it.file is ClaudeSessionVirtualFile }
+            val running = (tab?.file as? ClaudeSessionVirtualFile)?.takeIf(terminals::runs)
+            val scanned = service.sessions.firstOrNull { it.id == session }
+            val refusal = managerRefusal(
+                files.store.read(), folder.id, session, scanned != null || running != null, service.live[session],
+                running != null, running != null && terminals.starting(running), folders::pathOf,
+            )
+            require(refusal == null) { refusal!! }
+            val manager = PlanManager(session, running?.cwd ?: scanned!!.cwd, running?.project ?: scanned!!.project)
+            service.updateFolders(ChangeSource.MCP) { it.assign(session, folder.id) }
+            val filed = service.folders
+            val message = planPrompt(filed, checkNotNull(filed.find(folder.id)), null, MyAirSettings.getInstance().briefs, manager = true)
+            val previous = files.adopt(folder.id, manager, running, message)
+            PlanOpener.editors(folder.id).forEach(PlanEditor::showManager)
+            val editor = PlanOpener.openHere(project, folder.id)
+            if (running != null) check(editor.pane?.send(message) == true) { "the plan tab of '$plan' shows no process of session $session" }
+            // The plan tab's pane holds the process now, so closing the session's tab leaves it running; a tab not started
+            // yet would start a second one when selected. A detached process has no tab to close.
+            tab?.let { FileEditorManager.getInstance(it.project).closeFile(it.file) }
+            managerSetJson(filed.pathOf(folder.id), manager, previous)
+        }
     }
 
     @McpTool
