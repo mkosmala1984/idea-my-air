@@ -93,12 +93,13 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
     fun planFolderAt(folderId: String) = ancestry(folderId).lastOrNull { it.plan != null }
 
     /**
-     * The plans of [dir], in tree order: the plan folder its bound folder is or lies in, or every plan folder below its bound
-     * folder; plan folders do not nest, so these never overlap.
+     * The plans of [dir]: the plan folder its bound folder is or lies in, or every plan folder below its bound folder (plan
+     * folders do not nest, so these never overlap), in tree order; then every other plan folder whose own working directory
+     * holds [dir], as a directory binds to one folder only while any number of plans may work in it.
      */
     fun planFoldersOf(dir: Path): List<Folder> {
-        val bound = projectFolder(dir) ?: return emptyList()
-        return (ancestry(bound.id).dropLast(1).asSequence() + bound.subtree()).filter { it.plan != null }.toList()
+        val bound = projectFolder(dir)?.let { (ancestry(it.id).dropLast(1).asSequence() + it.subtree()).filter { f -> f.plan != null }.toList() }.orEmpty()
+        return bound + all().filter { f -> f.plan != null && f.workdir?.let(dir::isAtOrUnder) == true && f !in bound }
     }
 
     fun findTask(id: String) = all().firstNotNullOfOrNull { f -> f.plan?.tasks()?.firstOrNull { it.id == id }?.let { f to it } }

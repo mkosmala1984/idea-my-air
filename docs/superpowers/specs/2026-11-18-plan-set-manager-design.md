@@ -32,6 +32,8 @@
 - **R17** `my_air_plan_get` gives each plan its `manager`: the managing session's id, null when there is none.
 - **R18** The appended system prompt names `my_air_plan_set_manager` and what it is for (`SessionSystemPromptTest` passes).
 - **R19** The tool's description tells the agent to call it only when the user asked for it in the conversation, and how to move a manager to another directory (start a session there with `my_air_session_start`, `folder` set to the plan's path, then call this tool).
+- **R20** `my_air_plan_get(dir)` also returns every plan folder whose own `workdir` is `dir` or a directory above it, after the plans found through the folder bound to `dir`, each plan once.
+- **R21** The result of `my_air_plan_set_manager` gives the plan's `dirs` and `workdir`, and a `hint` naming `my_air_folders_apply` `set_workdir` when the new manager's `cwd` lies in none of them; `hint` is null otherwise.
 
 ## Why
 

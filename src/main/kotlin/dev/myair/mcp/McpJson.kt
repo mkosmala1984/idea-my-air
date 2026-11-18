@@ -3,6 +3,7 @@ package dev.myair.mcp
 import com.google.gson.GsonBuilder
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
+import dev.myair.claude.isAtOrUnder
 import dev.myair.folders.Folder
 import dev.myair.folders.progress
 import dev.myair.folders.SessionFolders
@@ -80,14 +81,27 @@ fun SessionFolders.planJson(folder: Folder, sessions: List<ClaudeSession>, live:
 fun SessionFolders.plansJson(folders: List<Folder>, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, managers: PlanManagers, zone: ZoneId): String =
     gson.toJson(folders.map { planMap(it, sessions, live, managers, zone) })
 
-/** What `my_air_plan_set_manager` returns: the plan's path, its new manager, and the previous manager's id. */
-fun managerSetJson(plan: String, manager: PlanManager, previous: String?): String = gson.toJson(
-    linkedMapOf(
-        "plan" to plan,
-        "manager" to linkedMapOf("id" to manager.session, "cwd" to manager.cwd.toString(), "project" to manager.project.toString()),
-        "previous" to previous,
-    ),
-)
+/**
+ * What `my_air_plan_set_manager` returns: the plan's path, directories and working directory, its new manager, the previous
+ * manager's id, and a hint when the manager runs outside both, where new task sessions would not start and from where
+ * `my_air_plan_get` would not find the plan; null otherwise.
+ */
+fun managerSetJson(plan: String, folder: Folder, manager: PlanManager, previous: String?): String {
+    val inPlan = (folder.dirs + listOfNotNull(folder.workdir)).any(manager.cwd::isAtOrUnder)
+    return gson.toJson(
+        linkedMapOf(
+            "plan" to plan,
+            "dirs" to folder.dirs,
+            "workdir" to folder.workdir,
+            "manager" to linkedMapOf("id" to manager.session, "cwd" to manager.cwd.toString(), "project" to manager.project.toString()),
+            "previous" to previous,
+            "hint" to if (inPlan) null else "The manager runs in ${manager.cwd}, outside the plan's directories and working directory, " +
+                "so new sessions of its tasks do not start there and my_air_plan_get does not find the plan from there. With the " +
+                "user's approval, my_air_folders_apply with set_workdir of '$plan' to that directory fixes both; unbind a directory " +
+                "of the plan no longer used.",
+        ),
+    )
+}
 
 private fun SessionFolders.planMap(folder: Folder, sessions: List<ClaudeSession>, live: Map<String, LiveSession>, managers: PlanManagers, zone: ZoneId): Map<String, Any?> {
     val plan = checkNotNull(folder.plan) { "folder ${folder.id} has no plan" }
