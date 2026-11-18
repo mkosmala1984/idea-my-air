@@ -14,7 +14,10 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import dev.myair.editor.SessionPaneHost
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.sessionIcon
-import dev.myair.editor.NEW_SESSION_ICON
+import dev.myair.editor.CONTINUE_SESSION_ICON
+import dev.myair.editor.NEW_SESSION_HERE_ICON
+import dev.myair.editor.NEW_SESSION_HERE_TOOLTIP
+import dev.myair.editor.newSessionHere
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -571,9 +574,14 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         row {
             val parts = listOfNotNull(context.model?.let(::modelName), context.effort).map<String, JComponent> { Chip(it) }.toMutableList()
             // The session is looked up at the click, as the tab is: the pane is not rebuilt for every change of it.
-            if (context.cwdExists) parts.add(InplaceButton("Continue in a new session: same model, effort and added directories, in ${context.cwd}", NEW_SESSION_ICON) {
-                continueSession(project, service.sessions.first { it.id == shownId }, context.cwd)
-            })
+            if (context.cwdExists) {
+                parts.add(InplaceButton("Continue in a new session: same model, effort and added directories, in ${context.cwd}", CONTINUE_SESSION_ICON) {
+                    continueSession(project, service.sessions.first { it.id == shownId }, context.cwd)
+                })
+                parts.add(InplaceButton("New Session Here: $NEW_SESSION_HERE_TOOLTIP", NEW_SESSION_HERE_ICON) {
+                    newSessionHere(project, service.sessions.first { it.id == shownId })
+                })
+            }
             parts.add(commentLabel(shortAge(context.lastMessage, Instant.now())))
             cell(WrapLine(parts)).align(AlignX.FILL)
         }

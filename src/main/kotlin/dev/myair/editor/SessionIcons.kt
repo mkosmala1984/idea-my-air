@@ -49,6 +49,12 @@ val CLAUDE_ICON: Icon = IconLoader.getIcon("/icons/claude.svg", SessionStatus::c
 /** The Claude asterisk, grey like the toolbar's other icons: starts a new session, wherever one is started. */
 val NEW_SESSION_ICON: Icon = IconLoader.getIcon("/icons/newSession.svg", SessionStatus::class.java)
 
+/** A small asterisk with a green plus: a new session in the folder a session works in, filed where it is. */
+val NEW_SESSION_HERE_ICON: Icon = IconLoader.getIcon("/icons/newSessionHere.svg", SessionStatus::class.java)
+
+/** A small asterisk with a blue arrow: a new session continuing a session. */
+val CONTINUE_SESSION_ICON: Icon = IconLoader.getIcon("/icons/continueSession.svg", SessionStatus::class.java)
+
 /** A thin grey asterisk: a session without a process. */
 val OFFLINE_SESSION_ICON: Icon = IconLoader.getIcon("/icons/claudeOffline.svg", SessionStatus::class.java)
 

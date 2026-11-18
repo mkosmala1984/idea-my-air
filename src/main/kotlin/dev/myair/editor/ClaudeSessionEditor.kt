@@ -12,6 +12,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
+import dev.myair.claude.ClaudeSession
 import dev.myair.service.ClaudeSessionsService
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
@@ -66,17 +67,22 @@ class ClaudeSessionEditor(project: Project, private val file: ClaudeSessionVirtu
  * disabled once that folder is gone.
  */
 private class NewSessionHereAction(private val project: Project, private val file: ClaudeSessionVirtualFile) :
-    DumbAwareAction("New Session Here", "A new Claude session in the folder this session works in, filed where it is", NEW_SESSION_ICON) {
+    DumbAwareAction("New Session Here", NEW_SESSION_HERE_TOOLTIP, NEW_SESSION_HERE_ICON) {
     private fun session() = ClaudeSessionsService.getInstance().listed.firstOrNull { it.id == file.sessionId }
-    private fun dir() = session()?.workDir ?: file.cwd
 
     override fun getActionUpdateThread() = ActionUpdateThread.EDT
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabled = dir().isDirectory()
+        e.presentation.isEnabled = (session()?.workDir ?: file.cwd).isDirectory()
     }
     override fun actionPerformed(e: AnActionEvent) {
-        val folders = ClaudeSessionsService.getInstance().folders
-        val folderId = session()?.let(folders::placeOf) ?: folders.folderOf(file.sessionId)
-        ClaudeSessionOpener.startNew(project, file.project, dir(), folderId = folderId)
+        val session = session()
+        if (session != null) newSessionHere(project, session)
+        else ClaudeSessionOpener.startNew(project, file.project, file.cwd, folderId = ClaudeSessionsService.getInstance().folders.folderOf(file.sessionId))
     }
 }
+
+const val NEW_SESSION_HERE_TOOLTIP = "A new Claude session in the folder this session works in, filed where it is"
+
+/** A new session of [session]'s project in the folder it works in now (`workDir`), filed in the folder it shows in (`placeOf`). */
+fun newSessionHere(project: Project, session: ClaudeSession) =
+    ClaudeSessionOpener.startNew(project, session.project, session.workDir, folderId = ClaudeSessionsService.getInstance().folders.placeOf(session))

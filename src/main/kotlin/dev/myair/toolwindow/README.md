@@ -83,7 +83,7 @@ Session Context panel:
   - Open: sessions (`ClaudeSessionOpener.open`), plans (`PlanOpener.open`), files, diffs (`showBaseDiff`, `showCombinedBaseDiff`, `showBaseChangesTree`).
   - Browser and external tools: Plannotator (`reviewInPlannotator`), artifact and skill origin URLs (`BrowserUtil.browse`).
   - Other tools: Open in IDEA, Open in Terminal (a Terminal tab).
-  - Sessions: `continueSession` starts a new session; `SessionPane.type` types `/<skill> ` into a tab's prompt without sending it.
+  - Sessions: `continueSession` starts a new session continuing the shown one, `newSessionHere` one in the folder it works in, filed where it is; `SessionPane.type` types `/<skill> ` into a tab's prompt without sending it.
 - Dialogs: modal input, confirm, error and choose dialogs, and file choosers (`FolderEditing`); `CommandDialog`, whose Copy button writes to the clipboard.
 - A 60 s Swing `Timer` refreshes the ages. Subscriptions to `ClaudeSessionsService`, `ActiveSession` and `PaneFont` are tied to the tool window's disposable.
 - Registered actions used: `dev.myair.NewSessionWithPrompt`, `dev.myair.NewClaudeSession`, `dev.myair.NewClaudeSessionInWorktree`. Popup places: `ClaudeSessionsPopup`, `ClaudePinnedPopup`.
