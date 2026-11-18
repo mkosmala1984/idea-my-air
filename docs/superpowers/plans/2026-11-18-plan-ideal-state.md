@@ -7,7 +7,7 @@
 | 3 | done | `871cf90` |
 | 4 | done | `f7dedc1` |
 | 5 | done | `3cdcf8e` |
-| 6 | | |
+| 6 | done | `2548d84` |
 | 7 | | |
 
 ## TL;DR
@@ -228,9 +228,9 @@ Cards, between the header (with description moved into Ideal state) and the mile
 - Code review: status (menu: the three statuses as toggles, `setReview(..., LocalDate.now())` keeping the commit), commit and date in grey; blocker rows `✗`/`✓`, id, text; row menu Resolve/Reopen, Edit, Delete; `+ Add blocker`.
 Header beside the task progress: `requirementsSummary` (when not null) and `reviewSummary` (R16). Deletes from the view ask nothing (as task delete in the view today).
 
-- [ ] **Step 1: Build** `./gradlew buildPlugin` — Expected: BUILD SUCCESSFUL.
+- [x] **Step 1: Build** `./gradlew buildPlugin` — Expected: BUILD SUCCESSFUL.
 - [ ] **Step 2: Sandbox walk** (`env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daemon runIde`) on a test plan folder: add one item of every kind from the view; edit each; flip eval and review status; resolve a blocker; see the header change; fold and unfold each card; from the manager run `my_air_plan_apply` with `add_evidence` and see `R1` turn `✓`; Edit → Undo restores and the next requirement keeps a new id; then delete the new sections' items and check `~/.my-air/structure.json`'s `version` (5 while `next` is set).
-- [ ] **Step 3: Commit** `Plan view: cards for ideal state, constraints, decisions, requirements and code review` with `Plan-Task: 6/7`.
+- [x] **Step 3: Commit** `Plan view: cards for ideal state, constraints, decisions, requirements and code review` with `Plan-Task: 6/7`.
 
 ### Task 7: Docs
 
