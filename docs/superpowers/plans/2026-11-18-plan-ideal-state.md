@@ -4,7 +4,7 @@
 |---|---|---|
 | 1 | done | `55c675c`..`1296572` |
 | 2 | done | `b04711a` |
-| 3 | | |
+| 3 | done | `871cf90` |
 | 4 | | |
 | 5 | | |
 | 6 | | |
@@ -158,11 +158,11 @@ Run: `./gradlew test --tests dev.myair.folders.PlanChangesTest` — Expected: FA
 
 **Interfaces:** Consumes Task 1's model. `planMap` adds after `description`: `"constraints"`, `"decisions"` (`id, date, text, session`, in order added), `"requirements"` (`id, text, eval` label, `tasks`, `evidence`, `status` as `unproven`/`not_done`/`proven`), `"review"` (`status` label, `commit`, `date`, `blockers` with `id, text, resolved`) or null.
 
-- [ ] **Step 1: Write the failing test** `` `a plan's sections come out with derived requirement statuses` ``: build a plan with one of each, assert the JSON fields and `requirements[0].status == "proven"`; and `` `a plan without sections has null constraints and review and empty lists` ``.
-- [ ] **Step 2: Run** `./gradlew test --tests dev.myair.mcp.FolderQueriesTest` — Expected: FAIL.
-- [ ] **Step 3: Implement** in `planMap`; describe the fields in `my_air_plan_get`'s description (R13, R20).
-- [ ] **Step 4: Run** the same — Expected: PASS.
-- [ ] **Step 5: Commit** `my_air_plan_get returns constraints, decisions, requirements and review` with `Plan-Task: 3/7`.
+- [x] **Step 1: Write the failing test** `` `a plan's sections come out with derived requirement statuses` ``: build a plan with one of each, assert the JSON fields and `requirements[0].status == "proven"`; and `` `a plan without sections has null constraints and review and empty lists` ``.
+- [x] **Step 2: Run** `./gradlew test --tests dev.myair.mcp.FolderQueriesTest` — Expected: FAIL.
+- [x] **Step 3: Implement** in `planMap`; describe the fields in `my_air_plan_get`'s description (R13, R20).
+- [x] **Step 4: Run** the same — Expected: PASS.
+- [x] **Step 5: Commit** `my_air_plan_get returns constraints, decisions, requirements and review` with `Plan-Task: 3/7`.
 
 ### Task 4: Sessions are told the sections
 
