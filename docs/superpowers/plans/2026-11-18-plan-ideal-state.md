@@ -3,7 +3,7 @@
 | Task | Status | Commit |
 |---|---|---|
 | 1 | done | `55c675c`..`1296572` |
-| 2 | | |
+| 2 | done | `b04711a` |
 | 3 | | |
 | 4 | | |
 | 5 | | |
@@ -132,7 +132,7 @@ Trailers: `Plan-Task: 1/7`, `Plan: docs/superpowers/plans/2026-11-18-plan-ideal-
 
 New `FIELDS`: `set_constraints {constraints}`, `add_decision {text, session}`, `add_requirement {text, eval, tasks, index}`, `add_evidence {id, evidence}`, `set_review {status, commit}`, `add_blocker {text}`; `update` gains `text, eval, tasks, evidence, resolved`; `update`/`delete` dispatch on the id's first letter `M`/`T`/`R`/`D`/`B` and refuse fields not of that kind (R: `text, eval, tasks, evidence`; D: `text`; B: `text, resolved`; M/T as today). `set_review` without `commit` keeps the stored one, `"commit": null` clears it; a given commit must match `[0-9a-f]{7,40}`. An id of another plan or unknown throws `no requirement 'R9' in this plan` and likewise.
 
-- [ ] **Step 1: Write the failing tests** (`structure` and `apply` helper get `today = LocalDate.of(2026, 11, 18)`):
+- [x] **Step 1: Write the failing tests** (`structure` and `apply` helper get `today = LocalDate.of(2026, 11, 18)`):
 - `` `the new sections are set in order, ids allocated per plan` ``: one list with `set_constraints`, `add_requirement` (`"eval":"code","tasks":["T2"]`), `add_evidence` (`"id":"R1","evidence":"commit 4c91271d91"`), `add_decision` (`"session":"s1"`), `set_review` (`"status":"in_progress","commit":"abc1234"`), `add_blocker`, `update` `B1` `resolved:true` → the plan equals the expected `Plan` with `Decision("D1","2026-11-18",...)`, review date `2026-11-18`, `R1.status == PROVEN`.
 - `` `update and delete take only the fields of the id's kind` ``: `{"op":"update","id":"D1","eval":"code"}` throws `unknown fields`; `{"op":"update","id":"B1","next":"x"}` throws.
 - `` `malformed evidence, eval and review status are refused naming the change` ``: `"evidence":"commit ABC1234"`, `"evidence":"commit abc1234 "`, `"eval":"unit"`, `"status":"finished"` each throw with message starting `change 1 `.
@@ -140,15 +140,15 @@ New `FIELDS`: `set_constraints {constraints}`, `add_decision {text, session}`, `
 - `` `set_review keeps the commit unless given, null clearing it` ``.
 - Existing tests: pass `today`.
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `./gradlew test --tests dev.myair.folders.PlanChangesTest` — Expected: FAIL (signature and unknown ops).
 
-- [ ] **Step 3: Implement the ops; `my_air_plan_apply` passes `LocalDate.now()` and its description names every new op with its fields, the eval kinds, review statuses and the evidence formats (R20)**
+- [x] **Step 3: Implement the ops; `my_air_plan_apply` passes `LocalDate.now()` and its description names every new op with its fields, the eval kinds, review statuses and the evidence formats (R20)**
 
-- [ ] **Step 4: Run** `./gradlew test --tests dev.myair.folders.PlanChangesTest --tests dev.myair.editor.SessionSystemPromptTest` — Expected: PASS.
+- [x] **Step 4: Run** `./gradlew test --tests dev.myair.folders.PlanChangesTest --tests dev.myair.editor.SessionSystemPromptTest` — Expected: PASS.
 
-- [ ] **Step 5: Commit** `Plan changes: ops for constraints, decisions, requirements, evidence, review and blockers` with trailers `Plan-Task: 2/7`.
+- [x] **Step 5: Commit** `Plan changes: ops for constraints, decisions, requirements, evidence, review and blockers` with trailers `Plan-Task: 2/7`.
 
 ### Task 3: `my_air_plan_get` returns the sections
 
