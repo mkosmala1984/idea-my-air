@@ -32,7 +32,7 @@ class PlanViewTest {
 
     @Test
     fun `milestones and tasks come in plan order with their progress`() {
-        val done = PlanChanges.apply(structure, "f", """[{"op":"update","id":"T2","status":"done"}]""")
+        val done = PlanChanges.apply(structure, "f", """[{"op":"update","id":"T2","status":"done"}]""", java.time.LocalDate.of(2026, 11, 18))
         val view = planViewOf(done, "f", emptyList(), null)!!
         assertEquals(listOf("First", "Second"), view.milestones.map { it.milestone.title })
         assertEquals(listOf("A", "B"), view.milestones[0].tasks.map { it.task.title })

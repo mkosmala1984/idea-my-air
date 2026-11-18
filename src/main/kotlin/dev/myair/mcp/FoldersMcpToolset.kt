@@ -38,6 +38,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import java.nio.file.Path
 import java.util.UUID
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
@@ -207,14 +208,26 @@ class FoldersMcpToolset : McpToolset {
             "{\"op\":\"move\",\"id\":\"T4\",\"milestone\":\"M2\",\"index\":0} (index after the move; milestone optional for a task, its own " +
             "by default, and not given for a milestone), " +
             "{\"op\":\"delete\",\"id\":\"T4\"} (a milestone only when all its tasks are done or canceled). " +
-            "New ids (M<n>, T<n>) are unique across all plans and never reused. Returns the plan after the change.",
+            "Plan sections: {\"op\":\"set_constraints\",\"constraints\":\"...\"} (Markdown rules the work follows; null clears), " +
+            "{\"op\":\"add_decision\",\"text\":\"...\",\"session\":\"<session id>\"} (D<n>, dated today; session optional), " +
+            "{\"op\":\"add_requirement\",\"text\":\"...\",\"eval\":\"code\",\"tasks\":[\"T2\"],\"index\":0} (R<n>; eval says how it is proven: " +
+            "assert, code, questions or judge; tasks and index optional, tasks of this plan), " +
+            "{\"op\":\"add_evidence\",\"id\":\"R1\",\"evidence\":\"commit 4c91271\"} (one item, exactly one of: 'test <Class> › <name>', " +
+            "'commit <7-40 lowercase hex>', 'checked: <what was done>', 'not done: <why>'; a requirement with evidence and no 'not done:' item is proven, " +
+            "with one it is not done), " +
+            "{\"op\":\"set_review\",\"status\":\"in_progress\",\"commit\":\"abc1234\"} (status not_done, in_progress or done, dated today; " +
+            "commit optional: kept when absent, null clears it, else 7-40 lowercase hex), " +
+            "{\"op\":\"add_blocker\",\"text\":\"...\"} (B<n>, a finding of the review). " +
+            "update and delete take R<n>, D<n> and B<n> ids too: update R1 takes text, eval, tasks and evidence (an array replacing the list), " +
+            "D1 takes text, B1 takes text and resolved (true or false). " +
+            "New ids (M<n>, T<n>) are unique across all plans and never reused; R<n>, D<n> and B<n> within the plan. Returns the plan after the change.",
     )
     suspend fun my_air_plan_apply(
         @McpDescription("The plan's folder path, as my_air_plan_get gives it.") plan: String,
         @McpDescription("The JSON array of changes.") changes: String,
     ): String = withFolders { service, folders ->
         val id = requireNotNull(folders.findByPath(plan)?.takeIf { it.plan != null }) { "no plan folder at '$plan'" }.id
-        service.updateFolders(ChangeSource.MCP) { PlanChanges.apply(it, id, changes) }
+        service.updateFolders(ChangeSource.MCP) { PlanChanges.apply(it, id, changes, LocalDate.now()) }
         service.folders.planJson(checkNotNull(service.folders.find(id)), service.sessions, service.live, PlanFiles.getInstance().store.read(), ZoneId.systemDefault())
     }
 
