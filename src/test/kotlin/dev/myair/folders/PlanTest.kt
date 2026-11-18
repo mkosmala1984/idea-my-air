@@ -103,6 +103,19 @@ class PlanTest {
     }
 
     @Test
+    fun `a directory also has the plan folders working in it, after those of its bound folder`() {
+        val air = SessionFolders()
+            .createFolder(null, "air", "air", dirs = listOf(Path.of("/air").toString()))
+            .createFolder("air", "a", "a", plan = Plan(null, emptyList()))
+            .createFolder(null, "p", "p", plan = Plan(null, emptyList())).setWorkdir("p", Path.of("/air").toString())
+            .createFolder(null, "q", "q", plan = Plan(null, emptyList())).setWorkdir("q", Path.of("/air-web").toString())
+            .createFolder(null, "plain", "plain").setWorkdir("plain", Path.of("/air").toString())
+        assertEquals(listOf("a", "p"), air.planFoldersOf(Path.of("/air/.claude/worktrees/x")).map { it.id })
+        assertEquals(listOf("p"), air.unbind(Path.of("/air").toString()).planFoldersOf(Path.of("/air")).map { it.id })
+        assertEquals(listOf("a", "p"), air.setWorkdir("a", Path.of("/air").toString()).planFoldersOf(Path.of("/air")).map { it.id })
+    }
+
+    @Test
     fun `operations on what another IDE removed change nothing`() {
         assertSame(structure, structure.addTask("M99", "x"))
         assertSame(structure, structure.addMilestone("gone", "x"))

@@ -1,6 +1,8 @@
 package dev.myair.mcp
 
 import com.google.gson.JsonParser
+import org.junit.jupiter.api.Assertions.assertTrue
+import dev.myair.folders.Folder
 import dev.myair.store.PlanManager
 import dev.myair.store.PlanManagers
 import dev.myair.claude.ClaudeSession
@@ -163,5 +165,17 @@ class FolderQueriesTest {
         val sessions = task.getAsJsonArray("sessions").map { it.asJsonObject }
         assertEquals(listOf("a" to "working", "bb" to null), sessions.map { it["id"].asString to it["status"].takeUnless { s -> s.isJsonNull }?.asString })
         assertEquals("0/1 tasks done", JsonParser.parseString(planned.treeJson()).asJsonArray[1].asJsonObject["plan"].asString)
+    }
+
+    @Test
+    fun `the manager set json hints at the plan's workdir only when the manager runs outside the plan's directories`() {
+        val planned = structure.createFolder(null, "p", "plan", dirs = listOf(Path.of("/wt").toString()), plan = Plan())
+        val folder = planned.find("p")!!
+        fun json(cwd: String, f: Folder = folder) = JsonParser.parseString(managerSetJson("plan", f, PlanManager("m", Path.of(cwd), Path.of(cwd)), "old")).asJsonObject
+        val outside = json("/main")
+        assertEquals(listOf("plan", "old", "m"), listOf(outside["plan"].asString, outside["previous"].asString, outside.getAsJsonObject("manager")["id"].asString))
+        assertTrue("set_workdir of 'plan'" in outside["hint"].asString)
+        assertEquals(true, json("/wt/sub")["hint"].isJsonNull)
+        assertEquals(true, json("/main", folder.copy(workdir = Path.of("/main").toString()))["hint"].isJsonNull)
     }
 }

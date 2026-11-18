@@ -184,7 +184,8 @@ class FoldersMcpToolset : McpToolset {
     @McpTool
     @McpDescription(
         "The plans of the project a directory belongs to, as a JSON array: the plan folder that the folder bound to the " +
-            "directory (or to one above it) is or lies in, else every plan folder below that bound folder. Each plan has folder " +
+            "directory (or to one above it) is or lies in, else every plan folder below that bound folder; then every plan folder whose workdir is " +
+            "the directory or one above it. Each plan has folder " +
             "(its path, the plan's name, which my_air_plan_apply takes), its directories, manager (the id of the session the plan's tab shows beside it, null before the tab first opened), description (Markdown, as for " +
             "milestones and tasks), and milestones (id, title, description, status open or done) with their tasks (id, title, description, status: pending, in_progress, waiting for the user, blocked by someone else, done or " +
             "canceled; next: the next step), each task with the sessions whose brief names it. Fails when the directory has no plan.",
@@ -225,8 +226,9 @@ class FoldersMcpToolset : McpToolset {
             "manage a plan already, nor run outside this IDE or as a background job. It is filed in the plan folder and shows in " +
             "the plan's tab, opened here, its own tab closing while its process runs on there; the previous manager's process " +
             "runs on without a tab until it is idle, so the previous manager may call this itself. my_air_history_restore does " +
-            "not undo it: call this again with the previous manager. Returns the plan's path, manager (the new one's id, cwd " +
-            "and project) and previous (the previous manager's id, null when the plan had none).",
+            "not undo it: call this again with the previous manager. Returns the plan's path, dirs and workdir, manager (the new " +
+            "one's id, cwd and project), previous (the previous manager's id, null when the plan had none) and hint (what to " +
+            "fix when the manager runs outside the plan's directories, else null).",
     )
     suspend fun my_air_plan_set_manager(
         @McpDescription("The plan's folder path, as my_air_plan_get gives it.") plan: String,
@@ -257,7 +259,7 @@ class FoldersMcpToolset : McpToolset {
             // The plan tab's pane holds the process now, so closing the session's tab leaves it running; a tab not started
             // yet would start a second one when selected. A detached process has no tab to close.
             tab?.let { FileEditorManager.getInstance(it.project).closeFile(it.file) }
-            managerSetJson(filed.pathOf(folder.id), manager, previous)
+            managerSetJson(filed.pathOf(folder.id), checkNotNull(filed.find(folder.id)), manager, previous)
         }
     }
 
@@ -294,7 +296,7 @@ class FoldersMcpToolset : McpToolset {
         throw IllegalArgumentException(
             "'$dir' has no plan" + (bound?.let { " (it is bound to folder '${folders.pathOf(it.id)}')" } ?: "") +
                 ". With the user's approval, my_air_folders_apply creates a plan folder" + (bound?.let { " inside '${folders.pathOf(it.id)}'" } ?: " bound to the directory") +
-                " (create with plan true) or makes a folder a plan folder (add_plan).",
+                " (create with plan true), makes a folder a plan folder (add_plan) or sets a plan folder's workdir to it (set_workdir).",
         )
     }
 
