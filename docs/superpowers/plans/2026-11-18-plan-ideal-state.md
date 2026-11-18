@@ -5,7 +5,7 @@
 | 1 | done | `55c675c`..`1296572` |
 | 2 | done | `b04711a` |
 | 3 | done | `871cf90` |
-| 4 | | |
+| 4 | done | `f7dedc1` |
 | 5 | | |
 | 6 | | |
 | 7 | | |
@@ -174,15 +174,15 @@ Run: `./gradlew test --tests dev.myair.folders.PlanChangesTest` — Expected: FA
 
 Layout after the intro sentence: `## Ideal state` + description (when set), `## Constraints` + text (when set), `## Requirements` with one line per requirement `- **R1** (code) text` (task session: those whose `tasks` hold its task; manager: all; heading only when any), then task and milestone as today, then the manager section with these rules added: record a decision with `add_decision` whenever the ideal state, constraints or requirements change; add evidence with `add_evidence` as tasks close, in the four formats; after a code review set it with `set_review` and its blockers with `add_blocker`; delete requirements, decisions or blockers only after the user agreed.
 
-- [ ] **Step 1: Write the failing tests**:
+- [x] **Step 1: Write the failing tests**:
 - `` `a task session gets the ideal state, constraints and only the requirements of its task` ``: R1 tasks `[T2]`, R2 tasks `[T9]`; prompt for T2 contains `## Ideal state`, `## Constraints`, `- **R1** (code) ` and not `R2`.
 - `` `a manager gets every requirement and the rules for decisions, evidence and review` ``: contains both R lines, `add_decision`, `add_evidence`, `set_review`, `add_blocker`.
 - `` `a plan without sections has no empty headings` ``: plan with only a description: no `## Constraints`, no `## Requirements`.
 - Update `` `the plan prompt carries names, the path and descriptions as written, but no status` `` for the `## Ideal state` heading.
-- [ ] **Step 2: Run** `./gradlew test --tests dev.myair.editor.SessionSystemPromptTest` — Expected: FAIL.
-- [ ] **Step 3: Implement** in `planPrompt`.
-- [ ] **Step 4: Run** the same — Expected: PASS.
-- [ ] **Step 5: Commit** `Plan prompt: ideal state, constraints, the task's requirements; manager keeps decisions, evidence and review` with `Plan-Task: 4/7`.
+- [x] **Step 2: Run** `./gradlew test --tests dev.myair.editor.SessionSystemPromptTest` — Expected: FAIL.
+- [x] **Step 3: Implement** in `planPrompt`.
+- [x] **Step 4: Run** the same — Expected: PASS.
+- [x] **Step 5: Commit** `Plan prompt: ideal state, constraints, the task's requirements; manager keeps decisions, evidence and review` with `Plan-Task: 4/7`.
 
 ### Task 5: View model, folding of sections, inline edits
 
