@@ -1,7 +1,5 @@
 package dev.myair.toolwindow
 
-import dev.myair.store.BranchReview
-import dev.myair.review.blockerCount
 import dev.myair.actions.Git
 import dev.myair.claude.BackgroundTask
 import dev.myair.claude.BriefTask
@@ -14,7 +12,9 @@ import dev.myair.folders.Milestone
 import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.startFolder
+import dev.myair.review.blockerCount
 import dev.myair.reviewview.ReviewStart
+import dev.myair.store.BranchReview
 import java.nio.file.Path
 import java.time.Instant
 import java.util.UUID

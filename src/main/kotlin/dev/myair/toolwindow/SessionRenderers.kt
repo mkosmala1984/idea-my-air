@@ -1,7 +1,5 @@
 package dev.myair.toolwindow
 
-import dev.myair.review.ReviewService
-import dev.myair.editor.REVIEW_ICON
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.ui.ColoredTreeCellRenderer
@@ -17,12 +15,14 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import dev.myair.claude.TaskStatus
+import dev.myair.editor.REVIEW_ICON
 import dev.myair.editor.projectIcon
 import dev.myair.editor.sessionIcon
 import dev.myair.folders.Folder
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.progress
 import dev.myair.folders.startFolder
+import dev.myair.review.ReviewService
 import java.nio.file.Path
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
