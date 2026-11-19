@@ -483,4 +483,28 @@ class GitTest {
         git(repo, "commit", "-m", "b")
         assertEquals(BranchFate(1, null), Git.branchFate(repo, "feature"))
     }
+
+    @Test
+    fun `changedLines gives old-side ranges since a commit, uncommitted edits included`() {
+        val repo = init("ranges")
+        repo.resolve("a.txt").writeText((1..10).joinToString("\n", postfix = "\n"))
+        repo.resolve("b.txt").writeText("-- one\ntwo\n")
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "base")
+        val base = git(repo, "rev-parse", "HEAD")
+        repo.resolve("a.txt").writeText((1..10).filter { it != 3 && it != 4 }.joinToString("\n", postfix = "\n").replace("7\n", "7\nnew\n").replace("9\n", "nine\n"))
+        git(repo, "commit", "-am", "edit")
+        repo.resolve("b.txt").writeText("two\n")
+        repo.resolve("c.txt").writeText("x\n")
+        git(repo, "add", "c.txt")
+        assertEquals(mapOf("a.txt" to listOf(3..4, 7..7, 9..9), "b.txt" to listOf(1..1), "c.txt" to listOf(0..0)), Git.changedLines(repo, base))
+        assertEquals(1, Git.commitsBetween(repo, base))
+    }
+
+    @Test
+    fun `changedLines and commitsBetween are null for a commit that is gone`() {
+        val repo = init("gone")
+        assertEquals(null, Git.changedLines(repo, "0".repeat(40)))
+        assertEquals(null, Git.commitsBetween(repo, "0".repeat(40)))
+    }
 }

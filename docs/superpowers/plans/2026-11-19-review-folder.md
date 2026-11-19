@@ -199,7 +199,7 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
   - `fun Git.changedLines(root: Path, from: String): Map<String, List<IntRange>>?` — old-side line ranges of `git diff -U0 <from>` (work tree included); null when `from` is no commit
   - `fun Git.commitsBetween(root: Path, from: String): Int?` — `git rev-list --count <from>..HEAD`, null when `from` is no commit
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 @Test fun `a run is running while its job is live and unreported`()     // and running with job null; reported once reported; failed when job gone
@@ -212,8 +212,8 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 @Test fun `changedLines and commitsBetween are null for a commit that is gone`()
 ```
 
-- [ ] **Step 2: Run** → FAIL. **Step 3: Implement** (`@@ -a,b` parsing; `b` 0 means a deletion after line `a`, range `a..a`). **Step 4: Run** → PASS, full tests PASS.
-- [ ] **Step 5: Commit** `Review facts: run status, maybe fixed, blockers, precision`.
+- [x] **Step 2: Run** → FAIL. **Step 3: Implement** (`@@ -a,b` parsing; `b` 0 means a deletion after line `a`, range `a..a`). **Step 4: Run** → PASS, full tests PASS.
+- [x] **Step 5: Commit** `Review facts: run status, maybe fixed, blockers, precision`.
 
 ---
 

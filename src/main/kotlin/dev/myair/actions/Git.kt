@@ -205,6 +205,36 @@ object Git {
         nulSeparated(run(root, "--no-optional-locks", "status", "--porcelain", "-z", "--untracked-files=all", "--no-renames"))
             .map { root.resolve(it.substring(3)).normalize() }.toSet()
 
+    /**
+     * Old-side line ranges, by repository-relative path, of `git diff -U0 <from>` (work tree included); a pure insertion
+     * after line a is a..a. Null when [from] is no commit.
+     */
+    fun changedLines(root: Path, from: String): Map<String, List<IntRange>>? {
+        if (!isCommit(root, from)) return null
+        val result = mutableMapOf<String, MutableList<IntRange>>()
+        var file: String? = null
+        var header = false
+        for (line in run(root, "--no-optional-locks", "diff", "-U0", "--no-renames", "--no-color", "--no-prefix", from).lines()) {
+            // Only the lines between `diff --git` and the first hunk are headers; a removed line may itself read `--- x`.
+            if (line.startsWith("diff --git ")) { header = true; file = null }
+            else if (header && line.startsWith("--- ")) file = line.removePrefix("--- ").takeIf { it != "/dev/null" }
+            else if (header && line.startsWith("+++ ")) { if (file == null) file = line.removePrefix("+++ ") }
+            else HUNK.matchEntire(line)?.let { m ->
+                header = false
+                val a = m.groupValues[1].toInt()
+                val b = m.groupValues[2].ifEmpty { "1" }.toInt()
+                result.getOrPut(checkNotNull(file) { "hunk before a file in git diff" }) { mutableListOf() }.add(a..maxOf(a, a + b - 1))
+            }
+        }
+        return result
+    }
+
+    private val HUNK = Regex("""@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@.*""")
+
+    /** Commits HEAD has and [from] lacks; null when [from] is no commit. */
+    fun commitsBetween(root: Path, from: String): Int? =
+        if (isCommit(root, from)) run(root, "--no-optional-locks", "rev-list", "--count", "$from..HEAD").trim().toInt() else null
+
     private fun isCommit(root: Path, ref: String) = run(root, "rev-parse", "--verify", "-q", "$ref^{commit}", ok = setOf(0, 1)).isNotBlank()
 
     /**
