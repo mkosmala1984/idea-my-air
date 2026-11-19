@@ -68,7 +68,7 @@ class ReviewMcpToolset : McpToolset {
         "Records the report of a reviewer run of a My Air review folder: call it exactly once, at the end of the review, with " +
             "the folder and run the reviewer's prompt named. A second report of the same run replaces its first, findings and " +
             "questions; nothing is recorded when any part is invalid. Each finding joins a finding of the review in the same file " +
-            "and category at most 3 lines away, else becomes a new one. Returns how many findings and questions were recorded.",
+            "and category at most 3 lines away that no other finding of this report joined, else becomes a new one. Returns how many findings and questions were recorded.",
     )
     suspend fun my_air_review_report(
         @McpDescription("The review folder's path, as the reviewer's prompt names it.") folder: String,

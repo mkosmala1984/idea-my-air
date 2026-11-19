@@ -23,6 +23,13 @@ class FindingsTest {
         assertEquals(13, r.findings.single().line)
     }
 
+    @Test fun `two findings of one report stay two findings, also when a third report joins one of them`() {
+        val r = mergeFindings(empty, w1, "c1", listOf(inc(10), inc(12)))
+        assertEquals(listOf(10, 12), r.findings.map { it.line })
+        val joined = mergeFindings(r, w2, "c1", listOf(inc(11), inc(12)))
+        assertEquals(listOf(listOf("W1", "W2"), listOf("W1", "W2")), joined.findings.map { f -> f.reports.map { it.run } })
+    }
+
     @Test fun `a report four lines away or of another category stays apart`() {
         val r = mergeFindings(empty, w1, "c1", listOf(inc(10)))
         assertEquals(2, mergeFindings(r, w2, "c1", listOf(inc(14))).findings.size)

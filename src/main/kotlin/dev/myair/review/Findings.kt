@@ -24,7 +24,8 @@ private fun Finding.number() = id.drop(1).toInt()
 /**
  * Adds [incoming], reported by [run] at [commit], to [review]: the run's earlier reports are dropped first (and findings
  * left with none); each incoming finding joins the nearest finding of the same file and category at most
- * [JOIN_DISTANCE] lines away (ties: lowest id), keeping its triage, else becomes a new one.
+ * [JOIN_DISTANCE] lines away (ties: lowest id) that no finding of this report joined yet, keeping its triage, else becomes
+ * a new one: two findings of one report are two problems.
  */
 fun mergeFindings(review: BranchReview, run: Run, commit: String, incoming: List<IncomingFinding>): BranchReview {
     val kept = review.findings.mapNotNull { f ->
@@ -33,7 +34,7 @@ fun mergeFindings(review: BranchReview, run: Run, commit: String, incoming: List
     return incoming.fold(review.copy(findings = kept)) { r, f ->
         val report = Report(run.id, run.reviewer, commit, f.line, f.severity, f.summary, f.failureScenario)
         val target = r.findings
-            .filter { it.file == f.file && it.category == f.category && abs(it.line - f.line) <= JOIN_DISTANCE }
+            .filter { it.file == f.file && it.category == f.category && abs(it.line - f.line) <= JOIN_DISTANCE && it.reports.none { r -> r.run == run.id } }
             .minWithOrNull(compareBy<Finding>({ abs(it.line - f.line) }, { it.number() }))
         if (target != null) r.copy(findings = r.findings.map { if (it === target) it.copy(reports = it.reports + report) else it })
         else r.nextId("F").let { (id, next) -> next.copy(findings = next.findings + Finding(id, f.file, f.category, listOf(report))) }
