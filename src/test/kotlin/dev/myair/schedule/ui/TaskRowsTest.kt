@@ -25,7 +25,7 @@ class TaskRowsTest {
     private val task = ScheduledTask("t", Preset("Triage", prompt = "p"), Schedule(DayOfWeek.entries.take(5).toSet(), LocalTime.of(8, 0)), true, emptyList(), null, Instant.EPOCH)
 
     private fun run(at: LocalDateTime, state: RunState, error: String? = null) =
-        ZonedDateTime.of(at, zone).toInstant().let { RunRecord("t", it, false, 1, "s", state, error, true, it) }
+        ZonedDateTime.of(at, zone).toInstant().let { RunRecord("t", it, false, 1, it, "s", state, error, true, it) }
 
     @Test
     fun `names a schedule as daily, a range of days or a list`() {
@@ -59,5 +59,13 @@ class TaskRowsTest {
         assertFalse(later.failed)
         assertEquals("started Wed 18.11 08:00", later.last)
         assertNull(taskRow(task, emptyList(), now).last)
+    }
+
+    @Test
+    fun `a run that got going shows as ran and clears a failure`() {
+        val failed = run(LocalDateTime.of(2026, 11, 16, 8, 0), RunState.FAILED, "directory missing: E:/x")
+        val ran = taskRow(task, listOf(run(LocalDateTime.of(2026, 11, 17, 8, 0), RunState.RAN), failed), now)
+        assertEquals("ran Tue 17.11 08:00", ran.last)
+        assertFalse(ran.failed)
     }
 }

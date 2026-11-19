@@ -51,6 +51,9 @@ class ClaudeSessionsService : Disposable {
     private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
     private val board = BoardWriter(structure.file.parent)
 
+    /** When the user last looked at each session (`~/.my-air/seen`). */
+    val seenStore get() = board.seenStore
+
     /** Opened on first use, off the EDT: creating the file loads sqlite's native library. */
     private val index by lazy { SessionIndex(structure.file.parent.resolve("search.db")) }
 

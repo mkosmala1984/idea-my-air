@@ -1,28 +1,25 @@
 package dev.myair.dashboard
 
-import com.intellij.ide.impl.ProjectUtil
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.impl.EditorHistoryManager
 import com.intellij.openapi.fileTypes.FileTypes
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vfs.DeprecatedVirtualFileSystem
 import com.intellij.openapi.vfs.NonPhysicalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.testFramework.LightVirtualFile
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.tabs.SingleTabFile
+import dev.myair.tabs.openSingleTab
 
 /** The dashboard's tab; one per IDE ([DashboardFiles.file]), and a [LightVirtualFile] compares by identity. */
-class DashboardVirtualFile : LightVirtualFile("Sessions", FileTypes.PLAIN_TEXT, ""), EditorHistoryManager.OptionallyIncluded {
+class DashboardVirtualFile : LightVirtualFile("Sessions", FileTypes.PLAIN_TEXT, ""), EditorHistoryManager.OptionallyIncluded, SingleTabFile {
     init {
         isWritable = false
     }
@@ -76,19 +73,6 @@ class OpenDashboardAction : AnAction(), DumbAware {
         e.presentation.isEnabled = e.project != null
     }
 
-    override fun actionPerformed(e: AnActionEvent) {
-        val file = DashboardFiles.getInstance().file
-        val holder = ProjectManager.getInstance().openProjects.firstOrNull { FileEditorManager.getInstance(it).isFileOpen(file) }
-        if (holder != null) ProjectUtil.focusProjectWindow(holder, true)
-        FileEditorManager.getInstance(holder ?: checkNotNull(e.project)).openFile(file, true)
-    }
+    override fun actionPerformed(e: AnActionEvent) = openSingleTab(DashboardFiles.getInstance().file, e.project)
 }
 
-/** Closes a dashboard tab opened, or restored, in a window while another window already shows it. */
-class DashboardSingleTab(private val project: Project) : FileEditorManagerListener {
-    override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-        if (file !is DashboardVirtualFile) return
-        val elsewhere = ProjectManager.getInstance().openProjects.any { it != project && !it.isDisposed && FileEditorManager.getInstance(it).isFileOpen(file) }
-        if (elsewhere) ApplicationManager.getApplication().invokeLater({ source.closeFile(file) }, project.disposed)
-    }
-}

@@ -25,14 +25,15 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toKotlinDuration
 
-enum class RunState { STARTING, STARTED, FAILED, SKIPPED }
+/** [RAN]: the run wrote its first message, so it got going; what it did is its session's to show. */
+enum class RunState { STARTING, STARTED, RAN, FAILED, SKIPPED }
 
 /** How long a run may go without its first message before it counts as failed. */
 val START_DEADLINE: Duration = 5.minutes
 private val KEPT: Duration = 90.days
 
 /**
- * One run of task [taskId] at [slot] (a [manual] one: when Run now was pressed), by the IDE of pid [ide], as session
+ * One run of task [taskId] at [slot] (a [manual] one: when Run now was pressed), by the IDE of pid [ide] started at [ideStart], as session
  * [session]. [error] says why it [RunState.FAILED] or was [RunState.SKIPPED]; [notified]: the user was told of the failure.
  */
 data class RunRecord(
@@ -40,6 +41,7 @@ data class RunRecord(
     val slot: Instant,
     val manual: Boolean,
     val ide: Long,
+    val ideStart: Instant,
     val session: String,
     val state: RunState,
     val error: String?,
@@ -103,9 +105,19 @@ class RunRecords(val dir: Path, private val zone: ZoneId) {
 
     private fun taskDirs(): List<Path> = if (dir.exists()) dir.listDirectoryEntries().filter { it.isDirectory() } else emptyList()
 
+    /** The record files the last reads could not parse, with why; they are left out of what the reads return. */
+    private val unreadable = java.util.concurrent.ConcurrentHashMap<Path, String>()
+
+    fun broken(): Map<Path, String> = unreadable.toMap()
+
     private fun read(taskDir: Path): List<RunRecord> =
         if (!taskDir.exists()) emptyList()
-        else taskDir.listDirectoryEntries("*.json").map { parseRecord(it.readText()) }.sortedByDescending { it.startedAt }
+        else taskDir.listDirectoryEntries("*.json").mapNotNull { file ->
+            runCatching { parseRecord(file.readText()) }
+                .onSuccess { unreadable.remove(file) }
+                .onFailure { unreadable[file] = it.message ?: it.javaClass.name }
+                .getOrNull()
+        }.sortedByDescending { it.startedAt }
 
     companion object {
         private val SLOT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH-mm")
@@ -114,13 +126,14 @@ class RunRecords(val dir: Path, private val zone: ZoneId) {
     }
 }
 
-private val RECORD_KEYS = setOf("taskId", "slot", "manual", "ide", "session", "state", "error", "notified", "startedAt")
+private val RECORD_KEYS = setOf("taskId", "slot", "manual", "ide", "ideStart", "session", "state", "error", "notified", "startedAt")
 
 private fun recordJson(r: RunRecord): String = GsonBuilder().setPrettyPrinting().create().toJson(JsonObject().apply {
     addProperty("taskId", r.taskId)
     addProperty("slot", r.slot.toString())
     addProperty("manual", r.manual)
     addProperty("ide", r.ide)
+    addProperty("ideStart", r.ideStart.toString())
     addProperty("session", r.session)
     addProperty("state", r.state.name)
     r.error?.let { addProperty("error", it) }
@@ -132,18 +145,35 @@ private fun parseRecord(text: String): RunRecord {
     val o = JsonParser.parseString(text).asJsonObject
     check(RECORD_KEYS.containsAll(o.keySet())) { "unexpected keys in a run record: ${o.keySet() - RECORD_KEYS}" }
     return RunRecord(
-        o["taskId"].asString, Instant.parse(o["slot"].asString), o["manual"].asBoolean, o["ide"].asLong, o["session"].asString,
+        o["taskId"].asString, Instant.parse(o["slot"].asString), o["manual"].asBoolean, o["ide"].asLong, Instant.parse(o["ideStart"].asString), o["session"].asString,
         RunState.valueOf(o["state"].asString), o["error"]?.asString, o["notified"].asBoolean, Instant.parse(o["startedAt"].asString),
     )
 }
 
-/** A run left by an IDE that is gone before its session wrote a transcript: nobody will see it start. */
-fun orphaned(record: RunRecord, ideAlive: Boolean, hasTranscript: Boolean): Boolean =
-    record.state in setOf(RunState.STARTING, RunState.STARTED) && !ideAlive && !hasTranscript
+/** What a check makes of a run not settled yet: it [Ran], or it [Failed] (its process to be [Failed.close]d). */
+sealed interface Verdict {
+    data object Ran : Verdict
+    data class Failed(val reason: String, val close: Boolean) : Verdict
+}
 
-/** A started run with no first message [START_DEADLINE] after its start, probably stuck on a question no view shows. */
-fun startTimedOut(record: RunRecord, now: Instant, hasTranscript: Boolean): Boolean =
-    record.state == RunState.STARTED && !hasTranscript && java.time.Duration.between(record.startedAt, now).toKotlinDuration() >= START_DEADLINE
+/**
+ * What [record] has come to at [now], seen by an IDE that wrote it ([own]) or not; [ideAlive]: the IDE that wrote it
+ * runs; [hasTranscript]: its session wrote its first message; [processRuns]: this IDE still runs its process. Null: no
+ * change. A start runs on the EDT in one go, so an own run still starting was cut short by an exception.
+ */
+fun verdict(record: RunRecord, own: Boolean, ideAlive: Boolean, hasTranscript: Boolean, processRuns: Boolean, now: Instant): Verdict? = when {
+    record.state != RunState.STARTING && record.state != RunState.STARTED -> null
+    record.state == RunState.STARTED && hasTranscript -> Verdict.Ran
+    own && record.state == RunState.STARTING -> Verdict.Failed("the start did not finish", close = false)
+    own && !processRuns -> Verdict.Failed("claude ended before its first message", close = false)
+    own && java.time.Duration.between(record.startedAt, now).toKotlinDuration() >= START_DEADLINE ->
+        Verdict.Failed("no first message within 5 minutes", close = true)
+    !own && !ideAlive -> Verdict.Failed("the IDE running it ended", close = false)
+    else -> null
+}
+
+/** Whether the process [pid] started at [start] still runs: a pid alone may since belong to another process. */
+fun ideAlive(pid: Long, start: Instant): Boolean = ProcessHandle.of(pid).flatMap { it.info().startInstant() }.orElse(null) == start
 
 /** A previous run in [status] that the next slot must not overlap. */
 fun blocksNext(status: SessionStatus?): Boolean = status == SessionStatus.WORKING || status == SessionStatus.NEEDS_INPUT

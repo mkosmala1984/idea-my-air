@@ -12,6 +12,7 @@ another IDE or the taskbar app asks.
 - `SessionHosts` (`SessionHosts.kt`): `findTab(sessionId): SessionTab?`, `openTabs(): List<OpenTab>`,
   `visibleSessions()`, `focus(tab)`, `allowForeground(pid)`, `hostWindow(pid, cwd): HostWindow?`, `bringToFront(window)`.
 - Data: `SessionTab(project, file)`, `HostWindow(pid, executable, title, hwnd)`.
+- `SingleTab.kt`: `SingleTabFile` (a tab the IDE holds once: the dashboard, the scheduled tasks), `openSingleTab(file, project)`, `SingleTabListener` (registered in `plugin.xml`, closes a second one).
 - `TabsSync` (`TabsSync.kt`, `@Service(APP)`, `getInstance()`): `publish()`, `allIdes()`, `isSelf(ide)`,
   `focusElsewhere(sessionId): Boolean`, `focusIn(ide, sessionId)`.
 - Registered in `plugin.xml`: `TabsSyncStartup` (`postStartupActivity`), `TabsSyncListener`

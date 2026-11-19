@@ -45,6 +45,7 @@ fun runText(record: RunRecord, now: ZonedDateTime): String = when (record.state)
     RunState.SKIPPED -> "skipped: ${record.error}"
     RunState.STARTING -> "starting ${at(record.startedAt, now)}"
     RunState.STARTED -> "started ${at(record.startedAt, now)}"
+    RunState.RAN -> "ran ${at(record.startedAt, now)}"
 }
 
 private fun at(instant: Instant, now: ZonedDateTime) = WHEN.format(instant.atZone(now.zone))

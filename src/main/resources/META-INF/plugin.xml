@@ -49,8 +49,7 @@
 
   <projectListeners>
     <listener class="dev.myair.tabs.TabsSyncListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
-    <listener class="dev.myair.dashboard.DashboardSingleTab" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
-    <listener class="dev.myair.schedule.ui.ScheduledTasksSingleTab" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    <listener class="dev.myair.tabs.SingleTabListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
   </projectListeners>
 
   <actions>

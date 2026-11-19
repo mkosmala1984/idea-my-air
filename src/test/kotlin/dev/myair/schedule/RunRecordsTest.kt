@@ -11,8 +11,10 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import kotlin.io.path.exists
+import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RunRecordsTest {
@@ -21,7 +23,7 @@ class RunRecordsTest {
 
     private val zone = ZoneId.of("Europe/Warsaw")
     private val slot = Instant.parse("2026-11-16T07:00:00Z")
-    private val record = RunRecord("t1", slot, false, 42, "s1", RunState.STARTING, null, false, slot)
+    private val record = RunRecord("t1", slot, false, 42, slot, "s1", RunState.STARTING, null, false, slot)
 
     private fun records() = RunRecords(temp, zone)
 
@@ -84,21 +86,56 @@ class RunRecordsTest {
     }
 
     @Test
-    fun `a run is orphaned when its IDE is gone before a transcript exists`() {
-        assertTrue(orphaned(record, ideAlive = false, hasTranscript = false))
-        assertTrue(orphaned(record.copy(state = RunState.STARTED), ideAlive = false, hasTranscript = false))
-        assertFalse(orphaned(record, ideAlive = true, hasTranscript = false))
-        assertFalse(orphaned(record, ideAlive = false, hasTranscript = true))
-        assertFalse(orphaned(record.copy(state = RunState.FAILED, error = "e"), ideAlive = false, hasTranscript = false))
+    fun `this IDE fails its run left starting, which only an exception in the start leaves`() {
+        assertEquals(Verdict.Failed("the start did not finish", close = false), verdict(record, own = true, ideAlive = true, hasTranscript = false, processRuns = false, slot))
     }
 
     @Test
-    fun `a started run times out after 5 minutes without a transcript`() {
+    fun `a run that wrote its first message ran, whichever IDE sees it, also after its IDE ended`() {
         val started = record.copy(state = RunState.STARTED)
-        assertFalse(startTimedOut(started, slot.plusSeconds(299), hasTranscript = false))
-        assertTrue(startTimedOut(started, slot.plusSeconds(300), hasTranscript = false))
-        assertFalse(startTimedOut(started, slot.plusSeconds(3000), hasTranscript = true))
-        assertFalse(startTimedOut(record, slot.plusSeconds(3000), hasTranscript = false))
+        assertEquals(Verdict.Ran, verdict(started, own = true, ideAlive = true, hasTranscript = true, processRuns = true, slot))
+        assertEquals(Verdict.Ran, verdict(started, own = false, ideAlive = false, hasTranscript = true, processRuns = false, slot))
+    }
+
+    @Test
+    fun `a run of an IDE gone fails before its first message, one of a live IDE is left to it`() {
+        val gone = Verdict.Failed("the IDE running it ended", close = false)
+        assertEquals(gone, verdict(record, own = false, ideAlive = false, hasTranscript = false, processRuns = false, slot))
+        assertEquals(gone, verdict(record.copy(state = RunState.STARTED), own = false, ideAlive = false, hasTranscript = false, processRuns = false, slot))
+        assertNull(verdict(record.copy(state = RunState.STARTED), own = false, ideAlive = true, hasTranscript = false, processRuns = false, slot))
+    }
+
+    @Test
+    fun `this IDE fails its run whose process ended before the first message or that waited 5 minutes for it`() {
+        val started = record.copy(state = RunState.STARTED)
+        assertEquals(Verdict.Failed("claude ended before its first message", close = false), verdict(started, own = true, ideAlive = true, hasTranscript = false, processRuns = false, slot))
+        assertNull(verdict(started, own = true, ideAlive = true, hasTranscript = false, processRuns = true, slot.plusSeconds(299)))
+        assertEquals(Verdict.Failed("no first message within 5 minutes", close = true), verdict(started, own = true, ideAlive = true, hasTranscript = false, processRuns = true, slot.plusSeconds(300)))
+    }
+
+    @Test
+    fun `a finished run is left alone`() {
+        for (state in listOf(RunState.RAN, RunState.FAILED, RunState.SKIPPED)) {
+            val done = record.copy(state = state, error = if (state == RunState.RAN) null else "e")
+            assertNull(verdict(done, own = false, ideAlive = false, hasTranscript = false, processRuns = false, slot.plusSeconds(3600)))
+        }
+    }
+
+    @Test
+    fun `an IDE is alive only while a process with its pid and its start runs`() {
+        val me = ProcessHandle.current()
+        val started = me.info().startInstant().get()
+        assertTrue(ideAlive(me.pid(), started))
+        assertFalse(ideAlive(me.pid(), started.minusSeconds(1)))
+    }
+
+    @Test
+    fun `an unreadable record is skipped and named, not thrown`() {
+        records().claim(record)
+        temp.resolve("t1/2026-11-17T08-00.json").writeText("{\"taskId\": \"t1\", \"color\": 1}")
+        val r = records()
+        assertEquals(listOf(record), r.all())
+        assertEquals(listOf("t1/2026-11-17T08-00.json"), r.broken().keys.map { temp.relativize(it).toString().replace('\\', '/') })
     }
 
     @Test

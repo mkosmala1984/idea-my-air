@@ -47,6 +47,9 @@ class ScheduledTasksEditor(private val project: Project, private val file: Sched
     private val scroll = JBScrollPane().apply { border = JBUI.Borders.empty() }
     private val timer = Timer(30_000) { reload() }
 
+    /** The tasks whose runs the user opened, kept across rebuilds. */
+    private val expanded = HashSet<String>()
+
     /** What the tab shows: the tasks or why the file cannot be read, and each task's runs, newest first. */
     private data class View(val tasks: Result<List<ScheduledTask>>, val runs: Map<String, List<RunRecord>>)
 
@@ -60,7 +63,7 @@ class ScheduledTasksEditor(private val project: Project, private val file: Sched
         ApplicationManager.getApplication().executeOnPooledThread {
             val tasks = store.read()
             val view = View(tasks, tasks.getOrNull().orEmpty().associate { it.id to RunRecords.INSTANCE.of(it.id) })
-            ApplicationManager.getApplication().invokeLater({ show(view) }, ModalityState.any()) { project.isDisposed }
+            ApplicationManager.getApplication().invokeLater({ show(view) }, ModalityState.any()) { disposed }
         }
     }
 
@@ -103,10 +106,14 @@ class ScheduledTasksEditor(private val project: Project, private val file: Sched
                             link(session.title) { ClaudeSessionOpener.open(project, session) }
                         }
                     }
+                }.apply {
+                    expanded = task.id in this@ScheduledTasksEditor.expanded
+                    addExpandedListener { if (it) this@ScheduledTasksEditor.expanded.add(task.id) else this@ScheduledTasksEditor.expanded.remove(task.id) }
                 }
             }
         }.apply { border = JBUI.Borders.empty(12, 16) })
-        scroll.verticalScrollBar.value = position
+        // After the new view is laid out, or the bar would clamp to the old one.
+        ApplicationManager.getApplication().invokeLater({ scroll.verticalScrollBar.value = position }, ModalityState.any())
     }
 
     private fun runNow(task: ScheduledTask) {
@@ -152,5 +159,10 @@ class ScheduledTasksEditor(private val project: Project, private val file: Sched
     override fun isValid() = true
     override fun addPropertyChangeListener(listener: PropertyChangeListener) {}
     override fun removePropertyChangeListener(listener: PropertyChangeListener) {}
-    override fun dispose() = timer.stop()
+    private var disposed = false
+
+    override fun dispose() {
+        disposed = true
+        timer.stop()
+    }
 }
