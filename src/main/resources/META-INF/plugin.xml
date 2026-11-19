@@ -35,6 +35,7 @@
     <editorTabTitleProvider implementation="dev.myair.editor.ClaudeSessionTabTitleProvider"/>
     <editorTabColorProvider implementation="dev.myair.editor.ClaudeSessionTabColorProvider"/>
     <postStartupActivity implementation="dev.myair.tabs.TabsSyncStartup"/>
+    <postStartupActivity implementation="dev.myair.review.ReviewServiceStartup"/>
     <editorEmptyStateComponentProvider implementation="dev.myair.prompt.PromptEmptyState"/>
     <notificationGroup id="My Air" displayType="BALLOON"/>
   </extensions>

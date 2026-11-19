@@ -264,6 +264,8 @@ class ReviewFiles(val root: Path) {
         }
     }
 
+    fun read(folderId: String): BranchReview = file(folderId).let { parseReview(it.readText(), it) }
+
     fun write(folderId: String, review: BranchReview) {
         file(folderId).parent.createDirectories()
         writeAtomically(file(folderId), review.toJson())

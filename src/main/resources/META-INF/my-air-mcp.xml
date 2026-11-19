@@ -2,5 +2,6 @@
   <extensions defaultExtensionNs="com.intellij.mcpServer">
     <mcpToolset implementation="dev.myair.mcp.FoldersMcpToolset"/>
     <mcpToolset implementation="dev.myair.mcp.BriefMcpToolset"/>
+    <mcpToolset implementation="dev.myair.mcp.ReviewMcpToolset"/>
   </extensions>
 </idea-plugin>

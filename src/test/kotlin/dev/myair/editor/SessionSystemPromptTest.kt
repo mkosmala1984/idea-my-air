@@ -7,6 +7,7 @@ import dev.myair.folders.EvalKind
 import dev.myair.folders.Plan
 import dev.myair.folders.SessionFolders
 import dev.myair.mcp.FoldersMcpToolset
+import dev.myair.mcp.ReviewMcpToolset
 import java.nio.file.Path
 import java.time.Instant
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -38,8 +39,12 @@ class SessionSystemPromptTest {
 
     @Test
     fun `both prompts name every folder tool`() {
-        val tools = FoldersMcpToolset::class.java.declaredMethods.filter { it.isAnnotationPresent(McpTool::class.java) }.map { it.name }.toSet()
-        assertEquals(setOf("my_air_sessions_find", "my_air_session_start", "my_air_folders_get", "my_air_folders_apply", "my_air_plan_get", "my_air_plan_apply", "my_air_plan_set_manager", "my_air_history_list", "my_air_history_restore"), tools)
+        fun toolsOf(toolset: Class<*>) = toolset.declaredMethods.filter { it.isAnnotationPresent(McpTool::class.java) }.map { it.name }.toSet()
+        val folderTools = toolsOf(FoldersMcpToolset::class.java)
+        assertEquals(setOf("my_air_sessions_find", "my_air_session_start", "my_air_folders_get", "my_air_folders_apply", "my_air_plan_get", "my_air_plan_apply", "my_air_plan_set_manager", "my_air_history_list", "my_air_history_restore"), folderTools)
+        val reviewTools = toolsOf(ReviewMcpToolset::class.java)
+        assertEquals(setOf("my_air_review_get", "my_air_review_apply", "my_air_review_report"), reviewTools)
+        val tools = folderTools + reviewTools
         settings.forEach { (briefs, filing) -> tools.forEach { assertTrue(it in appendedSystemPrompt(briefs, filing), it) } }
     }
 

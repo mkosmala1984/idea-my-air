@@ -291,15 +291,15 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
   - `fun reviewJson(path: String, review: BranchReview, git: ReviewGit?, liveJobs: Set<String>): String` (R15: derived `maybe_fixed` and run `status`)
   - MCP: `my_air_review_get(folder)`, `my_air_review_apply(folder, changes)`, `my_air_review_report(folder, run, commit, findings, questions)`; `folder` is a folder path; a folder that is no review throws `no review folder at '<path>'`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 @Test fun `review json carries maybe fixed and run status`()
 @Test fun `both prompts name every folder tool`()   // existing test extended: ReviewMcpToolset's tools too
 ```
 
-- [ ] **Step 2: Run** → FAIL. **Step 3: Implement**; descriptions of the three tools list every op and field, as `my_air_plan_apply`'s does. **Step 4:** PASS, full tests PASS, `./gradlew buildPlugin` PASS.
-- [ ] **Step 5: Commit** `ReviewService and the review MCP tools`.
+- [x] **Step 2: Run** → FAIL. **Step 3: Implement**; descriptions of the three tools list every op and field, as `my_air_plan_apply`'s does. **Step 4:** PASS, full tests PASS, `./gradlew buildPlugin` PASS.
+- [x] **Step 5: Commit** `ReviewService and the review MCP tools`.
 
 ---
 
