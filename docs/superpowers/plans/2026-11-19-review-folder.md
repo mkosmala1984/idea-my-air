@@ -261,7 +261,7 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 - Consumes: `folders.Plan`, `folders.Review`/`Blocker`/`ReviewStatus`, `PlanChanges.apply(structure, folderId, changes, today)`.
 - Produces: `data class Mirror(val changes: String, val blockers: Map<String, String>)`; `fun mirrorToPlan(review: BranchReview, plan: Plan, liveJobs: Set<String>): Mirror?` — null when nothing would change. Changes JSON for `PlanChanges`: one `set_review` (status per R31, commit = `reviewedCommit`), `add_blocker` for a blocker finding without a mapped id or whose mapped id is missing from the plan, `update` (`text`, `resolved`) for mapped ones. Since `add_blocker` returns no id, `blockers` maps new ones by predicting `B<plan.next["B"] ?: 1>` in order; a test pins that against `PlanChanges`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 @Test fun `a blocker finding becomes a plan blocker and its id is recorded`()      // apply changes with PlanChanges; plan has B1 with text "F1 a.kt:3 race"
@@ -272,8 +272,8 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 @Test fun `nothing to change gives no mirror`()
 ```
 
-- [ ] **Step 2–4:** FAIL, implement, PASS, full tests PASS.
-- [ ] **Step 5: Commit** `Review blockers mirrored into the linked plan`.
+- [x] **Step 2–4:** FAIL, implement, PASS, full tests PASS.
+- [x] **Step 5: Commit** `Review blockers mirrored into the linked plan`.
 
 ---
 
