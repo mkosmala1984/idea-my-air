@@ -13,15 +13,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ReviewJsonTest {
-    private fun run(id: String, job: String?, reported: String? = null, commit: String? = null) =
-        Run(id, "a", null, job, "main..HEAD", "2026-11-19T10:00:00Z", reported, commit)
+    private fun run(id: String, job: String?, reported: String? = null, commit: String? = null, session: String? = null) =
+        Run(id, "a", session, job, "main..HEAD", "2026-11-19T10:00:00Z", reported, commit)
 
     private fun finding(id: String, line: Int, commit: String, severity: Severity = Severity.minor) =
         Finding(id, "a.kt", "bug", listOf(Report("W1", "a", commit, line, severity, "s", "x")))
 
     private val review = BranchReview(
         "b", "main", Path.of("E:/d"), 7, null, null, "sum", emptyList(),
-        listOf(run("W1", "j1", "2026-11-19T10:05:00Z", "c1"), run("W2", "j2"), run("W3", "j3"), run("W4", null)),
+        listOf(run("W1", "j1", "2026-11-19T10:05:00Z", "c1"), run("W2", "j2", session = "s2"), run("W3", "j3", session = "s3"), run("W4", "j4")),
         listOf(finding("F1", 10, "c1", Severity.blocker), finding("F2", 40, "c1"), finding("F3", 10, "gone")),
         emptyList(), mapOf("F" to 4, "W" to 5), mapOf("F1" to "B1"),
     )

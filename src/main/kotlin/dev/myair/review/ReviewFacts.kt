@@ -8,10 +8,14 @@ import dev.myair.store.Severity
 
 enum class RunStatus { running, reported, failed }
 
-/** A run without a job is starting (`claude --bg` ignores `--session-id`, so a run is recorded before its job exists). */
+/**
+ * A run is starting until its session is learned from the registry: `claude --bg` ignores `--session-id`, so a run is
+ * recorded before its job exists, and the registry skips a starting `claude`'s entry. It fails only once its session was
+ * seen and its job is no longer live without a report.
+ */
 fun runStatus(run: Run, liveJobs: Set<String>): RunStatus = when {
     run.reported != null -> RunStatus.reported
-    run.job == null || run.job in liveJobs -> RunStatus.running
+    run.session == null || run.job in liveJobs -> RunStatus.running
     else -> RunStatus.failed
 }
 

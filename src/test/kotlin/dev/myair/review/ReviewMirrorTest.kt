@@ -73,8 +73,8 @@ class ReviewMirrorTest {
         fun status(runs: List<Run>) = applied(review(emptyList(), runs)).first.review!!
         assertEquals(ReviewStatus.IN_PROGRESS, status(listOf(reported, starting)).status)
         assertEquals(ReviewStatus.DONE, status(listOf(reported)).status)
-        assertEquals(ReviewStatus.DONE, status(listOf(reported, starting.copy(job = "dead"))).status)
-        assertEquals(ReviewStatus.NOT_DONE, status(listOf(starting.copy(job = "dead"))).status)
+        assertEquals(ReviewStatus.DONE, status(listOf(reported, starting.copy(job = "dead", session = "s"))).status)
+        assertEquals(ReviewStatus.NOT_DONE, status(listOf(starting.copy(job = "dead", session = "s"))).status)
         assertNull(status(listOf(starting.copy(job = "dead"))).commit)
     }
 

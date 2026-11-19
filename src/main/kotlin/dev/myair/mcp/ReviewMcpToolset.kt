@@ -7,7 +7,6 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.openapi.application.EDT
 import dev.myair.review.ReviewChanges
 import dev.myair.review.ReviewService
-import dev.myair.review.jobSessions
 import dev.myair.review.reviewJson
 import dev.myair.service.ClaudeSessionsService
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +38,7 @@ class ReviewMcpToolset : McpToolset {
             "read, else null; head, since_reviewed and maybe_fixed are then empty).",
     )
     suspend fun my_air_review_get(@McpDescription("The review folder's path, names joined by /, such as rtm/Review: feature-x.") folder: String): String =
-        withReview(folder) { service, id -> reviewJson(folder, service.review(id), service.facts[id], liveJobs()) }
+        withReview(folder) { service, id -> reviewJson(folder, service.review(id), service.facts[id], service.liveJobs) }
 
     @McpTool
     @McpDescription(
@@ -60,7 +59,7 @@ class ReviewMcpToolset : McpToolset {
         @McpDescription("The review folder's path, as for my_air_review_get.") folder: String,
         @McpDescription("The JSON array of changes.") changes: String,
     ): String = withReview(folder) { service, id ->
-        reviewJson(folder, service.update(id) { ReviewChanges.apply(it, changes) }, service.facts[id], liveJobs())
+        reviewJson(folder, service.update(id) { ReviewChanges.apply(it, changes) }, service.facts[id], service.liveJobs)
     }
 
     @McpTool
@@ -88,8 +87,6 @@ class ReviewMcpToolset : McpToolset {
         val reported = review.findings.count { f -> f.reports.any { it.run == run } }
         "ok, run $run recorded: $reported findings, ${review.questions.count { it.run == run }} questions"
     }
-
-    private fun liveJobs() = jobSessions(ClaudeSessionsService.getInstance().live).keys
 
     /**
      * Runs [block] on the EDT with the review folder at [path]; a folder that is no review, an unreadable review or an

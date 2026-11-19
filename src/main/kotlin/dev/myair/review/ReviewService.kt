@@ -81,6 +81,9 @@ class ReviewService : Disposable {
     /** By folder id, only folders in the structure; a `review.json` that cannot be read is a failure. */
     val reviews get() = inStructure(all, sessions.folders)
 
+    /** The jobs of the registry's live entries, which [runStatus] and the mirror read. */
+    val liveJobs: Set<String> get() = jobSessions(sessions.live).keys
+
     /** By folder id, of the reviews read without failure. */
     var facts: Map<String, ReviewGit> = emptyMap()
         private set
@@ -159,39 +162,40 @@ class ReviewService : Disposable {
         val jobs = jobSessions(sessions.live)
         val due = reviews.filter { (_, result) ->
             val review = result.getOrNull() ?: return@filter false
-            review.runs.any { it.session == null && it.job in jobs } || mirrorDue(review, sessions.folders, jobs.keys) != null
+            review.runs.any { it.session == null && it.job in jobs } || mirrorDue(review, sessions.folders, liveJobs) != null
         }
         due.keys.forEach { id -> change(id) { learnSessions(it, jobs) } }
     }
 
     /**
      * Applies [op] to the review on disk; when the review changed, sessions were learned or its plan does not follow,
-     * files the sessions in the review folder and applies the mirror (computed against the plan on disk, so the blocker
-     * ids it predicts are the ones given) in one folders write, then writes the review with the mirror's blocker ids.
+     * writes the review with the mirror's blocker ids first, so the plan never holds a blocker the review does not map
+     * (a blocker id the plan lacks is added again by the next mirror), then files the sessions in the review folder and
+     * applies the mirror in one folders write.
      */
     private fun change(folderId: String, op: (BranchReview) -> Pair<BranchReview, List<String>>): BranchReview {
         ThreadingAssertions.assertEventDispatchThread()
         val before = files.read(folderId)
         val (review, filed) = op(before)
-        val liveJobs = jobSessions(sessions.live).keys
-        val foldersDue = filed.isNotEmpty() || mirrorDue(review, sessions.folders, liveJobs) != null
-        if (review == before && !foldersDue) return before
-        var stored = review
-        if (foldersDue) {
-            sessions.updateFolders(ChangeSource.AUTO) { structure ->
-                val assigned = filed.fold(structure) { s, session -> s.assign(session, folderId) }
-                val mirror = mirrorDue(review, assigned, liveJobs) ?: return@updateFolders assigned
-                stored = review.copy(blockers = mirror.blockers)
-                PlanChanges.apply(assigned, checkNotNull(review.plan), mirror.changes, LocalDate.now()).also { after ->
-                    // A mirror that does not converge would rewrite the plan on every notification.
-                    check(mirrorDue(stored, after, liveJobs) == null) { "the mirror of review $folderId does not converge: ${mirror.changes}" }
-                }
-            }
-        }
+        val jobs = liveJobs
+        val mirror = mirrorDue(review, sessions.folders, jobs)
+        if (review == before && filed.isEmpty() && mirror == null) return before
+        val stored = mirror?.let { review.copy(blockers = it.blockers) } ?: review
         if (stored != before) files.write(folderId, stored)
         // Drops a read started before this write, which would land the review as it was.
         requested++
         all = all + (folderId to Result.success(stored))
+        if (filed.isNotEmpty() || mirror != null) {
+            sessions.updateFolders(ChangeSource.AUTO) { structure ->
+                val assigned = filed.fold(structure) { s, session -> s.assign(session, folderId) }
+                if (mirror == null) assigned
+                else PlanChanges.apply(assigned, checkNotNull(review.plan), mirror.changes, LocalDate.now()).also { after ->
+                    // Also catches a plan another IDE changed since this one read it, where the predicted ids are wrong;
+                    // a mirror that does not converge would rewrite the plan on every notification.
+                    check(mirrorDue(stored, after, jobs) == null) { "the mirror of review $folderId does not converge: ${mirror.changes}" }
+                }
+            }
+        }
         changed()
         return stored
     }

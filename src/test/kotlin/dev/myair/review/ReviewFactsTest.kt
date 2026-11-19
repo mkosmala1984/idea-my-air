@@ -13,7 +13,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ReviewFactsTest {
-    private fun run(id: String, reviewer: String = "a", job: String? = "j", reported: String? = null) = Run(id, reviewer, null, job, "main..HEAD", "2026-11-19T10:00:00Z", reported)
+    private fun run(id: String, reviewer: String = "a", job: String? = "j", reported: String? = null, session: String? = null) = Run(id, reviewer, session, job, "main..HEAD", "2026-11-19T10:00:00Z", reported)
 
     private fun finding(id: String, state: FindingState = FindingState.open, severity: Severity = Severity.minor, reviewer: String = "a", line: Int = 11, commit: String = "c1", run: String = "W1") =
         Finding(id, "a.kt", "bug", listOf(Report(run, reviewer, commit, line, severity, "s", "x")), state, "r", "f", "c")
@@ -25,7 +25,9 @@ class ReviewFactsTest {
         assertEquals(RunStatus.running, runStatus(run("W1"), setOf("j")))
         assertEquals(RunStatus.running, runStatus(run("W1", job = null), emptySet()))
         assertEquals(RunStatus.reported, runStatus(run("W1", reported = "2026-11-19T11:00:00Z"), emptySet()))
-        assertEquals(RunStatus.failed, runStatus(run("W1"), emptySet()))
+        assertEquals(RunStatus.running, runStatus(run("W1"), emptySet()), "a job the registry has not listed yet is starting")
+        assertEquals(RunStatus.running, runStatus(run("W1", session = "s"), setOf("j")))
+        assertEquals(RunStatus.failed, runStatus(run("W1", session = "s"), emptySet()))
     }
 
     @Test fun `a finding is maybe fixed when a changed range comes within three lines`() {
