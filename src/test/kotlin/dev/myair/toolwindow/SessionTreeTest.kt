@@ -11,6 +11,11 @@ import dev.myair.claude.TaskStatus
 import dev.myair.folders.Folder
 import dev.myair.folders.Plan
 import dev.myair.folders.SessionFolders
+import dev.myair.store.BranchReview
+import dev.myair.store.Finding
+import dev.myair.store.FindingState
+import dev.myair.store.Report
+import dev.myair.store.Severity
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import java.time.Instant
@@ -463,5 +468,22 @@ class SessionTreeTest {
     fun `a worktree holds the sessions under it as text, as a bound folder does, so another case is another directory`() {
         val upper = listOf(inApp("a3", Path.of("/APP/.claude/worktrees/x"), 3))
         assertEquals("recent(a3), app(worktrees app(worktree $wY, worktree $appX), a3), sessions", shape(foldersTree(app, upper, NO_BRANCH, appWorktrees, null)))
+    }
+
+    @Test
+    fun `a review folder shows its standing blockers, a folder that is no review none`() {
+        fun finding(id: String, severity: Severity, state: FindingState) =
+            Finding(id, "a.kt", "bug", listOf(Report("W1", "a", "c1", 1, severity, "s", "x")), state, "r", "f", "c")
+        val review = BranchReview(
+            "b", "main", Path.of("E:/d"), null, null, null, null, emptyList(), emptyList(),
+            listOf(finding("F1", Severity.blocker, FindingState.open), finding("F2", Severity.blocker, FindingState.accepted), finding("F3", Severity.blocker, FindingState.rejected), finding("F4", Severity.minor, FindingState.open)),
+            emptyList(), emptyMap(),
+        )
+        val reviews = mapOf("rev" to Result.success(review), "bad" to Result.failure(IllegalStateException("x")))
+        assertEquals(2, reviewBlockers(Folder("rev", "Review"), reviews))
+        assertEquals(0, reviewBlockers(Folder("bad", "Review"), reviews))
+        assertNull(reviewBlockers(Folder("other", "Folder"), reviews))
+        val root = foldersTree(SessionFolders(listOf(Folder("rev", "Review"))), emptyList(), NO_BRANCH, NO_WORKTREES, null)
+        assertEquals(FolderSummary(0, null, 2), folderSummary(find(root, "rev"), { reviewBlockers(it, reviews) ?: 0 }) { null })
     }
 }

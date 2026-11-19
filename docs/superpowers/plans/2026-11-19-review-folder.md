@@ -22,7 +22,7 @@
 | 8 | done | `5463c99` |
 | 9 | done | `c2b8c5f` |
 | 10 | done | `5b09d1b` |
-| 11 | | |
+| 11 | in progress | |
 
 **Goal:** a Review folder kind with its own editor tab, reviewers run as `claude --bg` jobs reporting through MCP, findings merged and triaged, blockers mirrored into a linked plan.
 
@@ -397,10 +397,10 @@ Panel behaviour, card by card (each folds; edits only from menus; rebuild only t
 **Files:**
 - Modify: `src/main/kotlin/dev/myair/toolwindow/SessionTree.kt` and its renderer (review icon, blocker count on the right in the needs-input colour), the tree menu (Open Review), `src/main/resources/icons/review.svg` + `review_dark.svg`, `CLAUDE.md`, `src/main/kotlin/dev/myair/review/README.md`, `src/main/kotlin/dev/myair/reviewview/README.md`
 
-- [ ] **Step 1:** Review folder rows get the icon and blocker count (from `ReviewService`), their sessions (manager, reviewers, fix sessions) stay their children (they are filed there).
-- [ ] **Step 2:** `CLAUDE.md`: a paragraph on the review folder (files, service, tools, tab, profiles), package list gains `review` and `reviewview`; READMEs list the files and functions as the other packages' do.
+- [x] **Step 1:** Review folder rows get the icon and blocker count (from `ReviewService`), their sessions (manager, reviewers, fix sessions) stay their children (they are filed there).
+- [x] **Step 2:** `CLAUDE.md`: a paragraph on the review folder (files, service, tools, tab, profiles), package list gains `review` and `reviewview`; READMEs list the files and functions as the other packages' do.
 - [ ] **Step 3: Walk in `runIde`** every requirement marked `checked:` below; fill Evidence.
-- [ ] **Step 4:** `./gradlew test buildPlugin` PASS.
+- [x] **Step 4:** `./gradlew test buildPlugin` PASS.
 - [ ] **Step 5: Commit** `Review folder in the tree; docs`.
 
 ---

@@ -1,5 +1,6 @@
 package dev.myair.toolwindow
 
+import dev.myair.editor.NEEDS_INPUT_AMBER
 import com.intellij.ide.ui.UISettings
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.util.ui.GraphicsUtil
@@ -156,10 +157,17 @@ class SessionTrailer(
         val metrics = component.getFontMetrics(component.font)
         val textX = right() - metrics.stringWidth(text)
         val dot = summary.urgent?.dot
-        val x = dot?.let { textX - JBUI.scale(DOT_GAP) - it.iconWidth } ?: textX
+        val dotX = dot?.let { textX - JBUI.scale(DOT_GAP) - it.iconWidth } ?: textX
+        val blockers = if (summary.blockers > 0) "${summary.blockers} blocker${if (summary.blockers > 1) "s" else ""}" else null
+        val blockersX = blockers?.let { dotX - JBUI.scale(GAP) - metrics.stringWidth(it) }
+        val x = blockersX ?: dotX
         cover(g, row, r, x)
-        dot?.paintIcon(component, g, x, r.y + (r.height - dot.iconHeight) / 2)
         g.font = component.font
+        blockers?.let {
+            g.color = NEEDS_INPUT_AMBER
+            g.drawString(it, blockersX!!, r.y + (r.height - metrics.height) / 2 + metrics.ascent)
+        }
+        dot?.paintIcon(component, g, dotX, r.y + (r.height - dot.iconHeight) / 2)
         g.color = SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
         g.drawString(text, textX, r.y + (r.height - metrics.height) / 2 + metrics.ascent)
     }

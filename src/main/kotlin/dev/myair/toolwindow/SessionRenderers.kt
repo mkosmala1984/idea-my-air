@@ -1,5 +1,7 @@
 package dev.myair.toolwindow
 
+import dev.myair.review.ReviewService
+import dev.myair.editor.REVIEW_ICON
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.ui.ColoredTreeCellRenderer
@@ -130,6 +132,7 @@ class SessionRenderer(
             is Folder -> {
                 icon = when {
                     item.plan != null -> d.grow(AllIcons.Nodes.Target)
+                    reviewBlockers(item, ReviewService.getInstance().reviews) != null -> d.grow(REVIEW_ICON)
                     item.dirs.isNotEmpty() -> projectIcon(Path.of(item.dirs.first()), item.name, d.iconSize)
                     else -> d.grow(AllIcons.Nodes.Folder)
                 }

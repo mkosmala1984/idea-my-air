@@ -17,6 +17,10 @@ there by class name, so moving or renaming one means updating that file too.
 - `object Git`
   - `run(dir, vararg args, input, ok)` / `bytes(...)`: run `git` in `dir`. Any exit code outside `ok` (default `{0}`) throws `GitFailure` with git's stderr.
   - `mainRoot(dir)`: the main checkout's root, also from inside a linked worktree (`--git-common-dir`).
+  - `mainCheckout(dir)`: the same read from the files git keeps, so callable on the EDT.
+  - `worktrees(mainRoot): List<Worktree>`: the main checkout first, after pruning those whose directory is gone.
+  - `changedLines(root, from)`: old-side line ranges by path of `git diff -U0 <from>`; null when `from` is no commit.
+  - `commitsBetween(root, from)`: commits HEAD has and `from` lacks; null when `from` is no commit or not an ancestor of HEAD.
   - `repo(dir): GitRepo`: local and remote branches (without `<remote>/HEAD`) and the default branch.
   - `state(dir): GitState?`: the work tree against its base, with changed files since `merge-base <base> HEAD` (untracked ones included). Returns null only when no `.git` exists up the path.
   - `baseOf(root)`: the stored base for the current branch, else the default branch.

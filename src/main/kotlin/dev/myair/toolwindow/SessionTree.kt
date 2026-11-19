@@ -1,5 +1,7 @@
 package dev.myair.toolwindow
 
+import dev.myair.store.BranchReview
+import dev.myair.review.blockerCount
 import dev.myair.actions.Git
 import dev.myair.claude.BackgroundTask
 import dev.myair.claude.BriefTask
@@ -184,20 +186,24 @@ fun urgencyOf(live: LiveSession?, unread: Boolean): Urgency? = when (live?.statu
 }
 
 /** What a group row shows on its right: how many sessions it holds and the most urgent of them. */
-data class FolderSummary(val sessions: Int, val urgent: Urgency?)
+data class FolderSummary(val sessions: Int, val urgent: Urgency?, val blockers: Int = 0)
 
 /**
  * The [FolderSummary] of a group node (folder, project, worktree, recent or unfiled sessions), counting the sessions below it
  * as shown, a session under both its folder and a worktree once; null for a session and its children.
  */
-fun folderSummary(node: DefaultMutableTreeNode, urgency: (ClaudeSession) -> Urgency?): FolderSummary? = when (node.userObject) {
+fun folderSummary(node: DefaultMutableTreeNode, blockers: (Folder) -> Int = { 0 }, urgency: (ClaudeSession) -> Urgency?): FolderSummary? = when (node.userObject) {
     is ClaudeSession, is WorkDirRow, is AddedDir, is BranchRow, is BriefGroup, is BriefGoal, is BriefTaskRow, is AgentsGroup, is AgentRow, is FilesGroup, is ChangedFile -> null
     is Folder, is Path, RecentSessions, UnfiledSessions, is MilestoneRow, is PlanTaskRow, is NoTask, is WorktreesGroup, is WorktreeRow -> {
         val sessions = groupSessions(node).distinctBy { it.id }
-        FolderSummary(sessions.size, sessions.mapNotNull(urgency).minOrNull())
+        FolderSummary(sessions.size, sessions.mapNotNull(urgency).minOrNull(), (node.userObject as? Folder)?.let(blockers) ?: 0)
     }
     else -> error("Unexpected tree node ${node.userObject}")
 }
+
+/** The standing blockers of [folder]'s review ([blockerCount]); null when it is no review folder, 0 when its `review.json` cannot be read. */
+fun reviewBlockers(folder: Folder, reviews: Map<String, Result<BranchReview>>): Int? =
+    reviews[folder.id]?.let { it.getOrNull()?.let(::blockerCount) ?: 0 }
 
 /** The sessions below [node], not looking inside a session. */
 fun groupSessions(node: DefaultMutableTreeNode): List<ClaudeSession> = node.children().toList().flatMap {

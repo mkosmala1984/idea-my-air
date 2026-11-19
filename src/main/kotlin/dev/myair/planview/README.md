@@ -18,6 +18,7 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
 - `PlanPanel.kt`: `class PlanPanel(project, folderId, parent) : JPanel, Scrollable`, with `show(view)`.
 - `PlanView.kt`: `data class TaskView`, `MilestoneView`, `PlanView`, `enum Section` (`IDEAL`, `CONSTRAINTS`, `DECISIONS`, `REQUIREMENTS`, `REVIEW`), `Folding`, `fun planViewOf(structure, folderId, sessions, managerId)`, `fun statusCounts(tasks)`, `fun openWork(counts)`, `fun requirementsSummary(requirements)`, `fun reviewSummary(review)` and `fun newestFirst(decisions)`.
 - `PlanSections.kt`: `PlanPanel.sectionCard(section, plan)`, the grey card of each section with its rows and `...` menu.
+- `PanelParts.kt`, shared with the review panel: `PAGE`, `card`, `holder`, `chevron`, `greyCard`, `head`, `group`, `buttons`, `selectable`, `markdownOrArea`, `more`, `action`, `Hover` and `SelectableTitle` (all `internal`).
 - `MarkdownHtml.kt`: `data class MarkdownColors`, `fun markdownHtml(markdown, colors)`.
 - `PlanEdit.kt`:
   - `sealed interface PlanEdit`: `Title`, `Next`, `Description`, `Constraints`, `NewDecision`, `NewRequirement`, `NewBlocker`, `NewTask`, `NewMilestone`.

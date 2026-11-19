@@ -218,7 +218,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         tree.trailer = SessionTrailer(
             tree, { tree.getClosestRowForLocation(it.x, it.y) }, tree::getRowBounds,
             { (tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession },
-            { folderSummary(tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode) { s -> urgencyOf(service.live[s.id], isUnread(s)) } },
+            { folderSummary(tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode, { f -> reviewBlockers(f, ReviewService.getInstance().reviews) ?: 0 }) { s -> urgencyOf(service.live[s.id], isUnread(s)) } },
             { DefaultTreeUI.getBackground(tree, tree.getPathForRow(it), it, tree.isRowSelected(it)) ?: tree.background }, trailerButtons, ::density,
         )
         pinned.trailer = SessionTrailer(
