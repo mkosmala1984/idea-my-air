@@ -22,8 +22,12 @@ import dev.myair.store.BranchReview
 import dev.myair.store.Homes
 import dev.myair.store.ReviewFiles
 import java.time.LocalDate
+import java.nio.file.Path
 import kotlin.io.path.createDirectories
+import kotlin.io.path.exists
+import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.isDirectory
+import kotlin.io.path.readText
 
 /**
  * Git facts of a review's `dir`: its [state], [head], the commits HEAD is past the reviewed commit ([sinceReviewed], null
@@ -96,10 +100,14 @@ fun linkedPlan(review: BranchReview, structure: SessionFolders): Plan? = review.
 fun mirrorDue(review: BranchReview, structure: SessionFolders, liveJobs: Set<String>): Mirror? =
     linkedPlan(review, structure)?.let { mirrorToPlan(review, it, liveJobs) }
 
-/** Reads [review]'s git facts; any failure goes into [ReviewGit.error]. */
+/**
+ * Reads [review]'s git facts, its work tree's changes counted against the review's base; any failure goes into
+ * [ReviewGit.error], also a work tree that has another branch checked out than the review's.
+ */
 fun readGit(review: BranchReview): ReviewGit = try {
     check(review.dir.isDirectory()) { "${review.dir} does not exist" }
-    val state = checkNotNull(Git.state(review.dir)) { "${review.dir} is not in a git repository" }
+    val state = checkNotNull(Git.state(review.dir, review.base)) { "${review.dir} is not in a git repository" }
+    check(state.branch == review.branch) { "${review.dir} has ${state.branch} checked out, not ${review.branch}" }
     val head = Git.run(state.root, "rev-parse", "HEAD").trim()
     val commits = review.findings.map { it.reports.last().commit }.toSet()
     ReviewGit(state, head, reviewedCommit(review)?.let { Git.commitsBetween(state.root, it) }, commits.associateWith { Git.changedLines(state.root, it) },
@@ -110,9 +118,27 @@ fun readGit(review: BranchReview): ReviewGit = try {
 }
 
 /**
+ * What [readGit] depends on, read from files without running git: the work tree's HEAD file, the times of the ref it
+ * names (loose, else in `packed-refs`; a commit changes the ref, not HEAD), of `packed-refs` and of the index, and of
+ * `review.json`; a missing file or work tree reads as null.
+ */
+data class GitStamp(val head: String?, val ref: Long?, val packed: Long?, val index: Long?, val review: Long?)
+
+fun gitStamp(dir: Path, reviewFile: Path): GitStamp {
+    fun time(p: Path) = if (p.exists()) p.getLastModifiedTime().toMillis() else null
+    val (gitDir, common) = Git.gitDirs(dir) ?: return GitStamp(null, null, null, null, time(reviewFile))
+    val head = gitDir.resolve("HEAD").readText().trim()
+    return GitStamp(head, head.removePrefix("ref: ").takeIf { it != head }?.let { time(common.resolve(it)) }, time(common.resolve("packed-refs")), time(gitDir.resolve("index")), time(reviewFile))
+}
+
+/** The reviews of [stamps] whose git is read again: not read yet, or read at another stamp ([read]). */
+fun gitDue(stamps: Map<String, GitStamp>, read: Map<String, GitStamp>): Set<String> = stamps.filter { (id, stamp) -> read[id] != stamp }.keys
+
+/**
  * Every review of `~/.my-air/reviews`, read and written only here, so the review tabs and the MCP tools see one state.
- * [reviews], [facts] and the listeners are touched on the EDT only. Reviews and their git facts are read off the EDT on
- * every [ClaudeSessionsService] change and on file events under the reviews directory; only the latest read lands.
+ * [reviews], [facts] and the listeners are touched on the EDT only. Reviews are read off the EDT on every
+ * [ClaudeSessionsService] change and on file events under the reviews directory, and with them the git facts of the
+ * reviews an open tab watches ([watchGit]) whose [GitStamp] changed; only the latest read lands.
  */
 @Service(Service.Level.APP)
 class ReviewService : Disposable {
@@ -132,9 +158,13 @@ class ReviewService : Disposable {
     /** The jobs of the registry's live entries, which [runStatus] and the mirror read. */
     val liveJobs: Set<String> get() = jobSessions(sessions.live).keys
 
-    /** By folder id, of the reviews read without failure. */
+    /** By folder id, of the watched reviews read without failure; [stamps] says what each was read at, kept in step. */
     var facts: Map<String, ReviewGit> = emptyMap()
         private set
+    private var stamps: Map<String, GitStamp> = emptyMap()
+
+    /** The reviews an open review tab shows, once per tab. */
+    private val watched = ArrayList<String>()
 
     private val listeners = ArrayList<() -> Unit>()
 
@@ -160,6 +190,14 @@ class ReviewService : Disposable {
 
     /** The review of [folderId]; throws when it has none or it cannot be read. */
     fun review(folderId: String): BranchReview = requireNotNull(reviews[folderId]) { "folder $folderId has no review" }.getOrThrow()
+
+    /** Reads the git facts of [folderId] too until [parent] is disposed: a review tab shows them, nothing else does. */
+    fun watchGit(folderId: String, parent: Disposable) {
+        ThreadingAssertions.assertEventDispatchThread()
+        watched += folderId
+        Disposer.register(parent) { watched -= folderId }
+        refresh()
+    }
 
     /** The `review.json` of [folderId]. */
     fun file(folderId: String) = files.file(folderId)
@@ -202,16 +240,19 @@ class ReviewService : Disposable {
         refresh()
     }
 
-    /** Reads every review and its git facts off the EDT; callable from any thread. */
+    /** Reads every review, and the git facts of the watched ones whose stamp changed, off the EDT; callable from any thread. */
     fun refresh() = ApplicationManager.getApplication().invokeLater {
         val generation = ++requested
-        val ids = sessions.folders.all().map { it.id }.toSet()
+        val watching = watched.toSet() intersect sessions.folders.all().map { it.id }.toSet()
+        val (lastStamps, lastFacts) = stamps to facts
         reader.execute {
             if (generation != requested) return@execute
             // Nobody reads the Future, so an exception would vanish with it; log it as an IDE error instead.
             val (read, git) = try {
                 val read = files.readAll()
-                read to read.filterKeys { it in ids }.mapNotNull { (id, r) -> r.getOrNull()?.let { id to readGit(it) } }.toMap()
+                val now = watching.mapNotNull { id -> read[id]?.getOrNull()?.let { id to gitStamp(it.dir, files.file(id)) } }.toMap()
+                val due = gitDue(now, lastStamps)
+                read to now.mapValues { (id, stamp) -> stamp to if (id in due) readGit(read.getValue(id).getOrThrow()) else lastFacts.getValue(id) }
             } catch (e: Throwable) {
                 thisLogger().error("Review refresh failed", e)
                 return@execute
@@ -219,7 +260,8 @@ class ReviewService : Disposable {
             ApplicationManager.getApplication().invokeLater {
                 if (generation != requested) return@invokeLater
                 all = read
-                facts = git
+                facts = git.mapValues { it.value.second }
+                stamps = git.mapValues { it.value.first }
                 sync()
                 changed()
             }

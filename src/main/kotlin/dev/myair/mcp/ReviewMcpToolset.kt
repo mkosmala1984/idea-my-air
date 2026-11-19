@@ -7,7 +7,9 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.openapi.application.EDT
 import dev.myair.review.ReviewChanges
 import dev.myair.review.ReviewService
+import dev.myair.review.readGit
 import dev.myair.review.reviewJson
+import dev.myair.store.BranchReview
 import dev.myair.service.ClaudeSessionsService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -38,7 +40,7 @@ class ReviewMcpToolset : McpToolset {
             "read, else null; head, since_reviewed and maybe_fixed are then empty).",
     )
     suspend fun my_air_review_get(@McpDescription("The review folder's path, names joined by /, such as rtm/Review: feature-x.") folder: String): String =
-        withReview(folder) { service, id -> reviewJson(folder, service.review(id), service.facts[id], service.liveJobs) }
+        reviewJsonOf(folder) { service, id -> service.review(id) }
 
     @McpTool
     @McpDescription(
@@ -58,9 +60,7 @@ class ReviewMcpToolset : McpToolset {
     suspend fun my_air_review_apply(
         @McpDescription("The review folder's path, as for my_air_review_get.") folder: String,
         @McpDescription("The JSON array of changes.") changes: String,
-    ): String = withReview(folder) { service, id ->
-        reviewJson(folder, service.update(id) { ReviewChanges.apply(it, changes) }, service.facts[id], service.liveJobs)
-    }
+    ): String = reviewJsonOf(folder) { service, id -> service.update(id) { ReviewChanges.apply(it, changes) } }
 
     @McpTool
     @McpDescription(
@@ -86,6 +86,12 @@ class ReviewMcpToolset : McpToolset {
         val review = service.update(id) { ReviewChanges.report(it, run, commit, findings, questions, Instant.now()) }
         val reported = review.findings.count { f -> f.reports.any { it.run == run } }
         "ok, run $run recorded: $reported findings, ${review.questions.count { it.run == run }} questions"
+    }
+
+    /** [reviewJson] of the review [block] returns for the folder at [path], its git read now, off the EDT. */
+    private suspend fun reviewJsonOf(path: String, block: (ReviewService, String) -> BranchReview): String {
+        val (review, jobs) = withReview(path) { service, id -> block(service, id) to service.liveJobs }
+        return reviewJson(path, review, withContext(Dispatchers.IO) { readGit(review) }, jobs)
     }
 
     /**

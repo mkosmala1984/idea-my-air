@@ -1,0 +1,66 @@
+package dev.myair.review
+
+import dev.myair.actions.Git
+import dev.myair.store.BranchReview
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Path
+import kotlin.io.path.createDirectories
+import kotlin.io.path.writeText
+import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
+
+/** Runs the real `git` on PATH against a repository in a temp directory. */
+class ReviewGitTest {
+    @TempDir
+    lateinit var dir: Path
+
+    private fun git(repo: Path, vararg args: String) = Git.run(repo, "-c", "user.name=t", "-c", "user.email=t@t", *args).trim()
+
+    /** A repository with `main`, `other` (one commit off main's first) and `feature` (one file off main) checked out. */
+    private fun repo(): Path = dir.resolve("repo").createDirectories().also {
+        git(it, "init", "-b", "main")
+        git(it, "commit", "--allow-empty", "-m", "first")
+        git(it, "branch", "other")
+        git(it, "commit", "--allow-empty", "-m", "second")
+        git(it, "checkout", "-b", "feature")
+        it.resolve("a.txt").writeText("1\n")
+        git(it, "add", ".")
+        git(it, "commit", "-m", "feature")
+    }
+
+    private fun review(repo: Path, branch: String = "feature", base: String = "main") =
+        BranchReview(branch, base, repo, null, null, null, null, emptyList(), emptyList(), emptyList(), emptyList(), emptyMap())
+
+    @Test fun `a work tree with another branch checked out than the review's is an error`() {
+        val repo = repo()
+        git(repo, "checkout", "main")
+        val git = readGit(review(repo))
+        assertEquals("IllegalStateException: $repo has main checked out, not feature", git.error)
+        assertNull(git.state)
+    }
+
+    @Test fun `changes are counted against the review's base, not the branch's default`() {
+        val repo = repo()
+        assertEquals(git(repo, "rev-parse", "main"), readGit(review(repo)).state?.mergeBase)
+        val againstOther = readGit(review(repo, base = "other")).state!!
+        assertEquals(git(repo, "rev-parse", "other"), againstOther.mergeBase)
+        assertEquals("other", againstOther.base)
+    }
+
+    @Test fun `the stamp changes with a commit, which leaves HEAD's file as it was, and with review json`() {
+        val repo = repo()
+        val file = dir.resolve("review.json").also { it.writeText("{}") }
+        val before = gitStamp(repo, file)
+        Thread.sleep(20)
+        git(repo, "commit", "--allow-empty", "-m", "more")
+        val after = gitStamp(repo, file)
+        assertEquals(before.head, after.head)
+        assertNotEquals(before, after)
+        assertEquals(setOf("r"), gitDue(mapOf("r" to after), mapOf("r" to before)))
+        assertEquals(emptySet(), gitDue(mapOf("r" to after), mapOf("r" to after)))
+        assertEquals(setOf("r"), gitDue(mapOf("r" to after), emptyMap()), "a review never read is due")
+        assertEquals(GitStamp(null, null, null, null, after.review), gitStamp(dir.resolve("gone"), file))
+    }
+}

@@ -114,9 +114,14 @@ object ReviewChanges {
         }
     }
 
-    /** Merges a reviewer's [findings] and [questions] (JSON arrays; questions are strings) into [review] as the report of [run] at [commit]; nothing is recorded when any of it is invalid. */
+    /**
+     * Merges a reviewer's [findings] and [questions] (JSON arrays; questions are strings) into [review] as the report of
+     * [run] at [commit], which must be the end of the run's range; nothing is recorded when any of it is invalid.
+     */
     fun report(review: BranchReview, run: String, commit: String, findings: String, questions: String, now: Instant): BranchReview {
         val r = review.run(run)
+        val end = r.range.substringAfter("..")
+        require(commit == end) { "commit $commit is not the end of the range ${r.range} of run $run; report on $end" }
         val incoming = each(array(findings, "findings"), "finding") {
             Keys(it, "finding", SOURCE, FINDING_KEYS).run {
                 IncomingFinding(string("file"), int("line"), string("category"), enum("severity", Severity.entries.toTypedArray()), string("summary"), string("failure_scenario")).also { f ->

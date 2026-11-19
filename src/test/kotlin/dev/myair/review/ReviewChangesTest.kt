@@ -12,7 +12,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ReviewChangesTest {
-    private val run = Run("W1", "security", null, null, "main..HEAD", "2026-11-19T10:00:00Z")
+    private val run = Run("W1", "security", null, null, "main..abc1234", "2026-11-19T10:00:00Z")
     private val base = BranchReview("b", "main", Path.of("E:/d"), null, null, null, null, emptyList(), listOf(run), emptyList(), emptyList(), emptyMap())
     private val one = """[{"file":"a.kt","line":10,"category":"bug","severity":"major","summary":"s","failure_scenario":"x"}]"""
     private val now = Instant.parse("2026-11-19T10:05:00Z")
@@ -42,20 +42,25 @@ class ReviewChangesTest {
         assertEquals("abc1234", apply("""[{"op":"set_state","id":"F1","state":"fixed","commit":"abc1234"}]""").findings.single().fixCommit)
     }
 
+    @Test fun `a report on another commit than the end of the run's range is refused naming both`() {
+        val e = assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "def5678", one, "[]", now) }
+        assertEquals("commit def5678 is not the end of the range main..abc1234 of run W1; report on abc1234", e.message)
+    }
+
     @Test fun `a report naming no run of the review is refused`() {
         assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W9", "abc1234", one, "[]", now) }
     }
 
     @Test fun `a report finding without a severity or with an unknown one records nothing`() {
-        assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "c", """[{"file":"a.kt","line":1,"category":"bug","summary":"s","failure_scenario":"x"}]""", "[]", now) }
-        assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "c", one.replace("major", "huge"), "[]", now) }
-        assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "c", one, "[1]", now) }
+        assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "abc1234", """[{"file":"a.kt","line":1,"category":"bug","summary":"s","failure_scenario":"x"}]""", "[]", now) }
+        assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "abc1234", one.replace("major", "huge"), "[]", now) }
+        assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "abc1234", one, "[1]", now) }
     }
 
     @Test fun `a report finding with a line break in its summary, file or category records nothing`() {
         listOf("summary", "file", "category").forEach { key ->
             val bad = one.replace("\"$key\":\"", "\"$key\":\"a\nb")
-            assertTrue(assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "c", bad, "[]", now) }.message!!.startsWith("finding 1 "), key)
+            assertTrue(assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "abc1234", bad, "[]", now) }.message!!.startsWith("finding 1 "), key)
         }
     }
 
@@ -68,8 +73,8 @@ class ReviewChangesTest {
 
     @Test fun `a second report of the same run replaces its questions`() {
         val manual = ReviewChanges.apply(reported, """[{"op":"add_question","text":"mine"}]""")
-        val first = ReviewChanges.report(manual, "W1", "c", one, """["a?","b?"]""", now)
-        val second = ReviewChanges.report(first, "W1", "c", one, """["a?"]""", now)
+        val first = ReviewChanges.report(manual, "W1", "abc1234", one, """["a?","b?"]""", now)
+        val second = ReviewChanges.report(first, "W1", "abc1234", one, """["a?"]""", now)
         assertEquals(listOf("mine", "a?"), second.questions.map { it.text })
         assertEquals(listOf(null, "W1"), second.questions.map { it.run })
     }

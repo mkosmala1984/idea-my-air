@@ -86,10 +86,10 @@ object Git {
     }
 
     /**
-     * The work tree of [dir] against its base; null when neither [dir] nor a folder above it has a `.git`. Any other
-     * failure throws: git's exit code 128 means every kind of fatal error, not only "no repository".
+     * The work tree of [dir] against [against], else against its base ([baseOf]); null when neither [dir] nor a folder
+     * above it has a `.git`. Any other failure throws: git's exit code 128 means every kind of fatal error, not only "no repository".
      */
-    fun state(dir: Path): GitState? {
+    fun state(dir: Path, against: String? = null): GitState? {
         if (!inRepo(dir)) return null
         check(run(dir, "rev-parse", "--is-inside-work-tree").trim() == "true") { "$dir is not in a work tree" }
         val root = Path.of(run(dir, "rev-parse", "--show-toplevel").trim())
@@ -100,7 +100,7 @@ object Git {
         val stored = current?.let { storedBase(root, it) }
         fun problem(base: String?, problem: String) = GitState(branch, current == null, root, base, stored != null, null, null, problem)
         // defaultBranch throws when the repository names no default; the branch row stays, the reason goes to Changes.
-        val base = runCatching { baseFrom(root, stored) }.getOrElse { return problem(null, it.message.orEmpty()) }
+        val base = against ?: runCatching { baseFrom(root, stored) }.getOrElse { return problem(null, it.message.orEmpty()) }
         if (!isCommit(root, base)) return problem(base, "Base $base no longer exists")
         // merge-base exits 1, saying nothing, when the two share no commit.
         val mergeBase = run(root, "merge-base", base, "HEAD", ok = setOf(0, 1)).trim().ifEmpty { return problem(base, "Base $base shares no history with $branch") }
@@ -130,10 +130,23 @@ object Git {
      * repository above it (a removed worktree, its main checkout's). A linked worktree's `.git` is a file naming its git dir.
      */
     fun head(dir: Path): Head? {
-        if (!dir.exists()) return null
-        val dotGit = generateSequence(dir.toAbsolutePath()) { it.parent }.map { it.resolve(".git") }.firstOrNull { it.exists() } ?: return null
+        val dotGit = dotGit(dir) ?: return null
         val head = gitDirOf(dotGit).resolve("HEAD").readText().trim()
         return Head(dotGit.parent, if (head.startsWith(BRANCH_REF)) head.removePrefix(BRANCH_REF) else null)
+    }
+
+    /** The `.git` of the work tree [dir] lies in; null as for [head]. */
+    private fun dotGit(dir: Path): Path? =
+        if (!dir.exists()) null else generateSequence(dir.toAbsolutePath()) { it.parent }.map { it.resolve(".git") }.firstOrNull { it.exists() }
+
+    /**
+     * The git dir of the work tree [dir] lies in and its common dir, which holds the refs: the git dir itself in a main
+     * checkout, the one its `commondir` names in a linked worktree. Read from files; null as for [head].
+     */
+    fun gitDirs(dir: Path): Pair<Path, Path>? {
+        val gitDir = gitDirOf(dotGit(dir) ?: return null)
+        val common = gitDir.resolve("commondir").takeIf { it.exists() }?.let { gitDir.resolve(it.readText().trim()).normalize() }
+        return gitDir to (common ?: gitDir)
     }
 
     /** The git dir of a `.git`: itself, or the one a linked worktree's `.git` file names. */
@@ -219,10 +232,11 @@ object Git {
 
     /**
      * Old-side line ranges, by repository-relative path, of `git diff -U0 <from>` (work tree included); a pure insertion
-     * after line a is a..a. Null when [from] is no commit.
+     * after line a is a..a. Null when [from] is no commit or not an ancestor of HEAD, as after a rebase, whose diff
+     * would mix in the changes of the branch's base.
      */
     fun changedLines(root: Path, from: String): Map<String, List<IntRange>>? {
-        if (!isCommit(root, from)) return null
+        if (!isCommit(root, from) || !isAncestor(root, from, "HEAD")) return null
         val result = mutableMapOf<String, MutableList<IntRange>>()
         var file: String? = null
         var header = false

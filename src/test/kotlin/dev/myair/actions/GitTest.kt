@@ -520,7 +520,7 @@ class GitTest {
     }
 
     @Test
-    fun `commitsBetween is null for a commit a rebase took out of the history`() {
+    fun `commitsBetween and changedLines are null for a commit a rebase took out of the history`() {
         val repo = init("rebased")
         repo.resolve("a.txt").writeText("1\n")
         git(repo, "add", ".")
@@ -528,6 +528,8 @@ class GitTest {
         val old = git(repo, "rev-parse", "HEAD")
         git(repo, "commit", "--amend", "-m", "rewritten")
         assertEquals(null, Git.commitsBetween(repo, old), "the old commit is still in the reflog, but not an ancestor of HEAD")
+        assertEquals(null, Git.changedLines(repo, old))
+        assertEquals(emptyMap(), Git.changedLines(repo, "HEAD"))
         assertEquals(0, Git.commitsBetween(repo, "HEAD"))
     }
 

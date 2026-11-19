@@ -19,13 +19,14 @@ there by class name, so moving or renaming one means updating that file too.
   - `mainRoot(dir)`: the main checkout's root, also from inside a linked worktree (`--git-common-dir`).
   - `mainCheckout(dir)`: the same read from the files git keeps, so callable on the EDT.
   - `worktrees(mainRoot): List<Worktree>`: the main checkout first, after pruning those whose directory is gone.
-  - `changedLines(root, from)`: old-side line ranges by path of `git diff -U0 <from>`; null when `from` is no commit.
+  - `changedLines(root, from)`: old-side line ranges by path of `git diff -U0 <from>`; null when `from` is no commit or not an ancestor of HEAD (after a rebase).
   - `commitsBetween(root, from)`: commits HEAD has and `from` lacks; null when `from` is no commit or not an ancestor of HEAD.
   - `repo(dir): GitRepo`: local and remote branches (without `<remote>/HEAD`) and the default branch.
-  - `state(dir): GitState?`: the work tree against its base, with changed files since `merge-base <base> HEAD` (untracked ones included). Returns null only when no `.git` exists up the path.
+  - `state(dir, against)`: the work tree against `against`, else its base, with changed files since `merge-base <base> HEAD` (untracked ones included). Returns null only when no `.git` exists up the path.
   - `baseOf(root)`: the stored base for the current branch, else the default branch.
   - `root(dir)`, `branchOf(dir)`, `currentBranch(dir)` (`detached at <sha7>` on a detached HEAD).
   - `head(dir): Head?` / `headBranch(dir)`: read from the HEAD file without running git; null for a missing folder.
+  - `gitDirs(dir)`: the git dir and the common dir of the work tree, read from files; null as for `head`.
   - `nearestBases(dir, branch)`: every other branch, nearest first: fewest commits of HEAD it lacks, then fewest of its own (`%(ahead-behind:HEAD)`, git 2.41).
   - `show(root, commit, path)`: file bytes at a commit.
   - `addWorktree(mainRoot, path, pick, fallback, inUse)`, `addBranchWorktree(mainRoot, path, branch, base)`.

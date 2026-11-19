@@ -33,6 +33,7 @@ class ReviewEditor(project: Project, private val file: ReviewVirtualFile) : Mana
     init {
         service.subscribe(this, ::update)
         reviews.subscribe(this, ::update)
+        reviews.watchGit(file.folderId, this)
         update()
     }
 
