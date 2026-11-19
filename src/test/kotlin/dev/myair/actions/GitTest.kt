@@ -507,4 +507,16 @@ class GitTest {
         assertEquals(null, Git.changedLines(repo, "0".repeat(40)))
         assertEquals(null, Git.commitsBetween(repo, "0".repeat(40)))
     }
+
+    @Test
+    fun `changedLines keys are exact paths for names with a space or non-ASCII letters`() {
+        val repo = init("names")
+        val names = listOf("a b.txt", "zażółć.txt")
+        names.forEach { repo.resolve(it).writeText("1\n2\n3\n") }
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "base")
+        val base = git(repo, "rev-parse", "HEAD")
+        names.forEach { repo.resolve(it).writeText("1\nx\n3\n") }
+        assertEquals(names.associateWith { listOf(2..2) }, Git.changedLines(repo, base))
+    }
 }

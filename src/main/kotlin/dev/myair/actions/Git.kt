@@ -214,11 +214,11 @@ object Git {
         val result = mutableMapOf<String, MutableList<IntRange>>()
         var file: String? = null
         var header = false
-        for (line in run(root, "--no-optional-locks", "diff", "-U0", "--no-renames", "--no-color", "--no-prefix", from).lines()) {
+        for (line in run(root, "-c", "core.quotepath=false", "--no-optional-locks", "diff", "-U0", "--no-renames", "--no-color", "--no-prefix", from).lines()) {
             // Only the lines between `diff --git` and the first hunk are headers; a removed line may itself read `--- x`.
             if (line.startsWith("diff --git ")) { header = true; file = null }
-            else if (header && line.startsWith("--- ")) file = line.removePrefix("--- ").takeIf { it != "/dev/null" }
-            else if (header && line.startsWith("+++ ")) { if (file == null) file = line.removePrefix("+++ ") }
+            else if (header && line.startsWith("--- ")) file = headerPath(line.removePrefix("--- "))
+            else if (header && line.startsWith("+++ ")) { if (file == null) file = headerPath(line.removePrefix("+++ ")) }
             else HUNK.matchEntire(line)?.let { m ->
                 header = false
                 val a = m.groupValues[1].toInt()
@@ -227,6 +227,12 @@ object Git {
             }
         }
         return result
+    }
+
+    /** The path of a `---`/`+++` header: git ends a name with a space by a TAB and still quotes one with `"` or control characters. */
+    private fun headerPath(name: String): String? {
+        check(!name.startsWith("\"")) { "git quoted a path in diff header: $name" }
+        return name.removeSuffix("	").takeIf { it != "/dev/null" }
     }
 
     private val HUNK = Regex("""@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@.*""")
