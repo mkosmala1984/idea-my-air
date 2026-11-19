@@ -190,6 +190,14 @@ class ClaudeSessionScannerTest {
         assertEquals(Artifact("b", "Board", "https://claude.ai/artifact/b", Path.of("C:\\x\\b.html")), artifacts[1])
     }
 
+    @Test
+    fun `opening an artifact is no publish`() {
+        val opened = """{"parentUuid":"p","isSidechain":false,"type":"user","message":{"role":"user","content":[{"tool_use_id":"t","type":"tool_result","content":"Opened"}]},""" +
+            """"toolUseResult":{"opened":true,"url":"https://claude.ai/artifact/b","artifact_id":"b","title":"Board","owned":true},$cwdLine,"sessionId":"s1","timestamp":"2026-10-24T10:03:00Z"}"""
+        val s = parse(write("s1", user("\"prompt\""), published("a", "Plan"), opened))
+        assertEquals(listOf("a"), s!!.artifacts.map { it.id })
+    }
+
     private fun call(id: String, name: String, input: String, sidechain: Boolean = false) =
         """{"parentUuid":"p","isSidechain":$sidechain,"message":{"role":"assistant","content":[{"type":"tool_use","id":"$id","name":"$name","input":$input}]},"type":"assistant",$cwdLine,"sessionId":"s1","timestamp":"2026-10-24T10:00:00Z"}"""
 
