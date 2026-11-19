@@ -232,7 +232,7 @@ object Git {
     /** The path of a `---`/`+++` header: git ends a name with a space by a TAB and still quotes one with `"` or control characters. */
     private fun headerPath(name: String): String? {
         check(!name.startsWith("\"")) { "git quoted a path in diff header: $name" }
-        return name.removeSuffix("	").takeIf { it != "/dev/null" }
+        return name.removeSuffix("\t").takeIf { it != "/dev/null" }
     }
 
     private val HUNK = Regex("""@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@.*""")
