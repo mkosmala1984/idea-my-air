@@ -145,13 +145,16 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
     fun detached(): List<Pair<Project, ClaudeSessionVirtualFile>> =
         runtimes.filter { it.value.owner == null && it.value.detachedAt != null }.map { it.value.project to it.key }
 
-    /** Ends every detached process that [retires] at [now], reading its status from [live] by pid and its tasks from [sessions]. */
-    fun retireIdle(live: Map<String, LiveSession>, sessions: Map<String, ClaudeSession>, now: Instant) {
+    /**
+     * Ends every detached process that [retires] at [now], reading its status from [live] by pid and its tasks from
+     * [sessions]; one whose session is in [held] stays.
+     */
+    fun retireIdle(live: Map<String, LiveSession>, sessions: Map<String, ClaudeSession>, now: Instant, held: Set<String>) {
         val before = runtimes.size
         for ((project, file) in detached()) {
             val detachedAt = checkNotNull(runtimes.getValue(file).detachedAt)
             val (status, tasks) = activity(file, live, sessions)
-            if (!retires(java.time.Duration.between(detachedAt, now).toKotlinDuration(), status, tasks)) continue
+            if (!retires(java.time.Duration.between(detachedAt, now).toKotlinDuration(), status, tasks, file.sessionId in held)) continue
             thisLogger().info("claude for session ${file.sessionId} (pid ${file.pid}) ends: idle without a tab since $detachedAt in ${project.name}")
             close(file)
         }

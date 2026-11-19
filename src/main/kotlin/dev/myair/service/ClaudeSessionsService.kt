@@ -155,7 +155,7 @@ class ClaudeSessionsService : Disposable {
                 // Before the check below: a session the user looked at changes the board and nothing else.
                 val unreadChanged = updateBoard(scanned, current, pinned.settled)
                 // On every refresh, changed or not: an idle detached session changes nothing, yet its time runs out.
-                SessionTerminals.getInstance().retireIdle(current, scanned.associateBy { it.id }, Instant.now())
+                SessionTerminals.getInstance().retireIdle(current, scanned.associateBy { it.id }, Instant.now(), emptySet())
                 val next = State(scanned, current, pinned, read, error, heads, unscanned)
                 if (loaded && !unreadChanged && next == state) return@invokeLater
                 if (failure != null && error != foldersError) thisLogger().error("Cannot read ${structure.file}", failure)
