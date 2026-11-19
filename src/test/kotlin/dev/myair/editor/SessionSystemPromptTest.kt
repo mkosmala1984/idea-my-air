@@ -105,6 +105,8 @@ class SessionSystemPromptTest {
         val prompt = planPrompt(sectioned, sectioned.find("a")!!, sectioned.findTask("T2")!!.second, briefs = true)
         listOf("## Ideal state", "## Constraints", "No new dependencies", "- **R1** (code) Fields map").forEach { assertTrue(it in prompt, it) }
         assertFalse("R2" in prompt)
+        assertTrue("add_evidence" in prompt, prompt)
+        assertFalse("add_evidence" in planPrompt(structure, structure.find("a")!!, structure.findTask("T2")!!.second, briefs = true))
     }
 
     @Test

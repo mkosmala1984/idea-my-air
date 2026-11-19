@@ -129,11 +129,11 @@ class PlanPanel(private val project: Project, internal val folderId: String, par
     private fun render(force: Boolean = false) {
         val view = view ?: return
         // A task or milestone the manager deleted meanwhile takes its open edit along.
-        open = open?.takeIf { it.edit.current(view.folder.plan!!) != null }
+        open = open?.takeIf { it.edit.current(view.plan) != null }
         val sessions = view.milestones.flatMap { m -> m.tasks.flatMap { it.sessions } }
         val now = Instant.now()
         // What the panel shows, not whole sessions: a working session's transcript changes them on every refresh.
-        val shown = listOf(view.folder.plan, view.folder.name, open?.edit, view.milestones.map { m -> m.tasks.map { t -> t.sessions.map { it.id } } },
+        val shown = listOf(view.plan, view.folder.name, open?.edit, view.milestones.map { m -> m.tasks.map { t -> t.sessions.map { it.id } } },
             sessions.map { listOf(it.title, service.live[it.id]?.status, it.id in service.unread, shortAge(it.lastMessage, now)) })
         if (!force && shown == rendered && !focusOpen) return
         rendered = shown
@@ -159,7 +159,7 @@ class PlanPanel(private val project: Project, internal val folderId: String, par
 
     internal fun card(init: Panel.() -> Unit) = panel(init).apply { isOpaque = false }
 
-    private fun milestones() = checkNotNull(view).folder.plan!!.milestones
+    private fun milestones() = checkNotNull(view).plan.milestones
 
     private fun Panel.header(view: PlanView) {
         row {
@@ -395,7 +395,7 @@ class PlanPanel(private val project: Project, internal val folderId: String, par
     private fun startDir(): Path = service.folders.startFolder(folderId)?.startDir?.let(Path::of) ?: projectBase(project)
 
     internal fun openEdit(edit: PlanEdit) {
-        val text = checkNotNull(edit.current(checkNotNull(view).folder.plan!!)) { "$edit names an item gone" }
+        val text = checkNotNull(edit.current(checkNotNull(view).plan)) { "$edit names an item gone" }
         val component = if (edit.multiline) inlineArea(text, ::save, ::cancel) else inlineField(text, ::save, ::cancel)
         open = OpenEdit(edit, component)
         focusOpen = true

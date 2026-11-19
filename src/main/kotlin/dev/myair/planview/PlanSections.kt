@@ -65,7 +65,7 @@ private fun PlanPanel.sectionMenu(section: Section, plan: Plan) = when (section)
     Section.REQUIREMENTS -> more(action("Add Requirement") { openEdit(PlanEdit.NewRequirement) })
     Section.REVIEW -> more(
         toggles("Status", ReviewStatus.entries, { it.label.replace('_', ' ') }, { it == (plan.review?.status ?: ReviewStatus.NOT_DONE) }) { s ->
-            change { it.setReview(folderId, s, plan.review?.commit, LocalDate.now()) }
+            change { it.setReview(folderId, s, it.find(folderId)?.plan?.review?.commit, LocalDate.now()) }
         },
         action("Add Blocker") { openEdit(PlanEdit.NewBlocker) },
     )

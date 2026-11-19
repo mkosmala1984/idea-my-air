@@ -99,30 +99,42 @@ data class Plan(
 ) {
     init {
         require(next.keys.all { it in ENTRY_PREFIXES } && next.values.all { it > 1 }) { "bad next $next" }
+        require(constraints?.isBlank() != true) { "blank constraints" }
         val tasks = tasks().map { it.id }.toSet()
         val ids = requirements.map { it.id } + decisions.map { it.id } + review?.blockers.orEmpty().map { it.id }
         require(ids.toSet().size == ids.size) { "duplicate plan entry ids $ids" }
         ids.forEach { id -> require(id.drop(1).toIntOrNull()?.let { it in 1 until (next[id.take(1)] ?: 1) } == true) { "bad entry id '$id' with next $next" } }
         requirements.forEach { r ->
             require(r.id.startsWith('R') && r.text.isNotBlank()) { "bad requirement $r" }
+            requireOneLine(r.text) { "requirement ${r.id}" }
             require(r.tasks.all { it in tasks }) { "requirement ${r.id} names tasks ${r.tasks - tasks} not of its plan" }
+            require(r.tasks.toSet().size == r.tasks.size) { "requirement ${r.id} names a task twice: ${r.tasks}" }
             r.evidence.forEach(::requireEvidence)
         }
         decisions.forEach { require(it.id.startsWith('D') && it.text.isNotBlank() && it.session?.isBlank() != true) { "bad decision $it" }; LocalDate.parse(it.date) }
         review?.let { r ->
             LocalDate.parse(r.date)
             require(r.commit?.isBlank() != true) { "blank review commit" }
-            r.blockers.forEach { require(it.id.startsWith('B') && it.text.isNotBlank()) { "bad blocker $it" } }
+            r.blockers.forEach {
+                require(it.id.startsWith('B') && it.text.isNotBlank()) { "bad blocker $it" }
+                requireOneLine(it.text) { "blocker ${it.id}" }
+            }
         }
     }
 
     fun tasks() = milestones.flatMap { it.tasks }
+
+    /** Whether removing the plan loses nothing but its description: no milestone, constraints, decision, requirement or review. */
+    val removable get() = milestones.isEmpty() && constraints == null && decisions.isEmpty() && requirements.isEmpty() && review == null
 
     /** Whether the plan holds anything `structure.json` version 5 brought, so the file must be written as version 5. */
     val usesVersion5 get() = constraints != null || decisions.isNotEmpty() || requirements.isNotEmpty() || review != null || next.isNotEmpty()
 
     companion object {
         val ENTRY_PREFIXES = setOf("R", "D", "B")
+
+        /** A requirement or blocker is one sentence: its text holds no line break. */
+        private fun requireOneLine(text: String, what: () -> String) = require('\n' !in text && '\r' !in text) { "${what()} text must be one line, got '$text'" }
     }
 }
 

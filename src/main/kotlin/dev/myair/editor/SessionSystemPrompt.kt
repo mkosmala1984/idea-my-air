@@ -56,9 +56,11 @@ fun sessionPlan(structure: SessionFolders, sessionId: String, session: ClaudeSes
 
 /**
  * What a session in a plan adds to its system prompt (`--append-system-prompt-file`, so Markdown keeps its lines): the
- * plan's name, path and description, and the task's and its milestone's. Only these, which rarely change: claude keeps a
- * session's prompt until it compacts, so statuses and next steps here would go stale. [manager]: the session is the plan's
- * manager ([dev.myair.planview.PlanFiles]), shown beside the plan in its tab.
+ * plan's name, path, ideal state (its description) and constraints, its requirements (all of them for the manager, else
+ * those naming the session's task, with the rule to add evidence to them when the task closes), and the task's and its
+ * milestone's descriptions. Only these, which rarely change: claude keeps a session's prompt until it compacts, so
+ * statuses, evidence and next steps here would go stale. [manager]: the session is the plan's manager
+ * ([dev.myair.planview.PlanFiles]), shown beside the plan in its tab.
  */
 fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, briefs: Boolean, manager: Boolean = false): String {
     val plan = checkNotNull(folder.plan) { "folder ${folder.id} has no plan" }
@@ -73,6 +75,10 @@ fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, brief
         if (requirements.isNotEmpty()) {
             append("\n## Requirements\n\n")
             requirements.forEach { append("- **${it.id}** (${it.eval.label}) ${it.text}\n") }
+            if (!manager) {
+                append("\nWhen the task closes, record evidence for these requirements with my_air_plan_apply add_evidence, one item each: ")
+                append("'test <Class> › <name>', 'commit <sha>', 'checked: <what was done>' or 'not done: <why>'.\n")
+            }
         }
         if (task != null) {
             val milestone = plan.milestones.first { task in it.tasks }
@@ -87,6 +93,7 @@ fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, brief
             append("This session manages this plan: the user sees the plan beside this session, in the same tab, and asks it to ")
             append("reorganise the plan. Change the plan with my_air_plan_apply; the view shows each change as it lands. ")
             append("Add and edit milestones and tasks freely, but delete or move them only after the user agreed.\n")
+            append("The plan's description is its ideal state; change it with set_description. ")
             append("Record a decision with add_decision whenever the ideal state, constraints or requirements change. ")
             append("Add evidence to a requirement with add_evidence as tasks close, as a test, a commit, a check or a not done reason. ")
             append("After a code review set it with set_review and its blockers with add_blocker. ")

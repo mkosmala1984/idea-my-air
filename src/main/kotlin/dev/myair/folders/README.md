@@ -53,7 +53,7 @@ These checks throw rather than repair:
 - Every `SessionFolders` operation that names a folder, milestone or task that is gone returns `this` unchanged, since another IDE may have deleted it. Every other broken rule throws.
 - `addMilestone` and `addTask` take their id from `nextId` and increment it, so an id is never reused. `restore` keeps the higher `nextId` of the two structures.
 - `addRequirement`, `addDecision` and `addBlocker` take their id from the plan's `next` (`R`/`D`/`B` per plan), so it is never reused within the plan, even after a delete.
-- `deletePlanItem` deletes a milestone only when all its tasks are `closed`. `removePlan` removes only a plan without milestones. `moveTask` stays within one plan.
+- `deletePlanItem` deletes a milestone only when all its tasks are `closed`. `removePlan` removes only a `removable` plan: no milestones, constraints, decisions, requirements or review. `moveTask` stays within one plan.
 - `SessionFolders.moveFolder` counts `index` before the move. `FolderChanges` `move` takes the final position and converts it.
 
 ### Placing sessions

@@ -187,7 +187,7 @@ class FoldersMcpToolset : McpToolset {
         "The plans of the project a directory belongs to, as a JSON array: the plan folder that the folder bound to the " +
             "directory (or to one above it) is or lies in, else every plan folder below that bound folder; then every plan folder whose workdir is " +
             "the directory or one above it. Each plan has folder " +
-            "(its path, the plan's name, which my_air_plan_apply takes), its directories, manager (the id of the session the plan's tab shows beside it, null before the tab first opened), description (Markdown, as for " +
+            "(its path, the plan's name, which my_air_plan_apply takes), its directories, manager (the id of the session the plan's tab shows beside it, null before the tab first opened), description (the plan's ideal state, Markdown, as for " +
             "milestones and tasks), constraints (Markdown the work in the plan follows, or null), decisions (id D<n>, date, text, session: " +
             "the id of the session that took it or null; in the order added), requirements (id R<n>, text, eval: assert, code, questions or judge, " +
             "tasks: ids of the plan's tasks delivering it, evidence: the items proving it, status derived from the evidence: unproven when it " +
@@ -203,7 +203,7 @@ class FoldersMcpToolset : McpToolset {
         "Changes one plan my_air_plan_get returned, all or none, in one write that leaves a snapshot for undo. " +
             "Add tasks and keep their status and next step current freely; delete or move milestones and tasks only after the " +
             "user agreed. changes is a JSON array applied in order: " +
-            "{\"op\":\"set_description\",\"description\":\"...\"} (the plan's; null clears it), " +
+            "{\"op\":\"set_description\",\"description\":\"...\"} (sets the plan's ideal state, Markdown; null clears it), " +
             "{\"op\":\"add_milestone\",\"title\":\"...\",\"description\":\"...\",\"index\":0} (description and index optional, index default last), " +
             "{\"op\":\"add_task\",\"milestone\":\"M1\",\"title\":\"...\",\"description\":\"...\",\"index\":0}, " +
             "{\"op\":\"update\",\"id\":\"T4\",\"title\":\"...\",\"description\":\"...\",\"status\":\"waiting\",\"next\":\"...\"} (fields " +
@@ -214,14 +214,14 @@ class FoldersMcpToolset : McpToolset {
             "{\"op\":\"delete\",\"id\":\"T4\"} (a milestone only when all its tasks are done or canceled). " +
             "Plan sections: {\"op\":\"set_constraints\",\"constraints\":\"...\"} (Markdown rules the work follows; null clears), " +
             "{\"op\":\"add_decision\",\"text\":\"...\",\"session\":\"<session id>\"} (D<n>, dated today; session optional), " +
-            "{\"op\":\"add_requirement\",\"text\":\"...\",\"eval\":\"code\",\"tasks\":[\"T2\"],\"index\":0} (R<n>; eval says how it is proven: " +
-            "assert, code, questions or judge; tasks and index optional, tasks of this plan), " +
+            "{\"op\":\"add_requirement\",\"text\":\"...\",\"eval\":\"code\",\"tasks\":[\"T2\"],\"index\":0} (R<n>, text one sentence on one line; eval says how it is proven: " +
+            "assert, code, questions or judge; tasks and index optional, tasks of this plan, each once), " +
             "{\"op\":\"add_evidence\",\"id\":\"R1\",\"evidence\":\"commit 4c91271\"} (one item, exactly one of: 'test <Class> › <name>', " +
             "'commit <7-40 lowercase hex>', 'checked: <what was done>', 'not done: <why>'; a requirement with evidence and no 'not done:' item is proven, " +
             "with one it is not done), " +
             "{\"op\":\"set_review\",\"status\":\"in_progress\",\"commit\":\"abc1234\"} (status not_done, in_progress or done, dated today; " +
             "commit optional: kept when absent, null clears it, else 7-40 lowercase hex), " +
-            "{\"op\":\"add_blocker\",\"text\":\"...\"} (B<n>, a finding of the review). " +
+            "{\"op\":\"add_blocker\",\"text\":\"...\"} (B<n>, a finding of the review, one line). " +
             "update and delete take R<n>, D<n> and B<n> ids too: update R1 takes text, eval, tasks and evidence (an array replacing the list), " +
             "D1 takes text, B1 takes text and resolved (true or false). " +
             "New ids (M<n>, T<n>) are unique across all plans and never reused; R<n>, D<n> and B<n> within the plan. Returns the plan after the change.",

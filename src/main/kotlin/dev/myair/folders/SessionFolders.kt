@@ -241,9 +241,9 @@ data class SessionFolders(val folders: List<Folder> = emptyList(), val nextId: I
         return edit(folderId) { it.copy(plan = Plan()) }
     }
 
-    /** Takes the plan off its folder; only an empty one, since removing it loses no milestone that way. */
+    /** Takes the plan off its folder; only a [Plan.removable] one, so that nothing but its description is lost. */
     fun removePlan(folderId: String) = editPlan(folderId) { plan ->
-        require(plan.milestones.isEmpty()) { "the plan still has milestones" }
+        require(plan.removable) { "the plan is not empty: it has milestones, constraints, decisions, requirements or a review" }
         null
     }
 

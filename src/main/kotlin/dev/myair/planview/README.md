@@ -20,7 +20,7 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
 - `MarkdownHtml.kt`: `data class MarkdownColors`, `fun markdownHtml(markdown, colors)`.
 - `PlanEdit.kt`:
   - `sealed interface PlanEdit`: `Title`, `Next`, `Description`, `Constraints`, `NewDecision`, `NewRequirement`, `NewBlocker`, `NewTask`, `NewMilestone`.
-  - `fun PlanEdit.apply(folderId, text)`.
+  - `fun PlanEdit.apply(folderId, text, today)`.
   - `fun PlanEdit.current(plan)`.
 - `InlineEdits.kt`: `class OpenEdit(edit, component)`, `fun inlineField`, `fun inlineArea`.
 - `PlanTabs.kt`: `class PlanTabTitleProvider` and `class PlanFileIconProvider`.

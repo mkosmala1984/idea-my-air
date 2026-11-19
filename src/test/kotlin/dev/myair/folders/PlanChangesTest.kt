@@ -78,6 +78,10 @@ class PlanChangesTest {
             """[{"op":"update","id":"T2","description":" "}]""" to "blank description",
             """[{"op":"set_goal","goal":"g"}]""" to "unknown op",
             """[{"op":"add_milestone","title":"ok"},{"op":"delete","id":"T9"}]""" to "change 2",
+            """[{"op":"update","id":"X1","text":"x"}]""" to "unknown id kind 'X'",
+            """[{"op":"add_requirement","text":"a\nb","eval":"code"}]""" to "one line",
+            """[{"op":"add_blocker","text":"a\rb"}]""" to "one line",
+            """[{"op":"add_requirement","text":"r","eval":"code","tasks":["T2","T2"]}]""" to "names a task twice",
         ).forEach { (changes, message) ->
             val error = assertThrows<IllegalArgumentException>(changes) { apply(changes) }
             assertTrue(message in error.message!!, "'$message' not in '${error.message}'")

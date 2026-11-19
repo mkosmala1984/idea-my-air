@@ -12,6 +12,14 @@ import java.time.LocalDate
  * plan; anything unknown throws [IllegalArgumentException] naming the change.
  */
 object PlanChanges {
+    /** The fields `update` takes per kind of id (`M`, `T`, `R`, `D`, `B`). */
+    private val UPDATE_FIELDS = mapOf(
+        "M" to setOf("id", "title", "description", "status", "next"),
+        "T" to setOf("id", "title", "description", "status", "next"),
+        "R" to setOf("id", "text", "eval", "tasks", "evidence"),
+        "D" to setOf("id", "text"),
+        "B" to setOf("id", "text", "resolved"),
+    )
     private val FIELDS = mapOf(
         "set_description" to setOf("description"),
         "add_milestone" to setOf("title", "description", "index"),
@@ -22,18 +30,9 @@ object PlanChanges {
         "add_evidence" to setOf("id", "evidence"),
         "set_review" to setOf("status", "commit"),
         "add_blocker" to setOf("text"),
-        "update" to setOf("id", "title", "description", "status", "next", "text", "eval", "tasks", "evidence", "resolved"),
+        "update" to UPDATE_FIELDS.values.flatten().toSet(),
         "move" to setOf("id", "milestone", "index"),
         "delete" to setOf("id"),
-    )
-
-    /** The fields `update` takes per kind of id (`M`, `T`, `R`, `D`, `B`). */
-    private val UPDATE_FIELDS = mapOf(
-        "M" to setOf("id", "title", "description", "status", "next"),
-        "T" to setOf("id", "title", "description", "status", "next"),
-        "R" to setOf("id", "text", "eval", "tasks", "evidence"),
-        "D" to setOf("id", "text"),
-        "B" to setOf("id", "text", "resolved"),
     )
     private val COMMIT = Regex("[0-9a-f]{7,40}")
 
@@ -58,7 +57,7 @@ object PlanChanges {
         val change = element.asJsonObject
         val op = change.string("op")
         val fields = requireNotNull(FIELDS[op]) { "unknown op '$op', expected one of ${FIELDS.keys}" }
-        val allowed = if (op == "update") UPDATE_FIELDS[change.string("id").take(1)] ?: UPDATE_FIELDS.getValue("T") else fields
+        val allowed = if (op == "update") change.string("id").take(1).let { kind -> requireNotNull(UPDATE_FIELDS[kind]) { "unknown id kind '$kind', expected one of ${UPDATE_FIELDS.keys}" } } else fields
         require(change.keySet() - "op" - allowed == emptySet<String>()) { "unknown fields ${change.keySet() - "op" - allowed}" }
         fun milestone(id: String) = requireNotNull(folders.findMilestone(id)?.takeIf { it.first.id == folderId }) { "no milestone '$id' in this plan" }.second
         fun task(id: String) = requireNotNull(folders.findTask(id)?.takeIf { it.first.id == folderId }) { "no task '$id' in this plan" }.second

@@ -54,7 +54,7 @@ Session Context panel:
   - A drop under `UnfiledSessions` unfiles the session.
 - `FolderDrop` drags either sessions alone or exactly one folder, project, milestone or task. It refuses every drop while `canEdit()` is false (not in Folders mode, or `foldersError` is set).
 - Plans do not nest (`canNewPlan`). Folder names must not be blank, must contain no `/` and must be unique among siblings (`askName`). A directory bound to one folder cannot be bound to another (`bindDirectory`).
-- A milestone with open tasks cannot be deleted (`deleteMilestone`). Remove Plan is enabled only for a plan with no milestones (`canRemovePlan`). Delete and Remove Plan first ask whether to interrupt a plan manager that is working (`managersConfirmed`).
+- A milestone with open tasks cannot be deleted (`deleteMilestone`). Remove Plan is enabled only for a plan with no milestones, constraints, decisions, requirements or review (`canRemovePlan`, `Plan.removable`). Delete and Remove Plan first ask whether to interrupt a plan manager that is working (`managersConfirmed`).
 - Unexpected input fails loudly:
   - `folderSummary` throws on an unknown node type.
   - `insertLine` throws on a drop into a collapsed or hidden parent.
