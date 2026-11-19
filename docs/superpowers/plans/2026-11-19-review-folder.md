@@ -59,7 +59,7 @@
 **Files:**
 - Modify: this plan (record the result under this task)
 
-- [ ] **Step 1: Run in a scratch git repository**
+- [x] **Step 1: Run in a scratch git repository**
 
 ```bash
 claude --bg --session-id 11111111-2222-3333-4444-555555555555 --model haiku --append-system-prompt "Reply with the word ok and stop." -- "say ok"
@@ -67,9 +67,34 @@ claude --bg --session-id 11111111-2222-3333-4444-555555555555 --model haiku --ap
 
 Expected: exit 0, stdout naming a job id; `~/.claude/sessions/<pid>.json` with `kind` `bg`, that `sessionId` and a `jobId`; `claude logs <jobId>` showing `ok`.
 
-- [ ] **Step 2: Record** the exact stdout format (to write `parseJobId`), whether `--session-id` was honoured, whether `--effort` is accepted with `--bg`, and stop the job with `claude stop <jobId>`.
+- [x] **Step 2: Record** the exact stdout format (to write `parseJobId`), whether `--session-id` was honoured, whether `--effort` is accepted with `--bg`, and stop the job with `claude stop <jobId>`.
 
-- [ ] **Step 3: Decide.** All honoured → continue. Any refused → stop here, set the row `blocked: <flag> refused by claude --bg`, report to the user; do not work around it.
+- [x] **Step 3: Decide.** All honoured → continue. Any refused → stop here, set the row `blocked: <flag> refused by claude --bg`, report to the user; do not work around it.
+
+**Result:** (claude 2.1.328, run in this worktree: a scratch repository outside it was refused with "Workspace not trusted. Run `claude` in <dir> once and accept the trust prompt", exit 1, so the spike used the already trusted worktree)
+
+`claude --bg --session-id <uuid> --model haiku --append-system-prompt "Reply with the word ok and stop." -- "say ok"`: exit 0. stdout, verbatim:
+
+```
+backgrounded · f2b8ed26
+  claude agents             list sessions
+  claude attach f2b8ed26    open in this terminal
+  claude logs f2b8ed26      show recent output
+  claude stop f2b8ed26      stop this session
+```
+
+stderr: `warning: --bg manages the session id; ignoring --session-id (use --resume <id> to continue an existing session)` and `Starting background service…`.
+
+- `--session-id`: **refused** (warning above; exit 0). The session got id `f2b8ed26-573c-468a-8919-2a760501c116`, not the requested one; no transcript with the requested uuid exists. The job id is the first 8 hex characters of the session id.
+- `--model haiku`: honoured (banner "Haiku 5.5").
+- `--append-system-prompt`: honoured (the text is in the transcript; the reply was `ok`, which "say ok" alone would also give).
+- `--effort low`: honoured (separate run, banner "Haiku 5.5 with low effort"; default without it: medium).
+- `~/.claude/sessions/52568.json`: `kind` `bg`, `jobId` `f2b8ed26`, `sessionId` `f2b8ed26-573c-468a-8919-2a760501c116`, `status` `idle` after the reply.
+- Transcript `~/.claude/projects/<encoded cwd>/<sessionId>.jsonl` exists under the generated session id.
+- `claude logs <jobId>`: the rendered terminal screen with ANSI escapes (shows `say ok` and `● ok`), not plain text.
+- `claude stop <jobId>` and `claude rm <jobId>`: both jobs stopped and removed.
+- Job id format: stdout line 1 matches `^backgrounded · ([0-9a-f]{8})$` (separator is U+00B7); the session id must be read afterwards from `~/.claude/sessions/<pid>.json` by `jobId`.
+
 
 ---
 
