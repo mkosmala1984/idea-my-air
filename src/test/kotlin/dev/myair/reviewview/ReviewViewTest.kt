@@ -26,8 +26,8 @@ class ReviewViewTest {
     private fun run(id: String, reviewer: String, started: String = "2026-11-19T10:00:00Z", reported: String? = "2026-11-19T10:10:00Z", commit: String? = "c1") =
         Run(id, reviewer, null, null, "mb..h", started, reported, commit)
 
-    private fun finding(id: String, severity: Severity = Severity.minor, state: FindingState = FindingState.open, runs: List<String> = listOf("W1")) =
-        Finding(id, "a.kt", "bug", runs.map { Report(it, "r", "c1", 10, severity, "s", "x") }, state, "why", "f1", "7")
+    private fun finding(id: String, severity: Severity = Severity.minor, state: FindingState = FindingState.open, reports: List<Pair<String, String>> = listOf("W1" to "r")) =
+        Finding(id, "a.kt", "bug", reports.map { (run, reviewer) -> Report(run, reviewer, "c1", 10, severity, "s", "x") }, state, "why", "f1", "7")
 
     private fun review(chapters: List<Chapter> = emptyList(), runs: List<Run> = emptyList(), findings: List<Finding> = emptyList(), pr: Int? = null) =
         BranchReview("b", "main", Path.of("E:/d"), pr, null, null, null, chapters, runs, findings, emptyList(), emptyMap())
@@ -60,10 +60,11 @@ class ReviewViewTest {
     @Test fun `a finding shows how many reviewers of the latest runs reported it over how many ran`() {
         val runs = listOf(
             run("W1", "a"), run("W2", "b"), run("W3", "c"), run("W4", "d"),
-            // d ran again and no longer reports it; e is still running.
+            // d ran again on new commits only, which says nothing of the older finding; e is still running.
             run("W5", "d", started = "2026-11-19T11:00:00Z"), run("W6", "e", started = "2026-11-19T11:00:00Z", reported = null, commit = null),
         )
-        val f = finding("F1", runs = listOf("W1", "W2", "W3", "W4"))
+        // c reported nothing about it; a reported it twice in one run, counted once.
+        val f = finding("F1", reports = listOf("W1" to "a", "W1" to "a", "W2" to "b", "W4" to "d"))
         val shown = view(review(runs = runs, findings = listOf(f))).findings.single()
         assertEquals(3 to 4, shown.agreeing to shown.ran)
     }

@@ -39,6 +39,15 @@ class ReviewSyncTest {
         assertSame(r, learnSessions(r, mapOf("j1" to "s1")).first)
     }
 
+    @Test fun `precision counts a review whose folder left the structure, not one that cannot be read`() {
+        val structure = SessionFolders().createFolder(null, "r1", "Review: b")
+        val kept = Finding("F1", "a.kt", "bug", listOf(Report("W1", "a", "c1", 1, Severity.minor, "s", "x")), dev.myair.store.FindingState.accepted)
+        val all = mapOf("r1" to Result.success(review(listOf(run("W1", null)))), "gone" to Result.success(review(listOf(run("W1", null)), findings = listOf(kept))),
+            "bad" to Result.failure(IllegalStateException("broken")))
+        assertEquals(setOf("r1"), inStructure(all, structure).keys)
+        assertEquals(Precision(1, 1, 2), precision(onDisk(all))["a"])
+    }
+
     @Test fun `reviews whose folder is not in the structure are left out`() {
         val structure = SessionFolders().createFolder(null, "r1", "Review: b")
         val all = mapOf("r1" to Result.success(review(emptyList())), "gone" to Result.success(review(emptyList())))

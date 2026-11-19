@@ -49,6 +49,9 @@ fun learnSessions(review: BranchReview, jobs: Map<String, String>): Pair<BranchR
         r.setSession(run.id, session) to learned + session
     }
 
+/** Every review of [all] that could be read, its folder in the structure or not: what a reviewer's precision counts over. */
+fun onDisk(all: Map<String, Result<BranchReview>>): List<BranchReview> = all.values.mapNotNull { it.getOrNull() }
+
 /** The reviews whose folder is in [structure]; the others are kept on disk, never deleted, so a restored folder finds its review. */
 fun inStructure(all: Map<String, Result<BranchReview>>, structure: SessionFolders): Map<String, Result<BranchReview>> =
     all.filterKeys { structure.find(it) != null }
@@ -102,6 +105,9 @@ class ReviewService : Disposable {
 
     /** By folder id, only folders in the structure; a `review.json` that cannot be read is a failure. */
     val reviews get() = inStructure(all, sessions.folders)
+
+    /** Every review on disk that could be read, folders gone from the structure included ([onDisk]). */
+    val readable get() = onDisk(all)
 
     /** The jobs of the registry's live entries, which [runStatus] and the mirror read. */
     val liveJobs: Set<String> get() = jobSessions(sessions.live).keys

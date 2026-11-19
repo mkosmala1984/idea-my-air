@@ -118,14 +118,15 @@ class ReviewPanel(
         val review = (result ?: return).getOrElse { return showError(it) }
         open = open?.takeIf { it.edit.current(review) != null }
         val git = reviews.facts[folderId]
-        val view = reviewViewOf(review, git, reviews.liveJobs, precision(reviews.reviews.values.mapNotNull { it.getOrNull() }), filter, service.sessions.associateBy { it.id })
+        val view = reviewViewOf(review, git, reviews.liveJobs, precision(reviews.readable), filter, service.sessions.associateBy { it.id })
         val profiles = ReviewProfileStore.INSTANCE.read()
         val now = Instant.now()
         val shown = mapOf(
             Card.HEADER to listOf(view.header, git?.error),
             Card.SUMMARY to listOf(view.summary, open?.edit == ReviewEdit.Summary),
             Card.EXPLANATION to listOf(view.chapters, view.unexplained, git?.state?.problem),
-            Card.REVIEWERS to listOf(view.runs.map { listOf(it, it.session?.title, runTime(it.run, it.status, now)) }, profiles, profileName, startErrors, git?.head, git?.state?.mergeBase, git?.sinceReviewed),
+            // Not whole sessions: a working reviewer's transcript changes them on every refresh.
+            Card.REVIEWERS to listOf(view.runs.map { listOf(it.run, it.status, it.findings, it.precision, it.session?.id, it.session?.title, runTime(it.run, it.status, now)) }, profiles, profileName, startErrors, git?.head, git?.state?.mergeBase, git?.sinceReviewed),
             Card.FINDINGS to listOf(view.findings, filter, review.findings.map { it.state to it.severity }, open?.edit?.takeIf { it != ReviewEdit.Summary }),
             Card.QUESTIONS to listOf(view.questions, review.questions.filter { it.resolved }),
         ).mapValues { (card, v) -> listOf(v, card.name in toggled, if (card == Card.QUESTIONS) RESOLVED in toggled else null) }

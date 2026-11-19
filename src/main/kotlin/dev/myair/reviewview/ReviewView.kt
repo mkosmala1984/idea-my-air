@@ -43,7 +43,7 @@ data class ChapterView(val chapter: Chapter, val files: List<ChapterFile>)
 /** [precision] null before any finding of the reviewer was triaged; [session] null until it is learned and scanned. */
 data class RunView(val run: Run, val status: RunStatus, val findings: Int, val precision: Precision?, val session: ClaudeSession?)
 
-/** [agreeing] of the [ran] reviewers whose latest reported run is counted reported it ([agreement]). */
+/** [agreeing] of the [ran] reviewers with a reported run in the review reported it ([agreement]). */
 data class FindingView(val finding: Finding, val maybeFixed: Boolean, val agreeing: Int, val ran: Int)
 
 data class ReviewView(
@@ -58,12 +58,12 @@ fun bitbucketPrUrl(originUrl: String, pr: Int): String? =
     BITBUCKET.find(originUrl.trim())?.destructured?.let { (workspace, repo) -> "https://bitbucket.org/$workspace/$repo/pull-requests/$pr" }
 
 /**
- * The latest reported run of each reviewer: a finding is agreed on by those of them it has a report of, out of all of
- * them; a reviewer still running or never reported counts for neither.
+ * The distinct reviewers a finding has a report of, out of those with a reported run in the review: a later run of new
+ * commits only says nothing about older findings, so it takes no agreement away.
  */
 private fun agreement(review: BranchReview): (Finding) -> Pair<Int, Int> {
-    val latest = review.runs.filter { it.reported != null }.groupBy { it.reviewer }.mapValues { (_, runs) -> runs.maxBy { it.started }.id }
-    return { f -> f.reports.map { it.run }.toSet().count { it in latest.values } to latest.size }
+    val ran = review.runs.filter { it.reported != null }.map { it.reviewer }.toSet().size
+    return { f -> f.reports.map { it.reviewer }.toSet().size to ran }
 }
 
 /** What the review panel shows of [review], its findings narrowed by [filter], [git] null before its git facts are read. */

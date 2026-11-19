@@ -520,6 +520,18 @@ class GitTest {
     }
 
     @Test
+    fun `commitsBetween is null for a commit a rebase took out of the history`() {
+        val repo = init("rebased")
+        repo.resolve("a.txt").writeText("1\n")
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "old")
+        val old = git(repo, "rev-parse", "HEAD")
+        git(repo, "commit", "--amend", "-m", "rewritten")
+        assertEquals(null, Git.commitsBetween(repo, old), "the old commit is still in the reflog, but not an ancestor of HEAD")
+        assertEquals(0, Git.commitsBetween(repo, "HEAD"))
+    }
+
+    @Test
     fun `changedLines keys are exact paths for names with a space or non-ASCII letters`() {
         val repo = init("names")
         val names = listOf("a b.txt", "zażółć.txt")

@@ -249,9 +249,12 @@ object Git {
 
     private val HUNK = Regex("""@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@.*""")
 
-    /** Commits HEAD has and [from] lacks; null when [from] is no commit. */
+    /**
+     * Commits HEAD has and [from] lacks; null when [from] is no commit or not an ancestor of HEAD, as after a rebase, which
+     * keeps the old commit in the reflog but out of the history.
+     */
     fun commitsBetween(root: Path, from: String): Int? =
-        if (isCommit(root, from)) run(root, "--no-optional-locks", "rev-list", "--count", "$from..HEAD").trim().toInt() else null
+        if (isCommit(root, from) && isAncestor(root, from, "HEAD")) run(root, "--no-optional-locks", "rev-list", "--count", "$from..HEAD").trim().toInt() else null
 
     private fun isCommit(root: Path, ref: String) = run(root, "rev-parse", "--verify", "-q", "$ref^{commit}", ok = setOf(0, 1)).isNotBlank()
 
