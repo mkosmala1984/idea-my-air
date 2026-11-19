@@ -132,12 +132,24 @@ object Git {
     fun head(dir: Path): Head? {
         if (!dir.exists()) return null
         val dotGit = generateSequence(dir.toAbsolutePath()) { it.parent }.map { it.resolve(".git") }.firstOrNull { it.exists() } ?: return null
-        val gitDir = if (dotGit.isDirectory()) dotGit else dotGit.readText().trim().let {
-            check(it.startsWith(GITDIR)) { "$dotGit does not name a git dir: $it" }
-            dotGit.parent.resolve(it.removePrefix(GITDIR))
-        }
-        val head = gitDir.resolve("HEAD").readText().trim()
+        val head = gitDirOf(dotGit).resolve("HEAD").readText().trim()
         return Head(dotGit.parent, if (head.startsWith(BRANCH_REF)) head.removePrefix(BRANCH_REF) else null)
+    }
+
+    /** The git dir of a `.git`: itself, or the one a linked worktree's `.git` file names. */
+    private fun gitDirOf(dotGit: Path): Path = if (dotGit.isDirectory()) dotGit else dotGit.readText().trim().let {
+        check(it.startsWith(GITDIR)) { "$dotGit does not name a git dir: $it" }
+        dotGit.parent.resolve(it.removePrefix(GITDIR))
+    }
+
+    /**
+     * The main checkout of the work tree root [dir], as [mainRoot] gives it but read from the files git keeps, so callable on
+     * the EDT: [dir] itself, or for a linked worktree the parent of the common dir its git dir's `commondir` names.
+     */
+    fun mainCheckout(dir: Path): Path {
+        val gitDir = gitDirOf(dir.resolve(".git"))
+        if (gitDir == dir.resolve(".git")) return dir
+        return gitDir.resolve(gitDir.resolve("commondir").readText().trim()).normalize().parent
     }
 
     /** The branch [head] reads; null outside a repository and on a detached HEAD. */

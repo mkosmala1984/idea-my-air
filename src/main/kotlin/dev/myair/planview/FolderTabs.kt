@@ -11,8 +11,12 @@ import com.intellij.openapi.vfs.NonPhysicalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
 import dev.myair.editor.ClaudeSessionVirtualFile
+import dev.myair.editor.PlanStart
 import dev.myair.editor.SessionTerminals
+import dev.myair.folders.ChangeSource
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.service.NEW_SESSION_TITLE
+import dev.myair.store.PlanManager
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -70,6 +74,15 @@ class FolderTabs<F : FolderTabFile>(private val create: (String) -> F) {
 
     fun setManager(folderId: String, file: ClaudeSessionVirtualFile) {
         managers[folderId] = file
+    }
+
+    /**
+     * The file of [manager], the manager of folder [folderId] as just stored, started with [args]; a new session ([newId])
+     * is first filed in the folder, so the tree shows it there.
+     */
+    fun managerFile(folderId: String, manager: PlanManager, newId: String, args: List<String>, planStart: PlanStart? = null): ClaudeSessionVirtualFile {
+        if (manager.session == newId) ClaudeSessionsService.getInstance().updateFolders(ChangeSource.AUTO) { it.assign(newId, folderId) }
+        return ClaudeSessionVirtualFile(manager.session, manager.cwd, manager.project, NEW_SESSION_TITLE, args, planStart = planStart).also { setManager(folderId, it) }
     }
 
     /**

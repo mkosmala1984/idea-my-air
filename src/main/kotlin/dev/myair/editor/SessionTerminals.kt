@@ -204,9 +204,11 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
         file.job = job
         // claude refuses or forks a `--resume` of a session a job runs; `attach` opens the job itself, with its own prompt.
         val managed = PlanFiles.getInstance().planOf(file)?.folderId
-        // A review's manager gets its review's prompt; claude reads the file again after a compaction, so it lives with the process.
-        val prompt = if (job != null) null else sessionPlan(folders, file.sessionId, service.sessions.firstOrNull { it.id == file.sessionId }, file.planStart, managed)
-            ?.let { (folder, task) -> planPrompt(folders, folder, task, settings.briefs, manager = managed != null) } ?: ReviewTabs.getInstance().managerPrompt(file)
+        // A review's manager gets its review's prompt, whatever plan task its brief names; claude reads the file again after a
+        // compaction, so it lives with the process.
+        val prompt = if (job != null) null else ReviewTabs.getInstance().managerPrompt(file)
+            ?: sessionPlan(folders, file.sessionId, service.sessions.firstOrNull { it.id == file.sessionId }, file.planStart, managed)
+                ?.let { (folder, task) -> planPrompt(folders, folder, task, settings.briefs, manager = managed != null) }
         val promptFile = prompt?.let { PromptFiles.write(Homes.myAir.resolve("prompts"), it) }
         val command = if (job != null) listOf(claude.path, "attach", job)
         else listOf(claude.path, "--append-system-prompt", appendedSystemPrompt(settings.briefs, settings.fileSessions)) +

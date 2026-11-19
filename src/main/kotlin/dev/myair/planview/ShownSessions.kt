@@ -24,7 +24,7 @@ fun managedPlanFolder(managers: PlanManagers, structure: SessionFolders, session
 fun sessionFileOf(file: VirtualFile?): ClaudeSessionVirtualFile? = when (file) {
     is ClaudeSessionVirtualFile -> file
     is PlanVirtualFile -> PlanFiles.getInstance().manager(file.folderId)?.takeIf { hasPlan(ClaudeSessionsService.getInstance().folders, file.folderId) }
-    is ReviewVirtualFile -> ReviewTabs.getInstance().manager(file.folderId)?.takeIf { ClaudeSessionsService.getInstance().folders.find(file.folderId) != null }
+    is ReviewVirtualFile -> ReviewTabs.getInstance().tabs.manager(file.folderId)?.takeIf { ClaudeSessionsService.getInstance().folders.find(file.folderId) != null }
     else -> null
 }
 

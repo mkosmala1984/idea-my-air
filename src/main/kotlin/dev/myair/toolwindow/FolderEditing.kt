@@ -23,6 +23,7 @@ import dev.myair.editor.confirmed
 import dev.myair.planview.PlanFiles
 import dev.myair.review.ReviewService
 import dev.myair.review.inReview
+import dev.myair.reviewview.ReviewTabs
 import dev.myair.service.ClaudeSessionsService
 import java.nio.file.Path
 import java.util.UUID
@@ -118,10 +119,15 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
         if (managersConfirmed(sequenceOf(folder), Closing.REMOVE_PLAN)) update { it.removePlan(folder.id) }
     }
 
-    /** Whether [closing] may end the managers of this IDE that the plans of [folders] have and that work now, asking when one does. */
+    /**
+     * Whether [closing] may end the managers of this IDE that the plans and reviews of [folders] have and that work now,
+     * asking when one does.
+     */
     private fun managersConfirmed(folders: Sequence<Folder>, closing: Closing): Boolean {
-        val files = PlanFiles.getInstance()
-        val working = folders.filter { it.plan != null }.mapNotNull { files.manager(it.id) }.filter(SessionTerminals.getInstance()::wouldInterrupt)
+        val plans = PlanFiles.getInstance()
+        val reviews = ReviewTabs.getInstance().tabs
+        val working = folders.flatMap { listOfNotNull(plans.manager(it.id)?.takeIf { _ -> it.plan != null }, reviews.manager(it.id)) }
+            .filter(SessionTerminals.getInstance()::wouldInterrupt)
         return confirmed(project, closing, working.map { it.title }.toList())
     }
 

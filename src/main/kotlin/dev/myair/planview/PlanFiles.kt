@@ -10,11 +10,8 @@ import dev.myair.editor.PlanStart
 import dev.myair.editor.SessionTerminals
 import dev.myair.editor.hasTranscript
 import dev.myair.editor.projectBase
-import dev.myair.folders.ChangeSource
 import dev.myair.folders.Folder
 import dev.myair.folders.SessionFolders
-import dev.myair.service.ClaudeSessionsService
-import dev.myair.service.NEW_SESSION_TITLE
 import dev.myair.store.Homes
 import dev.myair.store.PlanManager
 import dev.myair.store.PlanManagerStore
@@ -100,10 +97,7 @@ class PlanFiles {
             args = start + pendingArgs.remove(folder.id).orEmpty()
             stored.prune(structure.all().map { it.id }.toSet()).set(folder.id, manager)
         }.byFolder.getValue(folder.id)
-        if (manager.session == newId) ClaudeSessionsService.getInstance().updateFolders(ChangeSource.AUTO) { it.assign(newId, folder.id) }
-        val file = ClaudeSessionVirtualFile(manager.session, manager.cwd, manager.project, NEW_SESSION_TITLE, args, planStart = PlanStart(folder.id, null))
-        tabs.setManager(folder.id, file)
-        return file
+        return tabs.managerFile(folder.id, manager, newId, args, PlanStart(folder.id, null))
     }
 
     /**

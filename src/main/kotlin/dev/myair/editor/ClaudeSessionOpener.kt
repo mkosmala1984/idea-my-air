@@ -11,8 +11,8 @@ import dev.myair.planview.PlanFiles
 import dev.myair.planview.PlanOpener
 import dev.myair.planview.managedPlanFolder
 import dev.myair.review.ReviewService
+import dev.myair.review.managedReviewFolder
 import dev.myair.reviewview.ReviewOpener
-import dev.myair.reviewview.managedReviewFolder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
 import dev.myair.tabs.HostWindow

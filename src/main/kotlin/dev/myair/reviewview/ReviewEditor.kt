@@ -21,7 +21,8 @@ class ReviewEditorProvider : FileEditorProvider, DumbAware {
 
 /**
  * A review tab: the review beside the terminal of its manager session ([ManagerTabEditor]). A review folder gone shows a
- * notice and ends the manager; a `review.json` that cannot be read shows why until it can, the manager left running.
+ * notice and ends the manager. A `review.json` that cannot be read before the review first showed shows why, starting no
+ * manager, until it can; once the review shows, it keeps showing as it was, the manager left running.
  */
 class ReviewEditor(project: Project, private val file: ReviewVirtualFile) : ManagerTabEditor(project, file, "Review", "dev.myair.reviewView.split") {
     private val reviews = ReviewService.getInstance()
@@ -48,5 +49,7 @@ class ReviewEditor(project: Project, private val file: ReviewVirtualFile) : Mana
 
     override fun startManager() = ReviewTabs.getInstance().startManager(file.folderId)
 
-    override fun forgetManager() = ReviewTabs.getInstance().forgetManager(file.folderId)
+    override fun forgetManager() {
+        ReviewTabs.getInstance().tabs.forgetManager(file.folderId)
+    }
 }

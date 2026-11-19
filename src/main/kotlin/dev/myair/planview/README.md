@@ -6,7 +6,7 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
 
 ## Interface
 
-- `FolderTabs.kt`, shared by plan and review tabs: `abstract class FolderTabFile(folderId, name)`, `abstract class FolderTabFileSystem(protocol, fileOf)`, `fun parseFolderTabPath(path)` and `class FolderTabs<F>(create)`, with `file`, `manager`, `running`, `setManager`, `forgetManager`, `tabOf`, `openHere<E>(project, folderId)` and `editors<E>(folderId)`.
+- `FolderTabs.kt`, shared by plan and review tabs: `abstract class FolderTabFile(folderId, name)`, `abstract class FolderTabFileSystem(protocol, fileOf)`, `fun parseFolderTabPath(path)` and `class FolderTabs<F>(create)`, with `file`, `manager`, `running`, `setManager`, `managerFile`, `forgetManager`, `tabOf`, `openHere<E>(project, folderId)` and `editors<E>(folderId)`.
 - `ManagerTabEditor.kt`: `abstract class ManagerTabEditor : FileEditor, SessionPaneHost`, a folder's content beside its manager's terminal, which exposes `pane`, `gone` and `showManager()`.
 - `PlanEditor.kt`: `class PlanEditorProvider` (type id `myair-plan`, `HIDE_DEFAULT_EDITOR`) and `class PlanEditor : ManagerTabEditor`.
 - `PlanFiles.kt`:

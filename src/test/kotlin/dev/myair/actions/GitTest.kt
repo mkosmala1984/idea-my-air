@@ -124,6 +124,17 @@ class GitTest {
     private fun branches(repo: Path) = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads").lines()
 
     @Test
+    fun `the main checkout read from files is the one git names, for the checkout and a linked worktree`() {
+        val repo = init("main-checkout")
+        git(repo, "branch", "topic")
+        val path = dir.resolve("wt-main")
+        Git.addWorktree(repo, path, "topic", "worktree-x", idle)
+        assertEquals(Git.mainRoot(repo), Git.mainCheckout(repo))
+        assertEquals(Git.mainRoot(path), Git.mainCheckout(path).toRealPath())
+        assertEquals(repo.toRealPath(), Git.mainCheckout(path).toRealPath())
+    }
+
+    @Test
     fun `a free local branch is checked out in the new worktree without a new branch`() {
         val repo = init("plain")
         git(repo, "branch", "topic")

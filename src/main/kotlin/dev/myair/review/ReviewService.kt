@@ -21,7 +21,6 @@ import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.BranchReview
 import dev.myair.store.Homes
 import dev.myair.store.ReviewFiles
-import dev.myair.reviewview.managedReviewFolder
 import java.time.LocalDate
 import kotlin.io.path.createDirectories
 import kotlin.io.path.isDirectory
@@ -38,6 +37,10 @@ data class ReviewGit(
 
 /** Job id to the session its live entry runs. */
 fun jobSessions(live: Map<String, LiveSession>): Map<String, String> = live.entries.mapNotNull { (session, entry) -> entry.job?.let { it to session } }.toMap()
+
+/** The review folder of [reviews] whose manager is session [sessionId]; a review that cannot be read names no manager. */
+fun managedReviewFolder(reviews: Map<String, Result<BranchReview>>, sessionId: String): String? =
+    reviews.entries.firstOrNull { it.value.getOrNull()?.manager?.session == sessionId }?.key
 
 /** Gives every run with a job and no session the session of its job's entry in [jobs]; returns the sessions learned too. */
 fun learnSessions(review: BranchReview, jobs: Map<String, String>): Pair<BranchReview, List<String>> =
