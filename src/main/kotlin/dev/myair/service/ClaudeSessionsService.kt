@@ -13,6 +13,7 @@ import com.intellij.openapi.project.ProjectManager
 import dev.myair.actions.Git
 import dev.myair.planview.PlanFiles
 import dev.myair.planview.shownSessionFiles
+import dev.myair.review.ReviewService
 import dev.myair.editor.SessionTerminals
 import java.time.Instant
 import dev.myair.editor.projectBase
@@ -229,7 +230,10 @@ class ClaudeSessionsService : Disposable {
         val titles = sessions.associate { it.id to it.title }
         val switched = retargetOpenTabs(live, titles, unread, sessions.associate { it.id to it.workDir }, state.heads)
         // A plan's manager follows its tab, so the next open resumes what the tab showed last.
-        if (switched.isNotEmpty()) PlanFiles.getInstance().store.update { switched.fold(it) { managers, (from, to) -> managers.moveSession(from, to) } }
+        if (switched.isNotEmpty()) {
+            PlanFiles.getInstance().store.update { switched.fold(it) { managers, (from, to) -> managers.moveSession(from, to) } }
+            ReviewService.getInstance().moveManagers(switched)
+        }
         if (switched.isNotEmpty() && foldersError == null) {
             updateFolders(ChangeSource.AUTO) { switched.fold(it) { folders, (from, to) -> folders.carryOver(from, to, titles.keys) } }
         }

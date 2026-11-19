@@ -40,7 +40,9 @@ import com.intellij.openapi.application.ApplicationManager
 import dev.myair.planview.PlanOpener
 import dev.myair.actions.Git
 import dev.myair.actions.NewSessionInDirAction
+import dev.myair.review.ReviewService
 import dev.myair.reviewview.NewReviewAction
+import dev.myair.reviewview.ReviewOpener
 import dev.myair.actions.openInIdeaAction
 import dev.myair.actions.openInTerminalAction
 import dev.myair.actions.PresetsGroup
@@ -282,6 +284,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         fun on(test: (Any?) -> Boolean) = { foldersMode && test(editing.selected()) }
         val planActions = listOf(
             FolderAction("Open Plan", AllIcons.Nodes.Target, on { editing.selectedPlanFolder() != null }, { true }) { PlanOpener.open(project, editing.selectedPlanFolder()!!.id) },
+            FolderAction("Open Review", AllIcons.Actions.Preview, on { it is Folder && it.id in ReviewService.getInstance().reviews }, { true }) { ReviewOpener.open(project, editing.selectedFolder()!!.id) },
             FolderAction("New Plan...", AllIcons.Nodes.Target, ::foldersMode, { canEditFolders() && editing.canNewPlan() }, editing::newPlan),
             FolderAction("Make Folder a Plan", null, on { it is Folder && editing.canAddPlan() }, ::canEditFolders, editing::addPlan),
             FolderAction("Remove Plan", null, on { it is Folder && it.plan != null }, { canEditFolders() && editing.canRemovePlan() }, editing::removePlan),

@@ -28,8 +28,8 @@ class PlanFilesTest {
     }
 
     @Test fun `a plan tab path is the folder id`() {
-        assertEquals("3f2a9c1e-0000-4000-8000-000000000001", parsePlanTabPath("3f2a9c1e-0000-4000-8000-000000000001"))
-        for (bad in listOf("", "a/b", "a?b", "a&b")) assertThrows<IllegalArgumentException>(bad) { parsePlanTabPath(bad) }
+        assertEquals("3f2a9c1e-0000-4000-8000-000000000001", parseFolderTabPath("3f2a9c1e-0000-4000-8000-000000000001"))
+        for (bad in listOf("", "a/b", "a?b", "a&b")) assertThrows<IllegalArgumentException>(bad) { parseFolderTabPath(bad) }
     }
 
     private val managers = PlanManagers().set("p", PlanManager("old", cwd, cwd)).set("q", PlanManager("other", cwd, cwd))

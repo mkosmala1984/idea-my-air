@@ -91,7 +91,7 @@ fun prNumber(input: String): Int? {
 /**
  * Makes the review of [branch] in the repository of [dirHint]: its work tree ([reviewWorkTree]) and base ([Git.baseOf])
  * read off the EDT, then `review.json` and the folder `Review: <branch>` where [reviewParent] puts a review started from
- * [place], in that order, so a failed structure write leaves an ignored file rather than an empty folder. EDT.
+ * [place], in that order, so a failed structure write leaves an ignored file rather than an empty folder; then opens it. EDT.
  */
 fun startReview(project: Project, branch: String, dirHint: Path, place: String?, pr: Int?) {
     ThreadingAssertions.assertEventDispatchThread()
@@ -106,6 +106,7 @@ fun startReview(project: Project, branch: String, dirHint: Path, place: String?,
             check(reviewParent(structure, reviews, place) == target) { "the place of the review of $branch changed meanwhile" }
             structure.createFolder(target.parent, id, reviewFolderName(structure, target.parent, branch))
         }
+        ReviewOpener.open(project, id)
     }
 }
 

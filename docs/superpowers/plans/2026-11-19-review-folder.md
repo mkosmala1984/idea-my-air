@@ -343,16 +343,16 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 
 `startManager` stores the manager in `review.json` (`manager`), starts it in `review.dir` with `--append-system-prompt-file <PromptFiles.write(prompts, reviewManagerPrompt(...))>`, files a new one in the review folder (`ChangeSource.AUTO`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 @Test fun `a review tab path round-trips its folder id`()
 @Test fun `a manager entry resumes in its stored directory and a new one starts with the prompt file`() // pure part: args of startManager via a function managerArgs(...)
 ```
 
-- [ ] **Step 2–4:** FAIL, implement, PASS, full tests PASS, `buildPlugin` PASS.
+- [x] **Step 2–4:** FAIL, implement, PASS, full tests PASS, `buildPlugin` PASS.
 - [ ] **Step 5: Check in `runIde`:** Open Review on a review folder opens one tab (a second Open focuses it), the manager starts in the review's dir, the tab survives an IDE restart, `/clear` in the manager keeps the tab bound.
-- [ ] **Step 6: Commit** `Review tab with its manager session`.
+- [x] **Step 6: Commit** `Review tab with its manager session`.
 
 ---
 

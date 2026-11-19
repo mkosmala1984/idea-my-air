@@ -6,13 +6,14 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
 
 ## Interface
 
-- `PlanEditor.kt`: `class PlanEditorProvider` (type id `myair-plan`, `HIDE_DEFAULT_EDITOR`) and `class PlanEditor : FileEditor, SessionPaneHost`, which exposes `pane` and `gone`.
+- `FolderTabs.kt`, shared by plan and review tabs: `abstract class FolderTabFile(folderId, name)`, `abstract class FolderTabFileSystem(protocol, fileOf)`, `fun parseFolderTabPath(path)` and `class FolderTabs<F>(create)`, with `file`, `manager`, `running`, `setManager`, `forgetManager`, `tabOf`, `openHere<E>(project, folderId)` and `editors<E>(folderId)`.
+- `ManagerTabEditor.kt`: `abstract class ManagerTabEditor : FileEditor, SessionPaneHost`, a folder's content beside its manager's terminal, which exposes `pane`, `gone` and `showManager()`.
+- `PlanEditor.kt`: `class PlanEditorProvider` (type id `myair-plan`, `HIDE_DEFAULT_EDITOR`) and `class PlanEditor : ManagerTabEditor`.
 - `PlanFiles.kt`:
   - `class PlanVirtualFile(folderId)`, whose path is the folder id.
   - `class PlanFileSystem` (`PROTOCOL = "myair-plan"`).
-  - `fun parsePlanTabPath(path)`.
   - `fun managerStart(existing, newId, cwd, project, hasTranscript)`.
-  - `@Service(APP) class PlanFiles`, with `store`, `file(folderId)`, `manager(folderId)`, `startManager(folder, structure, ideProject)`, `planOf(file)` and `forgetManager(folderId)`.
+  - `@Service(APP) class PlanFiles`, with `store`, `file(folderId)`, `manager(folderId)`, `startManager(folder, structure, ideProject)`, `tabs`, `planOf(file)` and `forgetManager(folderId)`.
 - `PlanOpener.kt`: `object PlanOpener`, with `open(project, folderId)`.
 - `PlanPanel.kt`: `class PlanPanel(project, folderId, parent) : JPanel, Scrollable`, with `show(view)`.
 - `PlanView.kt`: `data class TaskView`, `MilestoneView`, `PlanView`, `enum Section` (`IDEAL`, `CONSTRAINTS`, `DECISIONS`, `REQUIREMENTS`, `REVIEW`), `Folding`, `fun planViewOf(structure, folderId, sessions, managerId)`, `fun statusCounts(tasks)`, `fun openWork(counts)`, `fun requirementsSummary(requirements)`, `fun reviewSummary(review)` and `fun newestFirst(decisions)`.
@@ -38,14 +39,14 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
   - with no entry, returns a new session and `--session-id`;
   - with an entry that has a transcript, returns `--resume`;
   - with an entry that has no transcript yet, returns `--session-id`.
-- `parsePlanTabPath` rejects an empty path or one containing `/`, `?` or `&`. `PlanVirtualFile` is kept out of Recent Files (`isIncludedInEditorHistory = false`).
+- `parseFolderTabPath` rejects an empty path or one containing `/`, `?` or `&`. `PlanVirtualFile` is kept out of Recent Files (`isIncludedInEditorHistory = false`).
 
 ### Editor and panel
 
 - The panel's header shows the name, the task progress and the summaries `R <proven>/<all>` and the review's, not the description, which is the Ideal state section. `Folding.open(section, plan)` is by default true for Requirements, for Code review while a blocker is unresolved and for the other sections while empty.
 
-- `PlanEditor` builds nothing until `service.loaded` and while `foldersError` is set. Until then it shows "Loading..." or the error.
-  - A plan that is gone sets `gone` for good: the editor shows only a notice, and `PlanOpener.open` closes that tab before opening the plan again.
+- `ManagerTabEditor` builds nothing until `service.loaded` and while `foldersError` is set. Until then it shows "Loading..." or the error.
+  - A plan or review that is gone sets `gone` for good: the editor shows only a notice, its manager's process is closed, and `FolderTabs.openHere` closes that tab before opening it again.
 - `planViewOf` returns null when the folder or its plan is gone. It leaves the manager session out of the task rows.
 - `PlanEdit.apply` returns a change applied by id to the structure as it is at save time.
   - A blank title or new item gives null, and the edit is refused.

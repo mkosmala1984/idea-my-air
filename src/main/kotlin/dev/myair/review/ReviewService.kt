@@ -21,6 +21,7 @@ import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.BranchReview
 import dev.myair.store.Homes
 import dev.myair.store.ReviewFiles
+import dev.myair.reviewview.managedReviewFolder
 import java.time.LocalDate
 import kotlin.io.path.createDirectories
 import kotlin.io.path.isDirectory
@@ -144,6 +145,11 @@ class ReviewService : Disposable {
         val stored = change(folderId) { op(it) to emptyList() }
         refresh()
         return stored
+    }
+
+    /** `/clear` and `/resume` give a process a new session id: a review managed by the first of a pair of [switched] now is by the second. */
+    fun moveManagers(switched: List<Pair<String, String>>) = switched.forEach { (from, to) ->
+        managedReviewFolder(reviews, from)?.let { id -> update(id) { it.copy(manager = checkNotNull(it.manager).copy(session = to)) } }
     }
 
     /** Writes the new [review] of [folderId] and notifies; refuses a folder with a `review.json` on disk, in the structure or not. */
