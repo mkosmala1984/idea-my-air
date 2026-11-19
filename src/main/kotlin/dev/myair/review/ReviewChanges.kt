@@ -127,7 +127,7 @@ object ReviewChanges {
             q.asString
         }
         val merged = mergeFindings(review, r, commit, incoming)
-        val marked = merged.copy(runs = merged.runs.map { if (it.id == run) it.copy(reported = now.toString()) else it }, questions = merged.questions.filter { it.run != run })
+        val marked = merged.copy(runs = merged.runs.map { if (it.id == run) it.copy(reported = now.toString(), commit = commit) else it }, questions = merged.questions.filter { it.run != run })
         return asked.fold(marked) { acc, q -> acc.addQuestion(q, r.reviewer, run) }
     }
 }

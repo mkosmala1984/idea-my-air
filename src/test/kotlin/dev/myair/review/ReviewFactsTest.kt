@@ -44,18 +44,20 @@ class ReviewFactsTest {
         assertEquals(2, toDecide(r))
     }
 
-    @Test fun `the reviewed commit is the one of the newest reported run`() {
-        val r = review(
-            listOf(run("W1", reported = "2026-11-19T10:30:00Z"), run("W2", reported = "2026-11-19T11:00:00Z"), run("W3")),
-            listOf(finding("F1", commit = "c1", run = "W1"), finding("F2", commit = "c2", run = "W2")),
-        )
-        assertEquals("c2", reviewedCommit(r))
-        assertEquals(null, reviewedCommit(review(listOf(run("W3")), emptyList())))
-    }
 
     @Test fun `precision counts kept over triaged per reviewer across reviews`() {
         val r1 = review(listOf(run("W1")), listOf(finding("F1", FindingState.accepted), finding("F2", FindingState.fixed), finding("F3", FindingState.rejected), finding("F4")))
         val r2 = review(listOf(run("W1")), listOf(finding("F1", FindingState.posted)))
         assertEquals(mapOf("a" to Precision(3, 4, 2)), precision(listOf(r1, r2)))
+    }
+
+    @Test fun `the reviewed commit is the one of the newest reported run`() {
+        val r = review(listOf(run("W1", reported = "2026-11-19T10:30:00Z").copy(commit = "c1"), run("W2", reported = "2026-11-19T11:00:00Z").copy(commit = "c2"), run("W3")), emptyList())
+        assertEquals("c2", reviewedCommit(r))
+        assertEquals(null, reviewedCommit(review(listOf(run("W3")), emptyList())))
+    }
+
+    @Test fun `a run that reported no findings still gives the reviewed commit`() {
+        assertEquals("c9", reviewedCommit(review(listOf(run("W1", reported = "2026-11-19T10:30:00Z").copy(commit = "c9")), emptyList())))
     }
 }

@@ -62,6 +62,7 @@ data class Run(
     val range: String,
     val started: String,
     val reported: String? = null,
+    val commit: String? = null,
 )
 
 data class Chapter(val title: String, val text: String, val files: List<String>)
@@ -124,7 +125,7 @@ fun BranchReview.toJson(): String = GSON.toJson(
         "summary" to summary,
         "chapters" to chapters.array { c -> obj("title" to c.title, "text" to c.text, "files" to c.files.array(::JsonPrimitive)) },
         "runs" to runs.array { r ->
-            obj("id" to r.id, "reviewer" to r.reviewer, "session" to r.session, "job" to r.job, "range" to r.range, "started" to r.started, "reported" to r.reported)
+            obj("id" to r.id, "reviewer" to r.reviewer, "session" to r.session, "job" to r.job, "range" to r.range, "started" to r.started, "reported" to r.reported, "commit" to r.commit)
         },
         "findings" to findings.array { f ->
             obj(
@@ -216,8 +217,8 @@ fun parseReview(text: String, source: Path): BranchReview {
             Keys(it, "chapter", source, setOf("title", "text", "files")).run { Chapter(string("title"), string("text"), strings("files")) }
         },
         runs = root.array("runs").map {
-            Keys(it, "run", source, setOf("id", "reviewer", "session", "job", "range", "started", "reported")).run {
-                Run(string("id"), string("reviewer"), stringOrNull("session"), stringOrNull("job"), string("range"), string("started"), stringOrNull("reported"))
+            Keys(it, "run", source, setOf("id", "reviewer", "session", "job", "range", "started", "reported", "commit")).run {
+                Run(string("id"), string("reviewer"), stringOrNull("session"), stringOrNull("job"), string("range"), string("started"), stringOrNull("reported"), stringOrNull("commit"))
             }
         },
         findings = root.array("findings").map {

@@ -27,11 +27,8 @@ fun blockerCount(review: BranchReview): Int =
 
 fun toDecide(review: BranchReview): Int = review.findings.count { it.state == FindingState.open && it.severity != Severity.blocker }
 
-/** The commit of the newest reported run's reports; null without a reported run or when it reported no finding. */
-fun reviewedCommit(review: BranchReview): String? {
-    val run = review.runs.filter { it.reported != null }.maxByOrNull { it.reported!! } ?: return null
-    return review.findings.flatMap { it.reports }.lastOrNull { it.run == run.id }?.commit
-}
+/** The commit the newest reported run reported on, findings or not; null without a reported run. */
+fun reviewedCommit(review: BranchReview): String? = review.runs.filter { it.reported != null }.maxByOrNull { it.reported!! }?.commit
 
 data class Precision(val kept: Int, val triaged: Int, val reviews: Int)
 

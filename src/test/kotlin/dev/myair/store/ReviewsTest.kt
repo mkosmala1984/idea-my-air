@@ -20,7 +20,7 @@ class ReviewsTest {
     private fun review(blockers: Map<String, String> = emptyMap()) = BranchReview(
         "feature/x", "main", Path.of("E:/dev/a"), 12, "plans/p", PlanManager("s1", Path.of("E:/dev/a"), Path.of("E:/dev/a")), "summary",
         listOf(Chapter("c", "t", listOf("a.kt", "b.kt"))),
-        listOf(Run("W1", "security", "s2", "j1", "main..HEAD", "2026-11-19T10:00:00Z", "2026-11-19T10:05:00Z"), Run("W2", "style", null, null, "main..HEAD", "2026-11-19T11:00:00Z")),
+        listOf(Run("W1", "security", "s2", "j1", "main..HEAD", "2026-11-19T10:00:00Z", "2026-11-19T10:05:00Z", "c1"), Run("W2", "style", null, null, "main..HEAD", "2026-11-19T11:00:00Z")),
         listOf(
             Finding("F1", "a.kt", "bug", listOf(report()), FindingState.rejected, reason = "intended"),
             Finding("F2", "b.kt", "bug", listOf(report(), report("W2", 20, Severity.major)), FindingState.fixed, fixCommit = "def5678"),

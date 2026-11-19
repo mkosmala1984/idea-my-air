@@ -70,6 +70,7 @@ class ReviewChangesTest {
     @Test fun `a report sets reported on its run and adds its questions`() {
         val r = ReviewChanges.report(base, "W1", "abc1234", one, """["a?","b?"]""", now)
         assertEquals("2026-11-19T10:05:00Z", r.runs.single().reported)
+        assertEquals("abc1234", r.runs.single().commit)
         assertEquals(listOf(Triple("Q1", "security", "a?"), Triple("Q2", "security", "b?")), r.questions.map { Triple(it.id, it.reviewer, it.text) })
         assertEquals(1, r.findings.size)
     }
