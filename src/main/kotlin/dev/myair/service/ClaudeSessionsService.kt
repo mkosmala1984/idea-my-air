@@ -14,6 +14,7 @@ import dev.myair.actions.Git
 import dev.myair.planview.PlanFiles
 import dev.myair.planview.shownSessionFiles
 import dev.myair.review.ReviewService
+import dev.myair.review.refuseReviewPlacement
 import dev.myair.editor.SessionTerminals
 import java.time.Instant
 import dev.myair.editor.projectBase
@@ -205,10 +206,14 @@ class ClaudeSessionsService : Disposable {
         return unread != before
     }
 
-    /** Applies [op] to the folders as they are on disk now and shows the result in every panel of this IDE. */
+    /**
+     * Applies [op] to the folders as they are on disk now and shows the result in every panel of this IDE; a result that
+     * puts a plan or review folder where a review folder forbids it throws ([refuseReviewPlacement]), whoever wrote it.
+     */
     fun updateFolders(source: ChangeSource, op: (SessionFolders) -> SessionFolders) {
         check(foldersError == null) { "folders cannot change while ${structure.file} is unreadable: $foldersError" }
-        state = state.copy(folders = structure.update(source, op))
+        val reviews = ReviewService.getInstance().onDiskIds
+        state = state.copy(folders = structure.update(source) { before -> op(before).also { refuseReviewPlacement(before, it, reviews) } })
         changed()
     }
 
@@ -232,11 +237,12 @@ class ClaudeSessionsService : Disposable {
         // A plan's manager follows its tab, so the next open resumes what the tab showed last.
         if (switched.isNotEmpty()) {
             PlanFiles.getInstance().store.update { switched.fold(it) { managers, (from, to) -> managers.moveSession(from, to) } }
-            ReviewService.getInstance().moveManagers(switched)
         }
         if (switched.isNotEmpty() && foldersError == null) {
             updateFolders(ChangeSource.AUTO) { switched.fold(it) { folders, (from, to) -> folders.carryOver(from, to, titles.keys) } }
         }
+        // After carryOver, which a failing review write must not skip.
+        if (switched.isNotEmpty()) ReviewService.getInstance().moveManagers(switched)
     }
 
     override fun dispose() {

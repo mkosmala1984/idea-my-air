@@ -23,7 +23,7 @@ import dev.myair.folders.FolderChanges
 import dev.myair.folders.PlanChanges
 import dev.myair.folders.SessionFolders
 import dev.myair.review.ReviewService
-import dev.myair.review.refusePlansInReviews
+import dev.myair.review.managedReviewFolder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.planview.PlanEditor
 import dev.myair.planview.PlanFiles
@@ -180,10 +180,7 @@ class FoldersMcpToolset : McpToolset {
     suspend fun my_air_folders_apply(@McpDescription("The JSON array of changes.") changes: String): String = withFolders { service, _ ->
         val scanned = service.sessions.map { it.id }.toSet()
         val projects = service.sessions.map { it.cwd.toString() }.toSet()
-        val reviews = ReviewService.getInstance().reviews.keys
-        service.updateFolders(ChangeSource.MCP) { before ->
-            FolderChanges.apply(before, changes, scanned, projects).also { refusePlansInReviews(before, it, reviews) }
-        }
+        service.updateFolders(ChangeSource.MCP) { FolderChanges.apply(it, changes, scanned, projects) }
         service.folders.treeJson()
     }
 
@@ -267,7 +264,7 @@ class FoldersMcpToolset : McpToolset {
             val scanned = service.sessions.firstOrNull { it.id == session }
             val refusal = managerRefusal(
                 files.store.read(), folder.id, session, scanned != null || running != null, service.live[session],
-                running != null, running != null && terminals.starting(running), folders::pathOf,
+                running != null, running != null && terminals.starting(running), managedReviewFolder(ReviewService.getInstance().reviews, session)?.let(folders::pathOf), folders::pathOf,
             )
             require(refusal == null) { refusal!! }
             val manager = PlanManager(session, running?.cwd ?: scanned!!.cwd, running?.project ?: scanned!!.project)

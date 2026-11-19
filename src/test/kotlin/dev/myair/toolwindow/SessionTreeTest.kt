@@ -111,22 +111,35 @@ class SessionTreeTest {
     fun `a dropped folder goes before the folder it lands in front of, last above sessions, or last inside a folder`() {
         val root = foldersTree(structure, sessions, NO_BRANCH, NO_WORKTREES, null)
         val rtm = TreePath(arrayOf(root, root.getChildAt(1)))
-        fun drop(id: String, path: TreePath, childIndex: Int) = dropChange(structure, listOf(structure.find(id)!!), path, childIndex)
+        fun drop(id: String, path: TreePath, childIndex: Int) = dropChange(structure, emptySet(), listOf(structure.find(id)!!), path, childIndex)
         fun names(drop: Drop?, parentId: String?) = drop!!.change(structure).children(parentId).map { it.name }
         assertEquals(listOf("experiments", "rtm"), names(drop("rtm", TreePath(root), 3), null))
         assertEquals(listOf("experiments", "rtm"), names(drop("empty", TreePath(root), 1), null))
         assertEquals(listOf("fixes", "experiments"), names(drop("empty", rtm, -1), "rtm"))
         assertEquals(listOf("rtm", "fixes", "experiments"), names(drop("fix", TreePath(root), 2), null))
         assertNull(drop("rtm", rtm, -1))
-        assertNull(dropChange(structure.createFolder(null, "f2", "fixes"), listOf(structure.find("fix")!!), TreePath(root), 0))
-        assertNull(dropChange(structure.createFolder(null, "f2", "Fixes"), listOf(Folder("f2", "Fixes")), rtm, -1))
+        assertNull(dropChange(structure.createFolder(null, "f2", "fixes"), emptySet(), listOf(structure.find("fix")!!), TreePath(root), 0))
+        assertNull(dropChange(structure.createFolder(null, "f2", "Fixes"), emptySet(), listOf(Folder("f2", "Fixes")), rtm, -1))
+    }
+
+    @Test
+    fun `a folder drop that puts a review folder in a review or plan folder, or a plan in a review, is refused`() {
+        val s = SessionFolders().createFolder(null, "r", "Review: a").createFolder(null, "r2", "Review: b").createFolder(null, "p", "plan", plan = Plan())
+        val root = foldersTree(s, emptyList(), NO_BRANCH, NO_WORKTREES, null)
+        fun row(id: String) = TreePath(arrayOf(root, root.children().toList().first { ((it as DefaultMutableTreeNode).userObject as? Folder)?.id == id }))
+        fun drop(id: String, onto: String) = dropChange(s, setOf("r", "r2"), listOf(s.find(id)!!), row(onto), -1)
+        assertNull(drop("r2", "r"))
+        assertNull(drop("r", "p"))
+        assertNull(drop("p", "r"))
+        // The same drop without review folders is allowed.
+        assertEquals(listOf("r2"), dropChange(s, emptySet(), listOf(s.find("r2")!!), row("r"), -1)!!.change(s).children("r").map { it.id })
     }
 
     @Test
     fun `a folder drop shows where the folder lands, not where the pointer is`() {
         val root = foldersTree(structure, sessions, NO_BRANCH, NO_WORKTREES, null)
         val rtm = TreePath(arrayOf(root, root.getChildAt(1)))
-        fun drop(path: TreePath, childIndex: Int) = dropChange(structure, listOf(structure.find("empty")!!), path, childIndex)!!
+        fun drop(path: TreePath, childIndex: Int) = dropChange(structure, emptySet(), listOf(structure.find("empty")!!), path, childIndex)!!
         fun shown(path: TreePath, childIndex: Int) = drop(path, childIndex).let { it.path to it.childIndex }
         // Below `sessions` at the end of the tree: the folder goes last below `recent`, so the line is after the last folder.
         assertEquals(TreePath(root) to 3, shown(TreePath(root), 4))
@@ -145,14 +158,14 @@ class SessionTreeTest {
         val root = foldersTree(structure, sessions, NO_BRANCH, NO_WORKTREES, null)
         val dragged = listOf(sessions[1], sessions[2])
         val rtm = TreePath(arrayOf(root, root.getChildAt(1)))
-        val onSession = dropChange(structure, dragged, rtm.pathByAddingChild(root.getChildAt(1).getChildAt(1)), -1)!!
+        val onSession = dropChange(structure, emptySet(), dragged, rtm.pathByAddingChild(root.getChildAt(1).getChildAt(1)), -1)!!
         assertEquals(listOf("rtm", "rtm"), dragged.map { onSession.change(structure).folderOf(it.id) })
         assertEquals(rtm to -1, onSession.path to onSession.childIndex)
         val unfiled = TreePath(arrayOf(root, root.getChildAt(3)))
-        val underSessions = dropChange(structure, dragged, unfiled.pathByAddingChild(root.getChildAt(3).getChildAt(0)), 0)!!
+        val underSessions = dropChange(structure, emptySet(), dragged, unfiled.pathByAddingChild(root.getChildAt(3).getChildAt(0)), 0)!!
         assertEquals(listOf(null, null), dragged.map { underSessions.change(structure).folderOf(it.id) })
         assertEquals(unfiled to -1, underSessions.path to underSessions.childIndex)
-        assertNull(dropChange(structure, dragged, TreePath(root), 1))
+        assertNull(dropChange(structure, emptySet(), dragged, TreePath(root), 1))
     }
 
     @Test
@@ -248,12 +261,12 @@ class SessionTreeTest {
         val root = foldersTree(structure, sessions, NO_BRANCH, NO_WORKTREES, null)
         val empty = TreePath(arrayOf(root, root.getChildAt(2)))
         val tf = Path.of("/tf")
-        val dropped = dropChange(structure, listOf(tf), empty, -1)!!.change(structure)
+        val dropped = dropChange(structure, emptySet(), listOf(tf), empty, -1)!!.change(structure)
         val folder = dropped.children("empty").single()
         assertEquals("tf" to tf.toString(), folder.name to folder.dirs.single())
-        assertEquals(listOf("tf", "rtm", "experiments"), dropChange(structure, listOf(tf), TreePath(root), 0)!!.change(structure).children(null).map { it.name })
-        assertNull(dropChange(dropped, listOf(tf), TreePath(root), 0))
-        assertNull(dropChange(structure, listOf(Path.of("/x/rtm")), TreePath(root), 0))
+        assertEquals(listOf("tf", "rtm", "experiments"), dropChange(structure, emptySet(), listOf(tf), TreePath(root), 0)!!.change(structure).children(null).map { it.name })
+        assertNull(dropChange(dropped, emptySet(), listOf(tf), TreePath(root), 0))
+        assertNull(dropChange(structure, emptySet(), listOf(Path.of("/x/rtm")), TreePath(root), 0))
     }
 
     /** [structure] with rtm made a plan folder bound to /rtm: M4 holds T5 and T6, M7 none; s3 names T5. */
@@ -277,16 +290,16 @@ class SessionTreeTest {
         val rtm = pathTo(1)
         val m1 = pathTo(1, 1)
         fun milestones(s: SessionFolders) = s.find("rtm")!!.plan!!.milestones.map { m -> m.id + m.tasks.map { it.id } }
-        assertEquals(listOf("M4[]", "M1[T2, T3]"), milestones(dropChange(planned, listOf(item(1, 1)), rtm, 4)!!.change(planned)))
-        assertEquals(listOf("M1[T3, T2]", "M4[]"), milestones(dropChange(planned, listOf(item(1, 1, 0)), m1, -1)!!.change(planned)))
-        assertEquals(listOf("M1[T3]", "M4[T2]"), milestones(dropChange(planned, listOf(item(1, 1, 0)), pathTo(1, 2), -1)!!.change(planned)))
-        assertNull(dropChange(planned, listOf(item(1, 1)), pathTo(2), -1))
-        assertNull(dropChange(planned, listOf(item(1, 1, 0)), rtm, 0))
-        assertNull(dropChange(planned, listOf(tasked[2]), m1, -1))
-        assertNull(dropChange(planned, listOf(tasked[0]), pathTo(2), -1))
-        assertEquals("rtm", dropChange(planned, listOf(tasked[1]), pathTo(1, 3), -1)!!.change(planned).folderOf("s2"))
+        assertEquals(listOf("M4[]", "M1[T2, T3]"), milestones(dropChange(planned, emptySet(), listOf(item(1, 1)), rtm, 4)!!.change(planned)))
+        assertEquals(listOf("M1[T3, T2]", "M4[]"), milestones(dropChange(planned, emptySet(), listOf(item(1, 1, 0)), m1, -1)!!.change(planned)))
+        assertEquals(listOf("M1[T3]", "M4[T2]"), milestones(dropChange(planned, emptySet(), listOf(item(1, 1, 0)), pathTo(1, 2), -1)!!.change(planned)))
+        assertNull(dropChange(planned, emptySet(), listOf(item(1, 1)), pathTo(2), -1))
+        assertNull(dropChange(planned, emptySet(), listOf(item(1, 1, 0)), rtm, 0))
+        assertNull(dropChange(planned, emptySet(), listOf(tasked[2]), m1, -1))
+        assertNull(dropChange(planned, emptySet(), listOf(tasked[0]), pathTo(2), -1))
+        assertEquals("rtm", dropChange(planned, emptySet(), listOf(tasked[1]), pathTo(1, 3), -1)!!.change(planned).folderOf("s2"))
         val other = planned.addPlan("empty")
-        assertNull(dropChange(other, listOf(other.find("empty")!!), rtm, -1))
+        assertNull(dropChange(other, emptySet(), listOf(other.find("empty")!!), rtm, -1))
     }
 
     @Test
@@ -295,7 +308,7 @@ class SessionTreeTest {
         val root = foldersTree(bound, sessions, NO_BRANCH, NO_WORKTREES, null)
         val unfiled = TreePath(arrayOf(root, root.lastChild))
         val dragged = listOf(sessions[0], sessions[1])
-        val after = dropChange(bound, dragged, unfiled, -1)!!.change(bound)
+        val after = dropChange(bound, emptySet(), dragged, unfiled, -1)!!.change(bound)
         assertEquals(dragged.map { it.id }, after.unfiled)
         assertEquals(listOf(null, null), dragged.map { after.folderOf(it.id) })
         assertEquals(listOf(null, null), dragged.map { after.placeOf(it) })
@@ -309,7 +322,7 @@ class SessionTreeTest {
         val bound = structure.createFolder(null, "p", "tf", dirs = listOf(Path.of("/tf").toString()))
         val root = foldersTree(bound, all, NO_BRANCH, NO_WORKTREES, null)
         assertEquals("recent(s4, s3, s2, s1), rtm(fix, s3, s1), empty, p(s4, s2), sessions", shape(root))
-        assertEquals(null, dropChange(bound, listOf(all.first()), TreePath(arrayOf(root, root.lastChild)), -1)!!.change(bound).placeOf(all.first()))
+        assertEquals(null, dropChange(bound, emptySet(), listOf(all.first()), TreePath(arrayOf(root, root.lastChild)), -1)!!.change(bound).placeOf(all.first()))
     }
 
     @Test
@@ -327,9 +340,9 @@ class SessionTreeTest {
         assertEquals(RecentSessions, recent.userObject)
         assertEquals((20 downTo 11).map { "n$it" }, recent.children().toList().map { "${(it as DefaultMutableTreeNode).userObject}" })
         val path = TreePath(arrayOf(root, recent))
-        assertNull(dropChange(SessionFolders(), listOf(many[15]), path, -1))
-        assertNull(dropChange(SessionFolders(), listOf(many[15]), path.pathByAddingChild(recent.getChildAt(0)), -1))
-        assertNull(dropChange(structure, listOf(structure.find("rtm")!!), path, -1))
+        assertNull(dropChange(SessionFolders(), emptySet(), listOf(many[15]), path, -1))
+        assertNull(dropChange(SessionFolders(), emptySet(), listOf(many[15]), path.pathByAddingChild(recent.getChildAt(0)), -1))
+        assertNull(dropChange(structure, emptySet(), listOf(structure.find("rtm")!!), path, -1))
         assertNull(targetFolder(path.pathByAddingChild(recent.getChildAt(0))))
     }
 
@@ -455,8 +468,8 @@ class SessionTreeTest {
         val folder = root.getChildAt(1) as DefaultMutableTreeNode
         val group = folder.getChildAt(0) as DefaultMutableTreeNode
         val row = TreePath(arrayOf(root, folder, group, group.getChildAt(1)))
-        assertNull(dropChange(app, listOf(bySession[1]), row, -1))
-        assertNull(dropChange(app, listOf(bySession[1]), TreePath(arrayOf(root, folder, group)), 0))
+        assertNull(dropChange(app, emptySet(), listOf(bySession[1]), row, -1))
+        assertNull(dropChange(app, emptySet(), listOf(bySession[1]), TreePath(arrayOf(root, folder, group)), 0))
         assertEquals(appX, nodeDir(row))
         assertEquals(appX, openDir(row))
         assertEquals(Path.of("/app"), nodeProject(row))

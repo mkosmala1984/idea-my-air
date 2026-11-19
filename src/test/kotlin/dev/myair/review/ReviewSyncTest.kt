@@ -3,6 +3,7 @@ package dev.myair.review
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import dev.myair.folders.Plan
+import dev.myair.folders.PlanChanges
 import dev.myair.folders.SessionFolders
 import dev.myair.store.BranchReview
 import dev.myair.store.Finding
@@ -12,6 +13,7 @@ import dev.myair.store.Severity
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import java.time.Instant
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -68,5 +70,16 @@ class ReviewSyncTest {
         val r = review(listOf(run("W1", null)), "p", listOf(blocker))
         assertEquals(mapOf("F1" to "B1"), mirrorDue(r, structure, emptySet())?.blockers)
         assertNull(mirrorDue(review(emptyList()), structure, emptySet()))
+    }
+
+    @Test fun `mirroring against a plan another IDE already mirrored into adds nothing, against the stale plan it would add again`() {
+        val stale = SessionFolders().createFolder(null, "p", "p", plan = Plan())
+        val blocker = Finding("F1", "a.kt", "bug", listOf(Report("W1", "a", "c1", 1, Severity.blocker, "s", "x")))
+        val r = review(listOf(run("W1", null)), "p", listOf(blocker))
+        val mirror = checkNotNull(mirrorDue(r, stale, emptySet()))
+        val mirrored = PlanChanges.apply(stale, "p", mirror.changes, LocalDate.of(2026, 11, 19))
+        val stored = r.copy(blockers = mirror.blockers)
+        assertNull(mirrorDue(stored, mirrored, emptySet()))
+        assertEquals(mapOf("F1" to "B1"), mirrorDue(stored, stale, emptySet())?.blockers, "the plan as this IDE read it lacks B1")
     }
 }

@@ -46,15 +46,16 @@ fun managerStart(existing: PlanManager?, newId: String, cwd: Path, project: Path
 
 /**
  * Why session [sessionId] cannot become the manager of the plan of folder [folderId], null when it can: it manages a plan
- * already, it is unknown ([known]: scanned, or its process runs here), a background job runs it ([live]), it runs outside
+ * already, or the review folder at path [review], it is unknown ([known]: scanned, or its process runs here), a background job runs it ([live]), it runs outside
  * this IDE ([live] with no process here), or its process here is still [starting], so a message cannot reach it yet.
  */
 fun managerRefusal(
     managers: PlanManagers, folderId: String, sessionId: String, known: Boolean, live: LiveSession?, runsHere: Boolean, starting: Boolean,
-    pathOf: (String) -> String,
+    review: String?, pathOf: (String) -> String,
 ): String? {
     managers.folderOf(sessionId)?.let { return if (it == folderId) "session $sessionId manages this plan already" else "session $sessionId manages the plan '${pathOf(it)}'" }
     return when {
+        review != null -> "session $sessionId manages the review '$review'"
         !known -> "no session $sessionId"
         live?.job != null -> "session $sessionId is run by the background job ${live.job}"
         live != null && !runsHere -> "session $sessionId runs outside this IDE (pid ${live.pid}); it must end there first"

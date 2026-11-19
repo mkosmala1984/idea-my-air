@@ -7,7 +7,7 @@ import dev.myair.claude.ClaudeSession
 import dev.myair.folders.FolderChanges
 import dev.myair.folders.Plan
 import dev.myair.folders.SessionFolders
-import dev.myair.review.refusePlansInReviews
+import dev.myair.review.refuseReviewPlacement
 import dev.myair.toolwindow.WorktreeRow
 import dev.myair.toolwindow.reviewStart
 import org.junit.jupiter.api.Test
@@ -54,7 +54,7 @@ class NewReviewTest {
     @Test fun `a plan made, created or moved into a review folder by a change list is refused naming both, one there before is not`() {
         val base = SessionFolders().createFolder(null, "r", "Review: a").createFolder("r", "sub", "sub").createFolder(null, "p", "plan", plan = Plan())
         val reviews = setOf("r")
-        fun apply(changes: String) = FolderChanges.apply(base, changes, emptySet(), emptySet()).let { refusePlansInReviews(base, it, reviews) }
+        fun apply(changes: String) = FolderChanges.apply(base, changes, emptySet(), emptySet()).let { refuseReviewPlacement(base, it, reviews) }
         listOf(
             """[{"op":"add_plan","path":"Review: a"}]""",
             """[{"op":"add_plan","path":"Review: a/sub"}]""",
@@ -66,7 +66,20 @@ class NewReviewTest {
         }
         apply("""[{"op":"create","path":"plan2","plan":true},{"op":"create","path":"Review: a/plain"}]""")
         val already = base.addPlan("sub")
-        refusePlansInReviews(already, already.rename("r", "Review: z"), reviews)
+        refuseReviewPlacement(already, already.rename("r", "Review: z"), reviews)
+    }
+
+    @Test fun `a review folder moved or created into a review or plan folder is refused, one there before is not`() {
+        val base = SessionFolders().createFolder(null, "r", "Review: a").createFolder(null, "r2", "Review: b").createFolder(null, "p", "plan", plan = Plan())
+        val reviews = setOf("r", "r2", "new")
+        fun refused(after: SessionFolders) = assertThrows<IllegalArgumentException> { refuseReviewPlacement(base, after, reviews) }.message!!
+        assertEquals("review folder 'Review: a/Review: b' would lie in review folder 'Review: a'", refused(base.moveFolder("r2", "r", 0)))
+        assertEquals("review folder 'plan/Review: b' would lie in plan folder 'plan'", refused(base.moveFolder("r2", "p", 0)))
+        assertEquals("review folder 'plan/Review: c' would lie in plan folder 'plan'", refused(base.createFolder("p", "new", "Review: c")))
+        assertEquals("'Review: a/plan' would be a plan in review folder 'Review: a', which holds no plan", refused(base.moveFolder("p", "r", 0)))
+        refuseReviewPlacement(base, base.createFolder(null, "new", "Review: c"), reviews)
+        val already = base.moveFolder("r2", "r", 0)
+        refuseReviewPlacement(already, already.rename("r2", "Review: z").createFolder(null, "x", "x"), reviews)
     }
 
     @Test fun `a place no longer in the structure throws`() {

@@ -59,17 +59,34 @@ fun inStructure(all: Map<String, Result<BranchReview>>, structure: SessionFolder
 /** Whether folder [id] is or lies in a review folder of [reviews], which [SessionFolders] does not know. */
 fun inReview(structure: SessionFolders, reviews: Set<String>, id: String) = structure.ancestry(id).any { it.id in reviews }
 
+/** Folder [folder] lies where the review rules forbid, inside [holder]. */
+private data class Misplaced(val folder: String, val holder: String)
+
+/** A plan folder that is or lies in a review folder, and a review folder that lies in a review or plan folder. */
+private fun misplaced(s: SessionFolders, reviews: Set<String>) = s.all().mapNotNull { f ->
+    when {
+        f.plan != null -> s.ancestry(f.id).firstOrNull { it.id in reviews }
+        f.id in reviews -> s.ancestry(f.id).dropLast(1).lastOrNull { it.id in reviews || it.plan != null }
+        else -> null
+    }?.let { Misplaced(f.id, it.id) }
+}
+
 /**
- * Throws naming the first plan folder of [after] that is or lies in a review folder of [reviews] and was not so in
- * [before]: a review folder holds no plan, whether a change list adds one, creates one inside or moves one in.
+ * Why [after] places a folder against the review rules where [before] did not, else null: a review folder holds no plan,
+ * whether a change adds one, creates one inside or moves one in, and lies in no review folder nor plan folder. Only
+ * placements new in [after] count, so a structure made before a rule existed does not block unrelated writes.
  */
-fun refusePlansInReviews(before: SessionFolders, after: SessionFolders, reviews: Set<String>) {
-    fun inReviews(s: SessionFolders) = s.all().filter { it.plan != null && inReview(s, reviews, it.id) }
-    val old = inReviews(before).map { it.id }.toSet()
-    inReviews(after).firstOrNull { it.id !in old }?.let { plan ->
-        val review = after.ancestry(plan.id).first { it.id in reviews }
-        throw IllegalArgumentException("'${after.pathOf(plan.id)}' would be a plan in review folder '${after.pathOf(review.id)}', which holds no plan")
-    }
+fun placementProblem(before: SessionFolders, after: SessionFolders, reviews: Set<String>): String? {
+    val old = misplaced(before, reviews).toSet()
+    val m = misplaced(after, reviews).firstOrNull { it !in old } ?: return null
+    val (folder, holder) = after.pathOf(m.folder) to after.pathOf(m.holder)
+    return if (checkNotNull(after.find(m.folder)).plan != null) "'$folder' would be a plan in review folder '$holder', which holds no plan"
+    else "review folder '$folder' would lie in ${if (m.holder in reviews) "review" else "plan"} folder '$holder'"
+}
+
+/** Throws with [placementProblem]'s message; every structure write runs it ([ClaudeSessionsService.updateFolders]). */
+fun refuseReviewPlacement(before: SessionFolders, after: SessionFolders, reviews: Set<String>) {
+    placementProblem(before, after, reviews)?.let { throw IllegalArgumentException(it) }
 }
 
 /** The plan [review] is linked to, while its folder still has one. */
@@ -108,6 +125,9 @@ class ReviewService : Disposable {
 
     /** Every review on disk that could be read, folders gone from the structure included ([onDisk]). */
     val readable get() = onDisk(all)
+
+    /** The folder ids of every `review.json` on disk, readable or not: what [refuseReviewPlacement] knows as review folders. */
+    val onDiskIds: Set<String> get() = all.keys
 
     /** The jobs of the registry's live entries, which [runStatus] and the mirror read. */
     val liveJobs: Set<String> get() = jobSessions(sessions.live).keys
@@ -161,19 +181,23 @@ class ReviewService : Disposable {
         return stored
     }
 
-    /** `/clear` and `/resume` give a process a new session id: a review managed by the first of a pair of [switched] now is by the second. */
+    /**
+     * `/clear` and `/resume` give a process a new session id: a review managed by the first of a pair of [switched] now is
+     * by the second. A plain write, without the plan mirror, which the next [sync] applies.
+     */
     fun moveManagers(switched: List<Pair<String, String>>) = switched.forEach { (from, to) ->
-        managedReviewFolder(reviews, from)?.let { id -> update(id) { it.copy(manager = checkNotNull(it.manager).copy(session = to)) } }
+        managedReviewFolder(reviews, from)?.let { id ->
+            val review = files.read(id)
+            store(id, review.copy(manager = checkNotNull(review.manager).copy(session = to)))
+            changed()
+        }
     }
 
     /** Writes the new [review] of [folderId] and notifies; refuses a folder with a `review.json` on disk, in the structure or not. */
     fun create(folderId: String, review: BranchReview) {
         ThreadingAssertions.assertEventDispatchThread()
         require(!files.exists(folderId)) { "folder $folderId has a review already" }
-        files.write(folderId, review)
-        // Drops a read started before this write, which would land without the new review.
-        requested++
-        all = all + (folderId to Result.success(review))
+        store(folderId, review)
         changed()
         refresh()
     }
@@ -216,36 +240,41 @@ class ReviewService : Disposable {
     }
 
     /**
-     * Applies [op] to the review on disk; when the review changed, sessions were learned or its plan does not follow,
-     * writes the review with the mirror's blocker ids first, so the plan never holds a blocker the review does not map
-     * (a blocker id the plan lacks is added again by the next mirror), then files the sessions in the review folder and
-     * applies the mirror in one folders write.
+     * Applies [op] to the review on disk. When sessions were learned or the plan does not follow as this IDE last read the
+     * structure, the mirror is computed in the folders write against the structure read from disk then (another IDE may
+     * have mirrored meanwhile), and the review is written there with the mirror's blocker ids before the structure, so the
+     * plan never holds a blocker the review does not map (a blocker id the plan lacks is added again by the next mirror);
+     * the sessions are filed in the review folder and the mirror applied in that one write.
      */
     private fun change(folderId: String, op: (BranchReview) -> Pair<BranchReview, List<String>>): BranchReview {
         ThreadingAssertions.assertEventDispatchThread()
         val before = files.read(folderId)
         val (review, filed) = op(before)
         val jobs = liveJobs
-        val mirror = mirrorDue(review, sessions.folders, jobs)
-        if (review == before && filed.isEmpty() && mirror == null) return before
-        val stored = mirror?.let { review.copy(blockers = it.blockers) } ?: review
-        if (stored != before) files.write(folderId, stored)
-        // Drops a read started before this write, which would land the review as it was.
-        requested++
-        all = all + (folderId to Result.success(stored))
-        if (filed.isNotEmpty() || mirror != null) {
-            sessions.updateFolders(ChangeSource.AUTO) { structure ->
-                val assigned = filed.fold(structure) { s, session -> s.assign(session, folderId) }
-                if (mirror == null) assigned
-                else PlanChanges.apply(assigned, checkNotNull(review.plan), mirror.changes, LocalDate.now()).also { after ->
-                    // Also catches a plan another IDE changed since this one read it, where the predicted ids are wrong;
-                    // a mirror that does not converge would rewrite the plan on every notification.
-                    check(mirrorDue(stored, after, jobs) == null) { "the mirror of review $folderId does not converge: ${mirror.changes}" }
-                }
+        var stored = review
+        if (filed.isEmpty() && mirrorDue(review, sessions.folders, jobs) == null) {
+            if (review == before) return before
+            store(folderId, review)
+        } else sessions.updateFolders(ChangeSource.AUTO) { structure ->
+            val mirror = mirrorDue(review, structure, jobs)
+            stored = mirror?.let { review.copy(blockers = it.blockers) } ?: review
+            if (stored != before) store(folderId, stored)
+            val assigned = filed.fold(structure) { s, session -> s.assign(session, folderId) }
+            if (mirror == null) assigned
+            else PlanChanges.apply(assigned, checkNotNull(review.plan), mirror.changes, LocalDate.now()).also { after ->
+                // A mirror that does not converge would rewrite the plan on every notification.
+                check(mirrorDue(stored, after, jobs) == null) { "the mirror of review $folderId does not converge: ${mirror.changes}" }
             }
         }
         changed()
         return stored
+    }
+
+    /** Writes [review] as the review of [folderId] and holds it; drops a read started before, which would land it as it was. */
+    private fun store(folderId: String, review: BranchReview) {
+        files.write(folderId, review)
+        requested++
+        all = all + (folderId to Result.success(review))
     }
 
     // A copy: a listener may unsubscribe while being called.
