@@ -83,7 +83,7 @@ private enum class WorktreeMode { NONE, ASK, FIXED }
 
 /** The aliases `claude --help` names for `--model`. */
 internal val MODELS = listOf("fable", "opus", "sonnet")
-private const val OWN_SETTING = "claude's own setting"
+internal const val OWN_SETTING = "claude's own setting"
 
 /**
  * Edits [preset], or a new one when null, under [name]; [takenNames] are the other presets'. [ideBase] is the directory an

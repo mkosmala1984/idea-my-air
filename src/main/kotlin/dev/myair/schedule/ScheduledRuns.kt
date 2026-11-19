@@ -1,6 +1,7 @@
 package dev.myair.schedule
 
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
+import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
@@ -14,6 +15,7 @@ import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.editor.SessionTerminals
 import dev.myair.editor.projectBase
 import dev.myair.folders.ChangeSource
+import dev.myair.schedule.ui.openScheduledTasks
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.Homes
 import dev.myair.store.SeenStore
@@ -158,6 +160,7 @@ class ScheduledRuns(private val scope: CoroutineScope) {
             val name = tasks[record.taskId]?.name ?: record.taskId
             NotificationGroupManager.getInstance().getNotificationGroup("My Air Scheduled Tasks")
                 .createNotification("Scheduled task \"$name\" failed: ${record.error}", NotificationType.ERROR)
+                .addAction(NotificationAction.createSimpleExpiring("Open Scheduled Tasks") { openScheduledTasks(null) })
                 .notify(null)
             records.update(record.copy(notified = true))
         }
