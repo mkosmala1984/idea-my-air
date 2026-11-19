@@ -115,7 +115,7 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
   - `fun BranchReview.toJson(): String`, `fun parseReview(text: String, source: Path): BranchReview`
   - `class ReviewFiles(val root: Path)` with `fun readAll(): Map<String, Result<BranchReview>>` (folder id → review, failures kept per review), `fun write(folderId: String, review: BranchReview)`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 @Test fun `a review round-trips through json`()            // every field set, parse(toJson(r)) == r
@@ -128,10 +128,10 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 @Test fun `blockers is written only when not empty`()        // json has no "blockers" key for an empty map
 ```
 
-- [ ] **Step 2: Run** `./gradlew test --tests dev.myair.store.ReviewsTest` → FAIL (unresolved references).
-- [ ] **Step 3: Implement** in `Reviews.kt`; JSON with Gson tree API and an explicit key set per object (as `parsePresets` does: `PRESET_KEYS`, `only`), `failure_scenario` as the JSON key of `failureScenario`, dates as ISO strings. `ReviewFiles.write` uses `writeAtomically(root.resolve(folderId).resolve("review.json"), …)`.
-- [ ] **Step 4: Run** the class → PASS; `./gradlew test` → PASS.
-- [ ] **Step 5: Commit** `Review model and review.json files`.
+- [x] **Step 2: Run** `./gradlew test --tests dev.myair.store.ReviewsTest` → FAIL (unresolved references).
+- [x] **Step 3: Implement** in `Reviews.kt`; JSON with Gson tree API and an explicit key set per object (as `parsePresets` does: `PRESET_KEYS`, `only`), `failure_scenario` as the JSON key of `failureScenario`, dates as ISO strings. `ReviewFiles.write` uses `writeAtomically(root.resolve(folderId).resolve("review.json"), …)`.
+- [x] **Step 4: Run** the class → PASS; `./gradlew test` → PASS.
+- [x] **Step 5: Commit** `Review model and review.json files`.
 
 ---
 
