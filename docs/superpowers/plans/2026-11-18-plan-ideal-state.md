@@ -2,13 +2,13 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
-| 6 | | |
-| 7 | | |
+| 1 | done | `55c675c`..`1296572` |
+| 2 | done | `b04711a` |
+| 3 | done | `871cf90` |
+| 4 | done | `f7dedc1` |
+| 5 | done | `3cdcf8e` |
+| 6 | done | `2548d84` |
+| 7 | done (global CLAUDE.md awaits approval) | `314f04e` |
 
 ## TL;DR
 
@@ -80,7 +80,7 @@
   - `deleteEntry(folderId: String, id: String)` for an `R`/`D`/`B` id.
   - private `Plan.allocate(prefix: Char): Pair<String, Plan>`: id `"$prefix${next[prefix] ?: 1}"`, `next` bumped.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `PlanTest`:
 - `` `a requirement is unproven without evidence, not done with any not done item, else proven` ``: `Requirement("R1","x",EvalKind.CODE).status == UNPROVEN`; with `listOf("commit abc1234")` → `PROVEN`; with `listOf("commit abc1234", "not done: sandbox walk not run")` → `NOT_DONE`.
@@ -96,21 +96,21 @@ In `SessionFoldersTest`:
 - `` `a plan with new fields is written as version 5 and reads back equal` ``: one of each field set; round-trips; `"version": 5`.
 - `` `version 5 rejects unknown plan keys` ``: a v5 file with `"plan":{"milestones":[],"extra":1}` throws naming `extra`.
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `./gradlew test --tests dev.myair.folders.PlanTest --tests dev.myair.folders.SessionFoldersTest`
 Expected: compilation fails on the missing types.
 
-- [ ] **Step 3: Implement the model in `Plan.kt` and the edits in `SessionFolders.kt`**
+- [x] **Step 3: Implement the model in `Plan.kt` and the edits in `SessionFolders.kt`**
 
 `VERSION` becomes 5; `parse` accepts `version in 1..5` and for 5 the root and folder key sets of 4; `plan()` reads the new keys only when `version == 5` (pass the version down) and uses `only` with them. `toJson` writes `"version"` as `if (all().any { it.plan?.usesVersion5 == true }) 5 else 4` and serializes `Plan` with a `JsonSerializer<Plan>` registered on the `GsonBuilder` that leaves out `decisions`, `requirements`, `next` when empty (Gson already leaves out nulls), so a version-4 file is unchanged. `restore` additionally merges, for every plan folder present in the snapshot, `next` with the current plan's by `maxOf` per key. `deletePlanItem` maps the plan's requirements' `tasks` minus the deleted task ids. Update the version comment.
 
-- [ ] **Step 4: Run them to verify they pass**
+- [x] **Step 4: Run them to verify they pass**
 
 Run: `./gradlew test --tests 'dev.myair.folders.*'`
 Expected: PASS, the existing folder tests included.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/kotlin/dev/myair/folders/Plan.kt src/main/kotlin/dev/myair/folders/SessionFolders.kt src/test/kotlin/dev/myair/folders/PlanTest.kt src/test/kotlin/dev/myair/folders/SessionFoldersTest.kt
@@ -132,7 +132,7 @@ Trailers: `Plan-Task: 1/7`, `Plan: docs/superpowers/plans/2026-11-18-plan-ideal-
 
 New `FIELDS`: `set_constraints {constraints}`, `add_decision {text, session}`, `add_requirement {text, eval, tasks, index}`, `add_evidence {id, evidence}`, `set_review {status, commit}`, `add_blocker {text}`; `update` gains `text, eval, tasks, evidence, resolved`; `update`/`delete` dispatch on the id's first letter `M`/`T`/`R`/`D`/`B` and refuse fields not of that kind (R: `text, eval, tasks, evidence`; D: `text`; B: `text, resolved`; M/T as today). `set_review` without `commit` keeps the stored one, `"commit": null` clears it; a given commit must match `[0-9a-f]{7,40}`. An id of another plan or unknown throws `no requirement 'R9' in this plan` and likewise.
 
-- [ ] **Step 1: Write the failing tests** (`structure` and `apply` helper get `today = LocalDate.of(2026, 11, 18)`):
+- [x] **Step 1: Write the failing tests** (`structure` and `apply` helper get `today = LocalDate.of(2026, 11, 18)`):
 - `` `the new sections are set in order, ids allocated per plan` ``: one list with `set_constraints`, `add_requirement` (`"eval":"code","tasks":["T2"]`), `add_evidence` (`"id":"R1","evidence":"commit 4c91271d91"`), `add_decision` (`"session":"s1"`), `set_review` (`"status":"in_progress","commit":"abc1234"`), `add_blocker`, `update` `B1` `resolved:true` → the plan equals the expected `Plan` with `Decision("D1","2026-11-18",...)`, review date `2026-11-18`, `R1.status == PROVEN`.
 - `` `update and delete take only the fields of the id's kind` ``: `{"op":"update","id":"D1","eval":"code"}` throws `unknown fields`; `{"op":"update","id":"B1","next":"x"}` throws.
 - `` `malformed evidence, eval and review status are refused naming the change` ``: `"evidence":"commit ABC1234"`, `"evidence":"commit abc1234 "`, `"eval":"unit"`, `"status":"finished"` each throw with message starting `change 1 `.
@@ -140,15 +140,15 @@ New `FIELDS`: `set_constraints {constraints}`, `add_decision {text, session}`, `
 - `` `set_review keeps the commit unless given, null clearing it` ``.
 - Existing tests: pass `today`.
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `./gradlew test --tests dev.myair.folders.PlanChangesTest` — Expected: FAIL (signature and unknown ops).
 
-- [ ] **Step 3: Implement the ops; `my_air_plan_apply` passes `LocalDate.now()` and its description names every new op with its fields, the eval kinds, review statuses and the evidence formats (R20)**
+- [x] **Step 3: Implement the ops; `my_air_plan_apply` passes `LocalDate.now()` and its description names every new op with its fields, the eval kinds, review statuses and the evidence formats (R20)**
 
-- [ ] **Step 4: Run** `./gradlew test --tests dev.myair.folders.PlanChangesTest --tests dev.myair.editor.SessionSystemPromptTest` — Expected: PASS.
+- [x] **Step 4: Run** `./gradlew test --tests dev.myair.folders.PlanChangesTest --tests dev.myair.editor.SessionSystemPromptTest` — Expected: PASS.
 
-- [ ] **Step 5: Commit** `Plan changes: ops for constraints, decisions, requirements, evidence, review and blockers` with trailers `Plan-Task: 2/7`.
+- [x] **Step 5: Commit** `Plan changes: ops for constraints, decisions, requirements, evidence, review and blockers` with trailers `Plan-Task: 2/7`.
 
 ### Task 3: `my_air_plan_get` returns the sections
 
@@ -158,11 +158,11 @@ Run: `./gradlew test --tests dev.myair.folders.PlanChangesTest` — Expected: FA
 
 **Interfaces:** Consumes Task 1's model. `planMap` adds after `description`: `"constraints"`, `"decisions"` (`id, date, text, session`, in order added), `"requirements"` (`id, text, eval` label, `tasks`, `evidence`, `status` as `unproven`/`not_done`/`proven`), `"review"` (`status` label, `commit`, `date`, `blockers` with `id, text, resolved`) or null.
 
-- [ ] **Step 1: Write the failing test** `` `a plan's sections come out with derived requirement statuses` ``: build a plan with one of each, assert the JSON fields and `requirements[0].status == "proven"`; and `` `a plan without sections has null constraints and review and empty lists` ``.
-- [ ] **Step 2: Run** `./gradlew test --tests dev.myair.mcp.FolderQueriesTest` — Expected: FAIL.
-- [ ] **Step 3: Implement** in `planMap`; describe the fields in `my_air_plan_get`'s description (R13, R20).
-- [ ] **Step 4: Run** the same — Expected: PASS.
-- [ ] **Step 5: Commit** `my_air_plan_get returns constraints, decisions, requirements and review` with `Plan-Task: 3/7`.
+- [x] **Step 1: Write the failing test** `` `a plan's sections come out with derived requirement statuses` ``: build a plan with one of each, assert the JSON fields and `requirements[0].status == "proven"`; and `` `a plan without sections has null constraints and review and empty lists` ``.
+- [x] **Step 2: Run** `./gradlew test --tests dev.myair.mcp.FolderQueriesTest` — Expected: FAIL.
+- [x] **Step 3: Implement** in `planMap`; describe the fields in `my_air_plan_get`'s description (R13, R20).
+- [x] **Step 4: Run** the same — Expected: PASS.
+- [x] **Step 5: Commit** `my_air_plan_get returns constraints, decisions, requirements and review` with `Plan-Task: 3/7`.
 
 ### Task 4: Sessions are told the sections
 
@@ -174,15 +174,15 @@ Run: `./gradlew test --tests dev.myair.folders.PlanChangesTest` — Expected: FA
 
 Layout after the intro sentence: `## Ideal state` + description (when set), `## Constraints` + text (when set), `## Requirements` with one line per requirement `- **R1** (code) text` (task session: those whose `tasks` hold its task; manager: all; heading only when any), then task and milestone as today, then the manager section with these rules added: record a decision with `add_decision` whenever the ideal state, constraints or requirements change; add evidence with `add_evidence` as tasks close, in the four formats; after a code review set it with `set_review` and its blockers with `add_blocker`; delete requirements, decisions or blockers only after the user agreed.
 
-- [ ] **Step 1: Write the failing tests**:
+- [x] **Step 1: Write the failing tests**:
 - `` `a task session gets the ideal state, constraints and only the requirements of its task` ``: R1 tasks `[T2]`, R2 tasks `[T9]`; prompt for T2 contains `## Ideal state`, `## Constraints`, `- **R1** (code) ` and not `R2`.
 - `` `a manager gets every requirement and the rules for decisions, evidence and review` ``: contains both R lines, `add_decision`, `add_evidence`, `set_review`, `add_blocker`.
 - `` `a plan without sections has no empty headings` ``: plan with only a description: no `## Constraints`, no `## Requirements`.
 - Update `` `the plan prompt carries names, the path and descriptions as written, but no status` `` for the `## Ideal state` heading.
-- [ ] **Step 2: Run** `./gradlew test --tests dev.myair.editor.SessionSystemPromptTest` — Expected: FAIL.
-- [ ] **Step 3: Implement** in `planPrompt`.
-- [ ] **Step 4: Run** the same — Expected: PASS.
-- [ ] **Step 5: Commit** `Plan prompt: ideal state, constraints, the task's requirements; manager keeps decisions, evidence and review` with `Plan-Task: 4/7`.
+- [x] **Step 2: Run** `./gradlew test --tests dev.myair.editor.SessionSystemPromptTest` — Expected: FAIL.
+- [x] **Step 3: Implement** in `planPrompt`.
+- [x] **Step 4: Run** the same — Expected: PASS.
+- [x] **Step 5: Commit** `Plan prompt: ideal state, constraints, the task's requirements; manager keeps decisions, evidence and review` with `Plan-Task: 4/7`.
 
 ### Task 5: View model, folding of sections, inline edits
 
@@ -202,15 +202,15 @@ Layout after the intro sentence: `## Ideal state` + description (when set), `## 
   - `fun PlanEdit.apply(folderId: String, text: String, today: LocalDate): ((SessionFolders) -> SessionFolders)?`: a new requirement gets `EvalKind.CODE`; blank text refused for titles and new items, empty clears `Constraints`.
   - `PlanEdit.current(plan)` covers the new edits.
 
-- [ ] **Step 1: Write the failing tests**:
+- [x] **Step 1: Write the failing tests**:
 - `PlanViewTest` › `` `requirements start open, review open while a blocker is unresolved, other sections folded when they hold anything` ``: plan with constraints, one decision, review with one unresolved blocker: `open(REQUIREMENTS)` true, `open(REVIEW)` true, `open(CONSTRAINTS)` false, `open(DECISIONS)` false, `open(IDEAL)` false with a description and true without; after resolving: `open(REVIEW)` false; `toggle("constraints")` opens it.
 - `PlanViewTest` › `` `the header counts proven requirements and names the review` ``: `requirementsSummary` of 6 with 4 proven → `"R 4/6"`, empty → null; `reviewSummary(null) == "review: not done"`, two unresolved → `"review: 2 blockers"`, done with all resolved → `"review: done"`.
 - `PlanEditTest` › `` `new decision, requirement and blocker edits add items, blank refused` ``: `NewDecision.apply("p","Why",today)` gives `D1` dated today; `NewRequirement` gives `R1` with `CODE`; `NewBlocker` gives `B1`; blank → null.
 - `PlanEditTest` › `` `a title edit of a requirement, decision or blocker changes its text` `` and `` `an empty constraints edit clears them` ``.
-- [ ] **Step 2: Run** `./gradlew test --tests 'dev.myair.planview.*'` — Expected: FAIL.
-- [ ] **Step 3: Implement** in `PlanView.kt` and `PlanEdit.kt`; `planViewOf` fills `plan`.
-- [ ] **Step 4: Run** the same — Expected: PASS (`PlanPanel` compiles against the new `apply` signature by passing `LocalDate.now()`).
-- [ ] **Step 5: Commit** `Plan view model: sections, their folding, header summaries, edits of the new items` with `Plan-Task: 5/7`.
+- [x] **Step 2: Run** `./gradlew test --tests 'dev.myair.planview.*'` — Expected: FAIL.
+- [x] **Step 3: Implement** in `PlanView.kt` and `PlanEdit.kt`; `planViewOf` fills `plan`.
+- [x] **Step 4: Run** the same — Expected: PASS (`PlanPanel` compiles against the new `apply` signature by passing `LocalDate.now()`).
+- [x] **Step 5: Commit** `Plan view model: sections, their folding, header summaries, edits of the new items` with `Plan-Task: 5/7`.
 
 ### Task 6: Plan panel cards and sandbox walk
 
@@ -228,9 +228,9 @@ Cards, between the header (with description moved into Ideal state) and the mile
 - Code review: status (menu: the three statuses as toggles, `setReview(..., LocalDate.now())` keeping the commit), commit and date in grey; blocker rows `✗`/`✓`, id, text; row menu Resolve/Reopen, Edit, Delete; `+ Add blocker`.
 Header beside the task progress: `requirementsSummary` (when not null) and `reviewSummary` (R16). Deletes from the view ask nothing (as task delete in the view today).
 
-- [ ] **Step 1: Build** `./gradlew buildPlugin` — Expected: BUILD SUCCESSFUL.
+- [x] **Step 1: Build** `./gradlew buildPlugin` — Expected: BUILD SUCCESSFUL.
 - [ ] **Step 2: Sandbox walk** (`env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daemon runIde`) on a test plan folder: add one item of every kind from the view; edit each; flip eval and review status; resolve a blocker; see the header change; fold and unfold each card; from the manager run `my_air_plan_apply` with `add_evidence` and see `R1` turn `✓`; Edit → Undo restores and the next requirement keeps a new id; then delete the new sections' items and check `~/.my-air/structure.json`'s `version` (5 while `next` is set).
-- [ ] **Step 3: Commit** `Plan view: cards for ideal state, constraints, decisions, requirements and code review` with `Plan-Task: 6/7`.
+- [x] **Step 3: Commit** `Plan view: cards for ideal state, constraints, decisions, requirements and code review` with `Plan-Task: 6/7`.
 
 ### Task 7: Docs
 
@@ -238,33 +238,33 @@ Header beside the task progress: `requirementsSummary` (when not null) and `revi
 - Modify: `CLAUDE.md` (plan folders paragraph and plan view paragraph), `src/main/kotlin/dev/myair/folders/README.md`, `src/main/kotlin/dev/myair/planview/README.md`
 - Modify (outside the repo, after the user approves the text): `~/.claude/CLAUDE.md` section "Spec requirements and plan evidence"
 
-- [ ] **Step 1: Update the repo docs**: the new `Plan` fields, version 5 written only while used, ids per plan, ops, derived status, sections in the prompt and the view.
+- [x] **Step 1: Update the repo docs**: the new `Plan` fields, version 5 written only while used, ids per plan, ops, derived status, sections in the prompt and the view.
 - [ ] **Step 2: Draft the global section**: with a My Air plan folder, a spec names the plan's path (`**Plan:** <folder path>`) in place of `## Requirements`, requirements live only in the plan and evidence goes through `my_air_plan_apply` `add_evidence` in the same four formats; without one, the Markdown list and table stay as today; drop the `my_air_spec_check` paragraph. Show the diff to the user; save only on approval.
-- [ ] **Step 3: Full run** `./gradlew test buildPlugin` — Expected: BUILD SUCCESSFUL, all tests pass.
-- [ ] **Step 4: Commit** the repo docs: `Document the plan's ideal state sections` with `Plan-Task: 7/7`.
+- [x] **Step 3: Full run** `./gradlew test buildPlugin` — Expected: BUILD SUCCESSFUL, all tests pass.
+- [x] **Step 4: Commit** the repo docs: `Document the plan's ideal state sections` with `Plan-Task: 7/7`.
 
 ## Requirements evidence
 
 | R | Task | Evidence |
 |---|---|---|
-| R1 | 1 | |
-| R2 | 4, 6 | |
-| R3 | 2 | |
-| R4 | 2 | |
-| R5 | 2 | |
-| R6 | 1 | |
-| R7 | 1, 2 | |
-| R8 | 1 | |
-| R9 | 2 | |
-| R10 | 1, 2 | |
-| R11 | 2 | |
-| R12 | 2 | |
-| R13 | 3 | |
-| R14 | 6 | |
-| R15 | 5 | |
-| R16 | 5, 6 | |
-| R17 | 5, 6 | |
-| R18 | 4 | |
-| R19 | 4 | |
-| R20 | 2, 3 | |
-| R21 | 7 | |
+| R1 | 1 | test `SessionFoldersTest` › `a structure without new plan fields is written as version 4 and reads back equal`; test `SessionFoldersTest` › `a plan with new fields is written as version 5 and reads back equal`; test `SessionFoldersTest` › `version 5 rejects unknown plan keys` |
+| R2 | 4, 6 | test `SessionSystemPromptTest` › `a task session gets the ideal state, constraints and only the requirements of its task`; not done: sandbox walk not run (heading in the view) |
+| R3 | 2 | test `PlanChangesTest` › `the new sections are set in order, ids allocated per plan` |
+| R4 | 2 | test `PlanChangesTest` › `the new sections are set in order, ids allocated per plan` |
+| R5 | 2 | test `PlanChangesTest` › `the new sections are set in order, ids allocated per plan`; test `PlanChangesTest` › `ids of another plan are refused` |
+| R6 | 1 | test `SessionFoldersTest` › `requirements, decisions and blockers are numbered per plan and prefix, never reused after a delete`; test `SessionFoldersTest` › `restore keeps the higher next of each plan and prefix` |
+| R7 | 1, 2 | test `PlanTest` › `evidence must be one of the four formats exactly`; test `PlanChangesTest` › `malformed evidence, eval and review status are refused naming the change` |
+| R8 | 1 | test `PlanTest` › `a requirement is unproven without evidence, not done with any not done item, else proven` |
+| R9 | 2 | test `PlanChangesTest` › `update and delete take only the fields of the id's kind` |
+| R10 | 1, 2 | test `SessionFoldersTest` › `deleting a task drops it from requirements`; test `SessionFoldersTest` › `a requirement may name only tasks of its plan` |
+| R11 | 2 | test `PlanChangesTest` › `set_review keeps the commit unless given, null clearing it` |
+| R12 | 2 | test `SessionFoldersTest` › `a blocker on a plan with no review starts one not done` |
+| R13 | 3 | test `FolderQueriesTest` › `a plan's sections come out with derived requirement statuses`; test `FolderQueriesTest` › `a plan without sections has null constraints and review and empty lists` |
+| R14 | 6 | commit `2548d84`; not done: sandbox walk not run |
+| R15 | 5 | test `PlanViewTest` › `requirements start open, review open while a blocker is unresolved, other sections folded when they hold anything` |
+| R16 | 5, 6 | test `PlanViewTest` › `the header counts proven requirements and names the review`; not done: sandbox walk not run (header in the view) |
+| R17 | 5, 6 | test `PlanEditTest` › `new decision, requirement and blocker edits add items, blank refused`; test `PlanEditTest` › `a title edit of a requirement, decision or blocker changes its text`; not done: sandbox walk not run |
+| R18 | 4 | test `SessionSystemPromptTest` › `a task session gets the ideal state, constraints and only the requirements of its task` |
+| R19 | 4 | test `SessionSystemPromptTest` › `a manager gets every requirement and the rules for decisions, evidence and review` |
+| R20 | 2, 3 | test `SessionSystemPromptTest` › `both prompts name every folder tool`; commit `b04711a`; commit `871cf90` |
+| R21 | 7 | commit `314f04e`; not done: ~/.claude/CLAUDE.md awaits the user's approval of the drafted section |

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import java.time.LocalDate
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
@@ -154,7 +155,7 @@ class SessionFoldersTest {
         val folder = """{"id":"a","name":"a","folders":[],"items":[]}"""
         listOf(
             """{"folders":[]}""",
-            """{"version":5,"nextId":1,"folders":[],"unfiled":[]}""",
+            """{"version":6,"nextId":1,"folders":[],"unfiled":[]}""",
             """{"version":4,"nextId":1,"folders":[]}""",
             """{"version":1,"folders":[{"id":"a","name":"a","folders":[]}]}""",
             """{"version":1,"folders":[{"id":"a","name":"a","folders":[],"items":[{"type":"jira","id":"PW-1"}]}]}""",
@@ -277,5 +278,106 @@ class SessionFoldersTest {
         assertEquals("/other", w.setWorkdir("rtm", "/other").startFolder("rtm")!!.startDir)
         assertEquals("/gone", tree.setWorkdir("tf", "/gone").startFolder("tf")!!.startDir)
         assertNull(tree.startFolder("tf"))
+    }
+
+    /** Plan p holds M1 with T2, plan q holds M3 with T4. */
+    private val plans = SessionFolders()
+        .createFolder(null, "p", "p").addPlan("p").addMilestone("p", "m").addTask("M1", "t")
+        .createFolder(null, "q", "q").addPlan("q").addMilestone("q", "m").addTask("M3", "t")
+
+    private val today = LocalDate.of(2026, 11, 18)
+
+    private fun SessionFolders.plan(id: String) = find(id)!!.plan!!
+
+    @Test
+    fun `requirements, decisions and blockers are numbered per plan and prefix, never reused after a delete`() {
+        val two = plans.addRequirement("p", "a", EvalKind.CODE).addRequirement("p", "b", EvalKind.JUDGE)
+        assertEquals(listOf("R1", "R2"), two.plan("p").requirements.map { it.id })
+        val again = two.deleteEntry("p", "R2").addRequirement("p", "c", EvalKind.ASSERT)
+        assertEquals(listOf("R1", "R3"), again.plan("p").requirements.map { it.id })
+        assertEquals(listOf("D1"), again.addDecision("p", "d", today).plan("p").decisions.map { it.id })
+        assertEquals(listOf("R1"), again.addRequirement("q", "x", EvalKind.CODE).plan("q").requirements.map { it.id })
+    }
+
+    @Test
+    fun `restore keeps the higher next of each plan and prefix`() {
+        val snapshot = plans
+        val later = plans.addRequirement("p", "a", EvalKind.CODE).addRequirement("p", "b", EvalKind.CODE)
+        val restored = later.restore(snapshot)
+        assertTrue(restored.plan("p").requirements.isEmpty())
+        assertEquals(listOf("R3"), restored.addRequirement("p", "c", EvalKind.CODE).plan("p").requirements.map { it.id })
+    }
+
+    @Test
+    fun `deleting a task drops it from requirements`() {
+        val required = plans.addRequirement("p", "a", EvalKind.CODE, listOf("T2"))
+        assertEquals(listOf("T2"), required.plan("p").requirements.single().tasks)
+        assertEquals(emptyList(), required.deletePlanItem("T2").plan("p").requirements.single().tasks)
+        val closed = required.editTask("T2") { it.copy(status = PlanStatus.DONE) }.deletePlanItem("M1")
+        assertEquals(emptyList(), closed.plan("p").requirements.single().tasks)
+    }
+
+    @Test
+    fun `a requirement may name only tasks of its plan`() {
+        assertThrows<IllegalArgumentException> { plans.addRequirement("p", "x", EvalKind.CODE, listOf("T4")) }
+        val required = plans.addRequirement("p", "x", EvalKind.CODE, listOf("T2"))
+        assertThrows<IllegalArgumentException> { required.editRequirement("p", "R1") { it.copy(tasks = listOf("T9")) } }
+    }
+
+    @Test
+    fun `entry edits on a gone folder or entry change nothing`() {
+        val full = plans.addRequirement("p", "a", EvalKind.CODE).addDecision("p", "d", today).addBlocker("p", "b", today)
+        listOf("R9", "D9", "B9").forEach { assertSame(full, full.deleteEntry("p", it), it) }
+        assertSame(full, full.editRequirement("p", "R9") { it.copy(text = "x") })
+        assertSame(full, full.editDecision("p", "D9") { it.copy(text = "x") })
+        assertSame(full, full.editBlocker("p", "B9") { it.copy(resolved = true) })
+        assertSame(full, full.editBlocker("q", "B1") { it.copy(resolved = true) })
+        assertSame(full, full.addRequirement("gone", "a", EvalKind.CODE))
+        assertSame(full, full.deleteEntry("gone", "R1"))
+        assertThrows<IllegalArgumentException> { full.deleteEntry("p", "T2") }
+    }
+
+    @Test
+    fun `an entry edit naming an id of another kind throws`() {
+        val full = plans.addRequirement("p", "a", EvalKind.CODE).addDecision("p", "d", today)
+        assertThrows<IllegalArgumentException> { full.editBlocker("p", "R1") { it.copy(resolved = true) } }
+        assertThrows<IllegalArgumentException> { full.editRequirement("p", "D1") { it.copy(text = "x") } }
+        assertThrows<IllegalArgumentException> { full.editDecision("p", "R1") { it.copy(text = "x") } }
+    }
+
+    @Test
+    fun `a blocker on a plan with no review starts one not done`() {
+        val blocked = plans.addBlocker("p", "b", today)
+        assertEquals(Review(ReviewStatus.NOT_DONE, null, "2026-11-18", listOf(Blocker("B1", "b"))), blocked.plan("p").review)
+        assertEquals(Review(ReviewStatus.DONE, "abc1234", "2026-11-18", listOf(Blocker("B1", "b"))), blocked.setReview("p", ReviewStatus.DONE, "abc1234", today).plan("p").review)
+    }
+
+    @Test
+    fun `a structure without new plan fields is written as version 4 and reads back equal`() {
+        val json = plans.toJson()
+        assertEquals(plans, SessionFolders.parse(json))
+        assertTrue("\"version\": 4" in json, json)
+        listOf("constraints", "decisions", "requirements", "review", "next\"").forEach { assertFalse("\"$it" in json, it) }
+        val v4 = json.replace("\"milestones\"", "\"constraints\": \"c\", \"milestones\"")
+        assertThrows<IllegalArgumentException> { SessionFolders.parse(v4) }
+    }
+
+    @Test
+    fun `a plan with new fields is written as version 5 and reads back equal`() {
+        val full = plans.setConstraints("p", "no new deps").addDecision("p", "Gson", today, "s1")
+            .addRequirement("p", "a", EvalKind.QUESTIONS, listOf("T2")).editRequirement("p", "R1") { it.copy(evidence = listOf("commit abc1234")) }
+            .addBlocker("p", "b", today).editBlocker("p", "B1") { it.copy(resolved = true) }
+        val json = full.toJson()
+        assertEquals(full, SessionFolders.parse(json))
+        assertTrue("\"version\": 5" in json, json)
+        assertTrue(full.plan("p").usesVersion5)
+        assertFalse(full.plan("q").usesVersion5)
+    }
+
+    @Test
+    fun `version 5 rejects unknown plan keys`() {
+        val text = """{"version":5,"nextId":2,"folders":[{"id":"p","name":"p","folders":[],"items":[],"dirs":[],"plan":{"milestones":[],"extra":1}}],"unfiled":[]}"""
+        val e = assertThrows<IllegalArgumentException> { SessionFolders.parse(text) }
+        assertTrue("extra" in e.message!!, e.message)
     }
 }

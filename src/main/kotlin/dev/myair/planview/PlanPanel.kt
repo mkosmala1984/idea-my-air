@@ -39,7 +39,6 @@ import dev.myair.editor.PlanStart
 import dev.myair.editor.projectBase
 import dev.myair.editor.sessionIcon
 import dev.myair.folders.ChangeSource
-import dev.myair.folders.Milestone
 import dev.myair.folders.PlanStatus
 import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
@@ -70,6 +69,7 @@ import java.awt.event.MouseEvent
 import java.awt.geom.RoundRectangle2D
 import java.nio.file.Path
 import java.time.Instant
+import java.time.LocalDate
 import javax.swing.Box
 import javax.swing.BoxLayout
 import javax.swing.Icon
@@ -83,27 +83,31 @@ import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
 
 /**
- * The plan side of a plan tab, in the composer's look: the plan's name and description, then a grey card per milestone
- * listing its tasks one line each; an open task is a white card with its next step, description and sessions. Each task's
- * actions, status included, are one menu beside its title. Milestones and tasks fold by [Folding]; every text is edited in place ([PlanEdit]).
+ * The plan side of a plan tab, in the composer's look: the plan's name and progress, the grey cards of its sections
+ * ([sectionCard]), then a grey card per milestone listing its tasks one line each; an open task is a white card with its
+ * next step, description and sessions. Each task's actions, status included, are one menu beside its title. Sections,
+ * milestones and tasks fold by [Folding]; every text is edited in place ([PlanEdit]).
  * [PlanEditor] hands it each new [PlanView]; it rebuilds only when what it shows changed, keeping an open edit's text component.
  */
-class PlanPanel(private val project: Project, private val folderId: String, parent: Disposable) : JPanel(BorderLayout()), Scrollable {
+class PlanPanel(private val project: Project, internal val folderId: String, parent: Disposable) : JPanel(BorderLayout()), Scrollable {
     private val service = ClaudeSessionsService.getInstance()
     private var view: PlanView? = null
-    private var open: OpenEdit? = null
+    internal var open: OpenEdit? = null
+        private set
     /** The open edit's component takes the focus on the next build: it was just opened, or saved and left open empty. */
     private var focusOpen = false
     /** What the panel was last built from. */
     private var rendered: Any? = null
-    private var folding = Folding()
+    internal var folding = Folding()
+        private set
     private var hideClosed: Boolean
         get() = PropertiesComponent.getInstance().getBoolean(HIDE_CLOSED_KEY)
         set(value) = PropertiesComponent.getInstance().setValue(HIDE_CLOSED_KEY, value)
-    private var colors = MarkdownColors.current()
+    internal var colors = MarkdownColors.current()
+        private set
     /**
-     * The panel holding each milestone's card, by milestone id, so a fold swaps that card alone. A holder stays put:
-     * [VerticalLayout] keeps its own order and puts a component added again last, whatever its index.
+     * The panel holding each section's and milestone's card, by section or milestone id, so a fold swaps that card alone.
+     * A holder stays put: [VerticalLayout] keeps its own order and puts a component added again last, whatever its index.
      */
     private val cards = mutableMapOf<String, JPanel>()
 
@@ -125,11 +129,11 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
     private fun render(force: Boolean = false) {
         val view = view ?: return
         // A task or milestone the manager deleted meanwhile takes its open edit along.
-        open = open?.takeIf { it.edit.current(view.folder.plan!!) != null }
+        open = open?.takeIf { it.edit.current(view.plan) != null }
         val sessions = view.milestones.flatMap { m -> m.tasks.flatMap { it.sessions } }
         val now = Instant.now()
         // What the panel shows, not whole sessions: a working session's transcript changes them on every refresh.
-        val shown = listOf(view.folder.plan, view.folder.name, open?.edit, view.milestones.map { m -> m.tasks.map { t -> t.sessions.map { it.id } } },
+        val shown = listOf(view.plan, view.folder.name, open?.edit, view.milestones.map { m -> m.tasks.map { t -> t.sessions.map { it.id } } },
             sessions.map { listOf(it.title, service.live[it.id]?.status, it.id in service.unread, shortAge(it.lastMessage, now)) })
         if (!force && shown == rendered && !focusOpen) return
         rendered = shown
@@ -138,7 +142,8 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
             isOpaque = false
             add(card { header(view) })
             cards.clear()
-            view.milestones.forEach { m -> add(JPanel(BorderLayout()).apply { isOpaque = false; add(milestoneCard(m)) }.also { cards[m.milestone.id] = it }) }
+            Section.entries.forEach { s -> add(holder(sectionCard(s, view.plan)).also { cards[s.id] = it }) }
+            view.milestones.forEach { m -> add(holder(milestoneCard(m)).also { cards[m.milestone.id] = it }) }
             add(card { addRow(PlanEdit.NewMilestone, "+ Add milestone") })
         }
         PaneFont.growAll(content)
@@ -150,9 +155,11 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
         focusOpen = false
     }
 
-    private fun card(init: Panel.() -> Unit) = panel(init).apply { isOpaque = false }
+    private fun holder(card: JComponent) = JPanel(BorderLayout()).apply { isOpaque = false; add(card) }
 
-    private fun milestones() = checkNotNull(view).folder.plan!!.milestones
+    internal fun card(init: Panel.() -> Unit) = panel(init).apply { isOpaque = false }
+
+    private fun milestones() = checkNotNull(view).plan.milestones
 
     private fun Panel.header(view: PlanView) {
         row {
@@ -162,9 +169,8 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
                 addActionListener { hideClosed = isSelected; render(force = true) }
             }
             actions(
-                action("Expand All", AllIcons.Actions.Expandall) { foldAll(true, milestones()) },
-                action("Collapse All", AllIcons.Actions.Collapseall) { foldAll(false, milestones()) },
-                more(action("Edit Description") { openEdit(PlanEdit.Description(null)) }),
+                action("Expand All", AllIcons.Actions.Expandall) { foldAll(true) },
+                action("Collapse All", AllIcons.Actions.Collapseall) { foldAll(false) },
             )
         }
         val tasks = milestones().flatMap { it.tasks }
@@ -173,17 +179,17 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
             cell(commentLabel(progress(tasks)))
             cell(ProgressLine(counts, PLAN_BAR))
             cell(commentLabel(openWork(counts)))
+            requirementsSummary(view.plan.requirements)?.let { cell(commentLabel(it)) }
+            cell(commentLabel(reviewSummary(view.plan.review)))
         }
-        markdown(PlanEdit.Description(null), view.description, "No description")
     }
 
     private fun milestoneCard(m: MilestoneView): JComponent {
         val milestone = m.milestone
         val unfolded = folding.open(milestone) || open?.edit?.let { it.itemId == milestone.id || it.itemId in m.tasks.map { t -> t.task.id } } == true
-        val chevron = JBLabel(if (unfolded) AllIcons.General.ChevronDown else AllIcons.General.ChevronRight)
         val rows = JPanel(VerticalLayout(0)).apply {
             isOpaque = false
-            add(head(milestone.id, chevron.apply { preferredSize = ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE }, title(PlanEdit.Title(milestone.id), milestone.title),
+            add(head(milestone.id, chevron(unfolded), title(PlanEdit.Title(milestone.id), milestone.title),
                 activity(m.tasks.flatMap { it.sessions }) + listOf(commentLabel(m.progress), ProgressLine(statusCounts(milestone.tasks)), buttons(more(
                     action("Rename") { openEdit(PlanEdit.Title(milestone.id)) },
                     action(if (milestone.done) "Reopen" else "Mark Done") { change { it.editMilestone(milestone.id) { x -> x.copy(done = !milestone.done) } } },
@@ -198,27 +204,33 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
                 add(card { indent { addRow(PlanEdit.NewTask(milestone.id), "+ Add task") } })
             }
         }
-        return Rounded(CARD, JBUI.scale(MILESTONE_ARC), squareTop = false).apply {
-            layout = BorderLayout()
-            border = JBUI.Borders.empty(4, 8)
-            add(rows)
-        }
+        return greyCard(rows)
+    }
+
+    internal fun chevron(unfolded: Boolean) =
+        JBLabel(if (unfolded) AllIcons.General.ChevronDown else AllIcons.General.ChevronRight).apply { preferredSize = ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE }
+
+    /** A section's or milestone's grey rounded card holding [rows]. */
+    internal fun greyCard(rows: JComponent) = Rounded(CARD, JBUI.scale(MILESTONE_ARC), squareTop = false).apply {
+        layout = BorderLayout()
+        border = JBUI.Borders.empty(4, 8)
+        add(rows)
     }
 
     /**
-     * A milestone's or task's head on one line: [lead] and the id, then [title] taking the width left, then [trail]; a
-     * click on what takes none folds [id]. Plain Swing, not a DSL row, so it is as high as its tallest part, and a task's
-     * is alike in place and size folded or not: a fold moves nothing but what comes after it.
+     * A section's, milestone's or task's head on one line: [lead] and [label], then [title] taking the width left, then
+     * [trail]; a click on what takes none folds [id]. Plain Swing, not a DSL row, so it is as high as its tallest part,
+     * and a task's is alike in place and size folded or not: a fold moves nothing but what comes after it.
      */
-    private fun head(id: String, lead: JComponent, title: JComponent, trail: List<JComponent>) = Hover { fold(id) }.apply {
+    internal fun head(id: String, lead: JComponent, title: JComponent, trail: List<JComponent>, label: String? = id): JComponent = Hover { fold(id) }.apply {
         border = JBUI.Borders.empty(3, HEAD_INSET)
-        add(group(listOf(lead, commentLabel(id))), BorderLayout.WEST)
+        add(group(listOfNotNull(lead, label?.let(::commentLabel))), BorderLayout.WEST)
         add(title)
         add(group(trail), BorderLayout.EAST)
     }
 
     /** [parts] side by side at their preferred widths, centred vertically. */
-    private fun group(parts: List<JComponent>) = JPanel().apply {
+    internal fun group(parts: List<JComponent>) = JPanel().apply {
         isOpaque = false
         layout = BoxLayout(this, BoxLayout.X_AXIS)
         parts.forEachIndexed { i, part ->
@@ -303,7 +315,7 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
     }
 
     /** A title, its text selectable; the field while its Rename is open. */
-    private fun title(edit: PlanEdit.Title, text: String, bold: Boolean = true, grey: Boolean = false): JComponent =
+    internal fun title(edit: PlanEdit.Title, text: String, bold: Boolean = true, grey: Boolean = false): JComponent =
         if (open?.edit == edit) checkNotNull(open).component
         else SelectableTitle(text).apply {
             if (bold) font = font.deriveFont(Font.BOLD)
@@ -311,7 +323,7 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
         }
 
     /** [markdown] rendered, else [empty] in grey (nothing when null); the text area with Save and Cancel while its edit is open. */
-    private fun Panel.markdown(edit: PlanEdit.Description, markdown: String?, empty: String?) {
+    internal fun Panel.markdown(edit: PlanEdit, markdown: String?, empty: String?) {
         if (open?.edit == edit) {
             row { cell(JBScrollPane(checkNotNull(open).component)).align(AlignX.FILL) }
             row {
@@ -323,7 +335,7 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
     }
 
     /** A `+ Add ...` link that opens [edit], the field while it is open. */
-    private fun Panel.addRow(edit: PlanEdit, text: String) = row {
+    internal fun Panel.addRow(edit: PlanEdit, text: String) = row {
         if (open?.edit == edit) inline(edit) else link(text) { openEdit(edit) }
     }
 
@@ -335,42 +347,45 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
      * [actions] as buttons drawn at once. A toolbar would add its buttons on its first update, later, and so change the
      * width of a row just rebuilt: the row would jump.
      */
-    private fun buttons(vararg actions: AnAction): JComponent = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0)).apply {
+    internal fun buttons(vararg actions: AnAction): JComponent = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0)).apply {
         isOpaque = false
         actions.forEach { add(ActionButton(it, it.templatePresentation.clone(), PLACE, ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE)) }
     }
 
     /** Lets the text be selected and copied: a DSL text cell is not focusable, and a text component unfocused shows no selection. */
-    private fun <T : JEditorPane> Cell<T>.selectable() = applyToComponent { isFocusable = true }
+    internal fun <T : JEditorPane> Cell<T>.selectable() = applyToComponent { isFocusable = true }
 
     /** The `⋯` menu. */
-    private fun more(vararg actions: AnAction) = DefaultActionGroup("More", actions.toList()).apply {
+    internal fun more(vararg actions: AnAction) = DefaultActionGroup("More", actions.toList()).apply {
         isPopup = true
         templatePresentation.icon = AllIcons.Actions.More
         // The dots say a menu opens; the button's corner arrow for a popup group would say it twice.
         templatePresentation.putClientProperty(ActionUtil.HIDE_DROPDOWN_ICON, true)
     }
 
-    private fun action(text: String, icon: Icon? = null, run: () -> Unit) = DumbAwareAction.create(text, icon) { run() }
+    internal fun action(text: String, icon: Icon? = null, run: () -> Unit) = DumbAwareAction.create(text, icon) { run() }
 
+    /** Flips section, milestone or task [id], rebuilding the card holding it. */
     private fun fold(id: String) {
         folding = folding.toggle(id)
-        rebuild(checkNotNull(view).milestones.filter { m -> m.milestone.id == id || m.tasks.any { it.task.id == id } })
+        rebuild(listOf(if (id in cards) id else checkNotNull(view).milestones.first { m -> m.tasks.any { it.task.id == id } }.milestone.id))
     }
 
-    private fun foldAll(open: Boolean, milestones: List<Milestone>) {
-        folding = Folding.all(open, milestones)
-        rebuild(checkNotNull(view).milestones)
+    private fun foldAll(open: Boolean) {
+        folding = Folding.all(open, checkNotNull(view).plan)
+        rebuild(cards.keys.toList())
     }
 
     /**
-     * Builds the cards of [milestones] again in place, the rest of the panel kept as it is: a whole rebuild lays out
-     * every Markdown text anew, whose height settles only on a second pass, and the panel flickers.
+     * Builds the cards of the sections and milestones [ids] again in place, the rest of the panel kept as it is: a whole
+     * rebuild lays out every Markdown text anew, whose height settles only on a second pass, and the panel flickers.
      */
-    private fun rebuild(milestones: List<MilestoneView>) {
-        for (m in milestones) cards.getValue(m.milestone.id).apply {
+    private fun rebuild(ids: List<String>) {
+        val view = checkNotNull(view)
+        for (id in ids) cards.getValue(id).apply {
             removeAll()
-            add(milestoneCard(m).also(PaneFont::growAll))
+            val section = Section.entries.firstOrNull { it.id == id }
+            add((if (section != null) sectionCard(section, view.plan) else milestoneCard(view.milestones.first { it.milestone.id == id })).also(PaneFont::growAll))
             revalidate()
             repaint()
         }
@@ -379,9 +394,9 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
     /** Where a session started on a task runs: as from the plan folder in the tree, else in the IDE project's directory. */
     private fun startDir(): Path = service.folders.startFolder(folderId)?.startDir?.let(Path::of) ?: projectBase(project)
 
-    private fun openEdit(edit: PlanEdit) {
-        val text = checkNotNull(edit.current(checkNotNull(view).folder.plan!!)) { "$edit names an item gone" }
-        val component = if (edit is PlanEdit.Description) inlineArea(text, ::save, ::cancel) else inlineField(text, ::save, ::cancel)
+    internal fun openEdit(edit: PlanEdit) {
+        val text = checkNotNull(edit.current(checkNotNull(view).plan)) { "$edit names an item gone" }
+        val component = if (edit.multiline) inlineArea(text, ::save, ::cancel) else inlineField(text, ::save, ::cancel)
         open = OpenEdit(edit, component)
         focusOpen = true
         render()
@@ -390,8 +405,8 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
     /** Applies the open edit; a blank title is refused and its field stays. A new item's field stays open, empty, for the next. */
     private fun save() {
         val open = checkNotNull(open) { "nothing to save" }
-        val op = open.edit.apply(folderId, open.component.text) ?: return
-        if (open.edit is PlanEdit.NewTask || open.edit == PlanEdit.NewMilestone) {
+        val op = open.edit.apply(folderId, open.component.text, LocalDate.now()) ?: return
+        if (open.edit.isNew) {
             open.component.text = ""
             focusOpen = true
         } else this.open = null
@@ -404,7 +419,7 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
         render()
     }
 
-    private fun change(op: (SessionFolders) -> SessionFolders) = service.updateFolders(ChangeSource.UI, op)
+    internal fun change(op: (SessionFolders) -> SessionFolders) = service.updateFolders(ChangeSource.UI, op)
 
     // The panel takes the width of its scroll pane, never scrolling sideways, and at least its height, so its background fills it.
     override fun getScrollableTracksViewportWidth() = true
@@ -416,9 +431,6 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
 
     private companion object {
         const val GAP = 6
-        const val HEAD_INSET = 2
-        /** Where a head's id starts: after its inset, its lead (a button's width) and a gap. A milestone's description starts there too. */
-        const val ID_COLUMN = HEAD_INSET + 22 + HEAD_GAP
         const val PLAN_BAR = 160
         const val MILESTONE_ARC = 16
         const val TASK_ARC = 12
@@ -430,16 +442,19 @@ class PlanPanel(private val project: Project, private val folderId: String, pare
 }
 
 /** The gap between the parts of a head. */
-private const val HEAD_GAP = 8
+internal const val HEAD_GAP = 8
+internal const val HEAD_INSET = 2
+/** Where a head's id starts: after its inset, its lead (a button's width) and a gap. A milestone's description and a section's items start there too. */
+internal const val ID_COLUMN = HEAD_INSET + 22 + HEAD_GAP
 
-/** The milestone or task an edit is about; null for a new milestone. */
+/** The milestone or task an edit is about; null for a new milestone and the edits of the sections. */
 private val PlanEdit.itemId: String?
     get() = when (this) {
         is PlanEdit.Title -> id
         is PlanEdit.Next -> taskId
         is PlanEdit.Description -> id
         is PlanEdit.NewTask -> milestoneId
-        PlanEdit.NewMilestone -> null
+        PlanEdit.NewMilestone, PlanEdit.Constraints, PlanEdit.NewDecision, PlanEdit.NewRequirement, PlanEdit.NewBlocker -> null
     }
 
 /** A row with a rounded hover background that runs [click]; it gets the clicks of the components in it that take none. */
