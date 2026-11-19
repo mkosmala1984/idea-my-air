@@ -111,16 +111,17 @@ private fun PlanPanel.decisionRow(d: Decision): JComponent {
     ))), top = true)
 }
 
-/** A requirement's line, then its evidence, dim and read-only. */
+/** A requirement's text, then its evidence, dim and read-only. */
 private fun PlanPanel.requirementRows(r: Requirement): List<JComponent> {
     val line = itemRow(
         listOf(glyph(r.status.glyph, r.status.color), commentLabel(r.id)),
-        title(PlanEdit.Title(r.id), r.text, bold = false),
+        card { markdown(PlanEdit.Title(r.id), r.text, null) },
         listOfNotNull(Chip(r.eval.label), r.tasks.takeIf { it.isNotEmpty() }?.let { commentLabel(it.joinToString(" ")) }, buttons(more(
             action("Edit") { openEdit(PlanEdit.Title(r.id)) },
             toggles("Eval", EvalKind.entries, { it.label }, { it == r.eval }) { k -> change { it.editRequirement(folderId, r.id) { x -> x.copy(eval = k) } } },
             action("Delete") { change { it.deleteEntry(folderId, r.id) } },
         ))),
+        top = true,
     )
     if (r.evidence.isEmpty()) return listOf(line)
     val evidence = card { r.evidence.forEach { row { comment(StringUtil.escapeXmlEntities(it), MAX_LINE_LENGTH_WORD_WRAP) } } }
@@ -138,12 +139,13 @@ private fun PlanPanel.reviewLine(plan: Plan) = indented(card {
 
 private fun PlanPanel.blockerRow(b: Blocker) = itemRow(
     listOf(glyph(b.glyph, if (b.resolved) SUCCESS else UIUtil.getErrorForeground()), commentLabel(b.id)),
-    title(PlanEdit.Title(b.id), b.text, bold = false),
+    card { markdown(PlanEdit.Title(b.id), b.text, null) },
     listOf(buttons(more(
         action(if (b.resolved) "Reopen" else "Resolve") { change { it.editBlocker(folderId, b.id) { x -> x.copy(resolved = !b.resolved) } } },
         action("Edit") { openEdit(PlanEdit.Title(b.id)) },
         action("Delete") { change { it.deleteEntry(folderId, b.id) } },
     ))),
+    top = true,
 )
 
 private fun glyph(text: String, color: Color) = JBLabel(text).apply { foreground = color }

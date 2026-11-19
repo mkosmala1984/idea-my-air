@@ -109,7 +109,7 @@ val PlanEdit.section: Section?
 /** Adds an item: its field stays open and empty after a save, for the next. */
 val PlanEdit.isNew get() = this is PlanEdit.NewTask || this == PlanEdit.NewMilestone || this == PlanEdit.NewDecision || this == PlanEdit.NewRequirement || this == PlanEdit.NewBlocker
 
-/** Edited in the area, as its text may hold several lines (Markdown): a description, the constraints, a decision. */
-val PlanEdit.multiline get() = this is PlanEdit.Description || this == PlanEdit.Constraints || this is PlanEdit.Title && kind(id) == 'D'
+/** Edited in the area, as its text may hold several lines (Markdown): a description, the constraints, a decision, requirement or blocker. */
+val PlanEdit.multiline get() = this is PlanEdit.Description || this == PlanEdit.Constraints || this is PlanEdit.Title && kind(id) in "DRB"
 
 private fun kind(id: String) = id.first().also { require(it in "MTRDB") { "not a milestone, task, requirement, decision or blocker id: $id" } }

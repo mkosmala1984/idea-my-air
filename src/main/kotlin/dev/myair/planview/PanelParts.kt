@@ -206,6 +206,8 @@ internal class SelectableTitle(text: String) : JTextField(text) {
         font = JBUI.Fonts.label()
         foreground = JBUI.CurrentTheme.Label.foreground()
         putClientProperty("caretWidth", 0)
+        // The caret starts at the end, so a title wider than its field would show its end and hide its start.
+        caretPosition = 0
         addMouseListener(object : MouseAdapter() {
             override fun mouseEntered(e: MouseEvent) = toHover(e)
             override fun mouseExited(e: MouseEvent) = toHover(e)
