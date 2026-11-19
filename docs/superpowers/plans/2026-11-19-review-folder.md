@@ -4,7 +4,7 @@
 
 - **Goal:** build the Review folder of the spec: a folder whose tab shows a branch's summary, explanation, reviewers, merged findings with triage and questions, its manager session beside it.
 - **Approach:** 11 tasks: a spike on `claude --bg` first (it can stop the plan), then the pure model and logic with tests (JSON, ops, merging, derived facts, profiles, plan mirror), then the service and MCP tools, then UI (New Review, tab, panel, tree), then docs and a sandbox walk.
-- **Needs your input:** none now; Task 1 comes back to you if `claude --bg` refuses `--session-id` or `--append-system-prompt`.
+- **Needs your input:** none. Task 1 found `claude --bg` ignores `--session-id`; ruled with you: a report names its run (`W<n>`), and the run's session is read from the registry by job id after the start.
 - **Risks:** the UI tasks (9, 10) are the largest and are checked mostly by hand in `runIde`; reviewer jobs cost tokens during the sandbox walk (use a profile of one cheap reviewer).
 - **Out of scope:** as in the spec: no Bitbucket calls from the plugin, no PR comment replies, gutter marks, dashboard, taskbar, profile editor.
 
@@ -46,7 +46,7 @@
 
 ## Review Focus
 
-1. A reviewer reporting twice, or a stale session reporting into a review it is no longer a run of → second replaces first (R17), unknown session refused; tests in Task 3.
+1. A reviewer reporting twice, or a report naming a run the review does not have → second replaces first (R17), unknown run refused; tests in Task 3.
 2. Two reviewers reporting the same issue three lines apart, plus a third four lines apart → two findings, not one or three; tests in Task 3.
 3. `review.json` edited by hand into a bad state (unknown key, finding `fixed` without commit) → load throws naming the file, the panel shows the error, nothing is overwritten; tests in Task 2, error display in Task 10.
 4. HEAD rewritten (rebase, force push) so the reviewed commit is gone → header says the commit is unknown instead of a count, `maybeFixed` is false for findings at that commit and no exception escapes the refresh; tests in Task 4.
@@ -109,7 +109,7 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
   - `enum class Severity { blocker, major, minor, nit }` (ordinal order = severity, highest first), `enum class FindingState { open, accepted, rejected, fixed, posted }`
   - `data class Report(val run: String, val reviewer: String, val commit: String, val line: Int, val severity: Severity, val summary: String, val failureScenario: String)`
   - `data class Finding(val id: String, val file: String, val category: String, val reports: List<Report>, val state: FindingState = FindingState.open, val reason: String? = null, val fixCommit: String? = null, val comment: String? = null)` with `val line get()` (newest report's) and `val severity get()` (highest of reports); `init` requires `reason` for `rejected`, `fixCommit` for `fixed`, `comment` for `posted`, `reports` not empty
-  - `data class Run(val id: String, val reviewer: String, val session: String, val job: String?, val range: String, val started: String, val reported: String? = null)`
+  - `data class Run(val id: String, val reviewer: String, val session: String?, val job: String?, val range: String, val started: String, val reported: String? = null)`
   - `data class Chapter(val title: String, val text: String, val files: List<String>)`, `data class Question(val id: String, val text: String, val reviewer: String?, val resolved: Boolean = false)`
   - `data class BranchReview(branch, base, dir: Path, pr: Int?, plan: String?, manager: PlanManager?, summary: String?, chapters, runs, findings, questions, next: Map<String, Int>, blockers: Map<String, String> = emptyMap())` with `fun nextId(prefix: String): Pair<String, BranchReview>`
   - `fun BranchReview.toJson(): String`, `fun parseReview(text: String, source: Path): BranchReview`
@@ -146,8 +146,8 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 - Produces:
   - `data class IncomingFinding(val file: String, val line: Int, val category: String, val severity: Severity, val summary: String, val failureScenario: String)`
   - `fun mergeFindings(review: BranchReview, run: Run, commit: String, incoming: List<IncomingFinding>): BranchReview`
-  - `object ReviewChanges { fun apply(review: BranchReview, changes: String): BranchReview; fun report(review: BranchReview, session: String, commit: String, findings: String, questions: String, now: Instant): BranchReview }`
-  - Typed ops used by the UI: `fun BranchReview.setState(id: String, state: FindingState, reason: String? = null, commit: String? = null, comment: String? = null): BranchReview`, `setSummary(text: String?)`, `setChapters(List<Chapter>)`, `setPr(Int?)`, `addQuestion(text, reviewer: String?)`, `resolveQuestion(id)`, `addRun(Run)`, `setJob(runId, job)`, `removeRun(runId)` (only an unreported run)
+  - `object ReviewChanges { fun apply(review: BranchReview, changes: String): BranchReview; fun report(review: BranchReview, run: String, commit: String, findings: String, questions: String, now: Instant): BranchReview }`
+  - Typed ops used by the UI: `fun BranchReview.setState(id: String, state: FindingState, reason: String? = null, commit: String? = null, comment: String? = null): BranchReview`, `setSummary(text: String?)`, `setChapters(List<Chapter>)`, `setPr(Int?)`, `addQuestion(text, reviewer: String?)`, `resolveQuestion(id)`, `addRun(Run)`, `setJob(runId, job)`, `setSession(runId, session)`, `removeRun(runId)` (only an unreported run)
 
 `mergeFindings` (the rule the tests pin):
 
@@ -171,7 +171,7 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 @Test fun `ops apply in order and all or none`()                                 // second op invalid → review unchanged, throws
 @Test fun `an unknown op or field throws naming the change`()
 @Test fun `set_state rejected without a reason throws`()                         // likewise fixed without commit, posted without comment
-@Test fun `a report from a session that is no run of the review is refused`()
+@Test fun `a report naming no run of the review is refused`()
 @Test fun `a report finding without a severity or with an unknown one records nothing`()
 @Test fun `a report sets reported on its run and adds its questions`()           // Q<n> ids, reviewer = run's reviewer
 ```
@@ -227,10 +227,10 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 - Produces:
   - `data class Reviewer(val name: String, val prompt: String, val model: String? = null, val effort: String? = null)`, `data class ReviewProfile(val name: String, val reviewers: List<Reviewer>)`
   - `fun parseProfiles(text: String): List<ReviewProfile>` (unknown keys throw, effort in `EFFORTS`, names unique); `class ReviewProfileStore(val file: Path) { fun read(): Result<List<ReviewProfile>> }` (missing file → success, empty; cached by mtime)
-  - `fun reviewerPrompt(folderPath: String, session: String, review: BranchReview, range: String): String` — names folder path, session id, branch, base, range; tells it to review only the range and call `my_air_review_report` once at the end with its session id; one line (no newline)
+  - `fun reviewerPrompt(folderPath: String, run: String, review: BranchReview, range: String): String` — names folder path, run id, branch, base, range; tells it to review only the range and call `my_air_review_report` once at the end with that run id; one line (no newline)
   - `fun reviewManagerPrompt(folderPath: String, review: BranchReview): String` — R9's rules
-  - `fun reviewerArgs(reviewer: Reviewer, session: String, prompt: String): List<String>` = `--bg --session-id <s> [--model m] [--effort e] --append-system-prompt <prompt> -- <reviewer.prompt>`
-  - `fun parseJobId(stdout: String): String` (format from Task 1; throws on anything else)
+  - `fun reviewerArgs(reviewer: Reviewer, prompt: String): List<String>` = `--bg [--model m] [--effort e] --append-system-prompt <prompt> -- <reviewer.prompt>` (no `--session-id`: `claude --bg` ignores it, Task 1)
+  - `fun parseJobId(stdout: String): String` — the first line must match `^backgrounded · ([0-9a-f]{8})$` (U+00B7 separator, Task 1's literal); anything else throws naming the output
   - `fun rangeFor(review: BranchReview, mergeBase: String, head: String, newOnly: Boolean): String` (`<reviewed>..<head>` when `newOnly` and a reviewed commit exists, else `<mergeBase>..<head>`)
   - `object Reviewers { fun start(dir: Path, args: List<String>): String }` — runs `claude` with `args` in `dir` off the EDT, 30 s timeout, non-zero exit throws with stderr, returns `parseJobId(stdout)`
 
@@ -240,7 +240,7 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 @Test fun `profiles parse and an unknown key throws`()
 @Test fun `a missing profiles file means no profiles`()
 @Test fun `reviewer args put the prompt last after a double dash`()
-@Test fun `the reviewer prompt names folder, session, range and the report tool on one line`()
+@Test fun `the reviewer prompt names folder, run, range and the report tool on one line`()
 @Test fun `the manager prompt names both review tools and forbids starting reviewers`()
 @Test fun `the range is new commits only when asked and a reviewed commit exists`()
 @Test fun `parseJobId reads the id claude prints and throws on other output`()   // literal from Task 1
@@ -287,9 +287,9 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 **Interfaces:**
 - Consumes: Tasks 2–6.
 - Produces:
-  - `@Service(APP) class ReviewService` with `val reviews: Map<String, Result<BranchReview>>` (folder ids in the structure only, R3), `fun review(folderId: String): BranchReview` (throws for a failure), `fun update(folderId: String, op: (BranchReview) -> BranchReview): BranchReview` (EDT; writes, mirrors to the plan through `ClaudeSessionsService.updateFolders(ChangeSource.AUTO)` when `plan` names a folder with a plan, notifies), `fun subscribe(disposable, listener: () -> Unit)`, `val facts: Map<String, ReviewGit>` where `data class ReviewGit(val state: GitState?, val head: String?, val sinceReviewed: Int?, val changed: Map<String, Map<String, List<IntRange>>?>, val error: String?)` (changed keyed by commit), refreshed off the EDT on `ClaudeSessionsService` notifications and on file events under `~/.my-air/reviews` (a `VirtualFileManager` / NIO watch as `ClaudeHomeWatcher` debounces), latest read wins
+  - `@Service(APP) class ReviewService` with `val reviews: Map<String, Result<BranchReview>>` (folder ids in the structure only, R3), `fun review(folderId: String): BranchReview` (throws for a failure), `fun update(folderId: String, op: (BranchReview) -> BranchReview): BranchReview` (EDT; writes, mirrors to the plan through `ClaudeSessionsService.updateFolders(ChangeSource.AUTO)` when `plan` names a folder with a plan, notifies), `fun subscribe(disposable, listener: () -> Unit)`, `val facts: Map<String, ReviewGit>` where `data class ReviewGit(val state: GitState?, val head: String?, val sinceReviewed: Int?, val changed: Map<String, Map<String, List<IntRange>>?>, val error: String?)` (changed keyed by commit), on each `ClaudeSessionsService` notification it gives every run with a job and no session the `sessionId` of the live entry whose `job` equals it (`setSession`) and files that session in the review folder (R22); refreshed off the EDT on `ClaudeSessionsService` notifications and on file events under `~/.my-air/reviews` (a `VirtualFileManager` / NIO watch as `ClaudeHomeWatcher` debounces), latest read wins
   - `fun reviewJson(path: String, review: BranchReview, git: ReviewGit?, liveJobs: Set<String>): String` (R15: derived `maybe_fixed` and run `status`)
-  - MCP: `my_air_review_get(folder)`, `my_air_review_apply(folder, changes)`, `my_air_review_report(folder, session, commit, findings, questions)`; `folder` is a folder path; a folder that is no review throws `no review folder at '<path>'`
+  - MCP: `my_air_review_get(folder)`, `my_air_review_apply(folder, changes)`, `my_air_review_report(folder, run, commit, findings, questions)`; `folder` is a folder path; a folder that is no review throws `no review folder at '<path>'`
 
 - [ ] **Step 1: Write the failing tests**
 

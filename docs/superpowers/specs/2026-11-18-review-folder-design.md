@@ -7,7 +7,7 @@
 - **Decided with you:** a review linked to a plan mirrors its blockers into the plan's `review` (spec `2026-11-18-plan-ideal-state-design.md`); reviewers are real sessions, not `claude -p`; Bitbucket only, through the manager's Atlassian MCP, never from the plugin.
 - **Decided here, check it:** review data is not in `structure.json`, so the file's version does not move and does not collide with version 5 of the plan spec; a review folder and its data are joined by the folder id.
 - **Needs your input:** which extras stay in scope: reviewer profiles (R18–R20), review of new commits only (R27–R29) and reviewer precision (R30) are in; editor gutter marks, PR comment replies, dashboard and taskbar are out. Say if you want any moved.
-- **Risks:** whether `claude --bg` takes `--session-id`, `--append-system-prompt` and a first prompt must be checked first (task 1), else reviewers fall back to tabs, which the design does not cover.
+- **Risks:** `claude --bg` ignores `--session-id` (checked in task 1), so a reviewer's session is known only once the registry lists its job; a report names its run, not its session.
 - **Out of scope:** the plugin calling Bitbucket, reading PR comments back, gutter annotations, tokens per reviewer, a settings editor for profiles.
 
 **Plan:** my-air/plans/Węzeł Review brancha-PR – propozycja
@@ -59,7 +59,7 @@ enum class FindingState { open, accepted, rejected, fixed, posted }
 data class Report(val run: String, val reviewer: String, val commit: String, val line: Int, val severity: Severity, val summary: String, val failureScenario: String)
 data class Finding(val id: String, val file: String, val category: String, val reports: List<Report>, val state: FindingState = FindingState.open,
                    val reason: String? = null, val fixCommit: String? = null, val comment: String? = null)
-data class Run(val id: String, val reviewer: String, val session: String, val job: String, val range: String, val started: String, val reported: String? = null)
+data class Run(val id: String, val reviewer: String, val session: String?, val job: String?, val range: String, val started: String, val reported: String? = null)
 data class Chapter(val title: String, val text: String, val files: List<String>)
 data class Question(val id: String, val text: String, val reviewer: String?, val resolved: Boolean = false)
 data class BranchReview(val branch: String, val base: String, val dir: Path, val pr: Int?, val plan: String?, val manager: PlanManager?,
@@ -77,11 +77,11 @@ A finding's line and severity are its newest report's line and the highest repor
 
 ### MCP (`FoldersMcpToolset`)
 
-`my_air_review_get`, `my_air_review_apply`, `my_air_review_report` (R14–R17), names and descriptions in `appendedSystemPrompt` (R34). `my_air_review_report` checks the calling session against the review's runs.
+`my_air_review_get`, `my_air_review_apply`, `my_air_review_report` (R14–R17), names and descriptions in `appendedSystemPrompt` (R34). `my_air_review_report` takes the run id the reviewer's prompt named and refuses one the review does not have.
 
 ### Reviewer start
 
-`startReviewer(review, reviewer, range)`: `claude --bg --session-id <uuid> [--model] [--effort] --append-system-prompt <reviewerPrompt> -- <prompt>` in `dir`, the job id read from the registry entry of that session id. `reviewerPrompt` (pure): folder path, branch, base, range, "review only this range", "call `my_air_review_report` once at the end with every finding and question; report nothing elsewhere". The first build task checks these flags against `claude --bg`; if any is refused, the spec comes back before building on it.
+`startReviewer(review, reviewer, range)`: the run `W<n>` is recorded first, then `claude --bg [--model] [--effort] --append-system-prompt <reviewerPrompt> -- <prompt>` in `dir`; the job id is the 8 hex characters of stdout's first line `backgrounded · <job>`, and the run's session the `sessionId` of the registry entry whose `jobId` it is, set on the next refresh, when the session is also filed in the review folder (`claude --bg` ignores `--session-id`, task 1). `reviewerPrompt` (pure): folder path, run id, branch, base, range, "review only this range", "call `my_air_review_report` once at the end with this run id and every finding and question; report nothing elsewhere".
 
 ### Plan mirror (R31)
 
