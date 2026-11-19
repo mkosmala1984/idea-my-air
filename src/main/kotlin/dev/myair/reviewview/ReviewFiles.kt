@@ -13,7 +13,6 @@ import dev.myair.planview.FolderTabs
 import dev.myair.planview.managerStart
 import dev.myair.review.ReviewService
 import dev.myair.review.reviewManagerPrompt
-import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.BranchReview
 import dev.myair.store.Homes
 import dev.myair.store.PlanManager
@@ -68,7 +67,7 @@ class ReviewTabs {
 
     /** The system prompt of [file] when it is a review's manager, written to a file at every start of its process; else null. */
     fun managerPrompt(file: ClaudeSessionVirtualFile): String? = reviewOf(file)?.folderId?.let {
-        reviewManagerPrompt(ClaudeSessionsService.getInstance().folders.pathOf(it), ReviewService.getInstance().review(it))
+        reviewManagerPrompt(it, ReviewService.getInstance().review(it))
     }
 
     companion object {

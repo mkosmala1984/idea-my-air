@@ -120,16 +120,22 @@ fun readGit(review: BranchReview): ReviewGit = try {
 
 /**
  * What [readGit] depends on, read from files without running git: the work tree's HEAD file, the times of the ref it
- * names (loose, else in `packed-refs`; a commit changes the ref, not HEAD), of `packed-refs` and of the index, and of
- * `review.json`; a missing file or work tree reads as null.
+ * names (loose, else in `packed-refs`; a commit changes the ref, not HEAD), of `packed-refs` and of the index, of
+ * `review.json`, and of each file the review's findings name ([files], by repository-relative path, resolved against the
+ * work tree root: `maybe_fixed` follows edits not yet staged); a missing file or work tree reads as null, and without a
+ * work tree there are no [files].
  */
-data class GitStamp(val head: String?, val ref: Long?, val packed: Long?, val index: Long?, val review: Long?)
+data class GitStamp(val head: String?, val ref: Long?, val packed: Long?, val index: Long?, val review: Long?, val files: Map<String, Long?>)
 
-fun gitStamp(dir: Path, reviewFile: Path): GitStamp {
+fun gitStamp(review: BranchReview, reviewFile: Path): GitStamp {
     fun time(p: Path) = if (p.exists()) p.getLastModifiedTime().toMillis() else null
-    val (gitDir, common) = Git.gitDirs(dir) ?: return GitStamp(null, null, null, null, time(reviewFile))
+    val (gitDir, common) = Git.gitDirs(review.dir) ?: return GitStamp(null, null, null, null, time(reviewFile), emptyMap())
+    val root = checkNotNull(Git.head(review.dir)).root
     val head = gitDir.resolve("HEAD").readText().trim()
-    return GitStamp(head, head.removePrefix("ref: ").takeIf { it != head }?.let { time(common.resolve(it)) }, time(common.resolve("packed-refs")), time(gitDir.resolve("index")), time(reviewFile))
+    return GitStamp(
+        head, head.removePrefix("ref: ").takeIf { it != head }?.let { time(common.resolve(it)) }, time(common.resolve("packed-refs")), time(gitDir.resolve("index")),
+        time(reviewFile), review.findings.map { it.file }.toSet().associateWith { time(root.resolve(it)) },
+    )
 }
 
 /** The reviews of [stamps] whose git is read again: not read yet, or read at another stamp ([read]). */
@@ -251,7 +257,7 @@ class ReviewService : Disposable {
             // Nobody reads the Future, so an exception would vanish with it; log it as an IDE error instead.
             val (read, git) = try {
                 val read = files.readAll()
-                val now = watching.mapNotNull { id -> read[id]?.getOrNull()?.let { id to gitStamp(it.dir, files.file(id)) } }.toMap()
+                val now = watching.mapNotNull { id -> read[id]?.getOrNull()?.let { id to gitStamp(it, files.file(id)) } }.toMap()
                 val due = gitDue(now, lastStamps)
                 read to now.mapValues { (id, stamp) -> stamp to if (id in due) readGit(read.getValue(id).getOrThrow()) else lastFacts.getValue(id) }
             } catch (e: Throwable) {

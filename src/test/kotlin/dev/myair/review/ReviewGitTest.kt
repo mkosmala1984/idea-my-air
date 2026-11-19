@@ -2,6 +2,9 @@ package dev.myair.review
 
 import dev.myair.actions.Git
 import dev.myair.store.BranchReview
+import dev.myair.store.Finding
+import dev.myair.store.Report
+import dev.myair.store.Severity
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
@@ -52,15 +55,30 @@ class ReviewGitTest {
     @Test fun `the stamp changes with a commit, which leaves HEAD's file as it was, and with review json`() {
         val repo = repo()
         val file = dir.resolve("review.json").also { it.writeText("{}") }
-        val before = gitStamp(repo, file)
+        val before = gitStamp(review(repo), file)
         Thread.sleep(20)
         git(repo, "commit", "--allow-empty", "-m", "more")
-        val after = gitStamp(repo, file)
+        val after = gitStamp(review(repo), file)
         assertEquals(before.head, after.head)
         assertNotEquals(before, after)
         assertEquals(setOf("r"), gitDue(mapOf("r" to after), mapOf("r" to before)))
         assertEquals(emptySet(), gitDue(mapOf("r" to after), mapOf("r" to after)))
         assertEquals(setOf("r"), gitDue(mapOf("r" to after), emptyMap()), "a review never read is due")
-        assertEquals(GitStamp(null, null, null, null, after.review), gitStamp(dir.resolve("gone"), file))
+        assertEquals(GitStamp(null, null, null, null, after.review, emptyMap()), gitStamp(review(dir.resolve("gone")), file))
+    }
+
+    @Test fun `editing a file a finding names makes the review due, editing another file does not`() {
+        val repo = repo()
+        repo.resolve("b.txt").writeText("one")
+        val file = dir.resolve("review.json").also { it.writeText("{}") }
+        val finding = Finding("F1", "a.txt", "bug", listOf(Report("W1", "a", "c", 1, Severity.minor, "s", "x")))
+        val reviewed = review(repo).copy(findings = listOf(finding, finding.copy(id = "F2", file = "gone.txt")))
+        val read = gitStamp(reviewed, file)
+        assertEquals(null, read.files.getValue("gone.txt"), "a missing file stamps as absent")
+        Thread.sleep(20)
+        repo.resolve("b.txt").writeText("two")
+        assertEquals(emptySet(), gitDue(mapOf("r" to gitStamp(reviewed, file)), mapOf("r" to read)))
+        repo.resolve("a.txt").writeText("two")
+        assertEquals(setOf("r"), gitDue(mapOf("r" to gitStamp(reviewed, file)), mapOf("r" to read)))
     }
 }

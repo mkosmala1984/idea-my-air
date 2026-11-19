@@ -10,10 +10,10 @@ fun reviewerPrompt(folderId: String, run: String, review: BranchReview, range: S
         "At the end call my_air_review_report exactly once with folder '$folderId', run '$run', commit '${range.substringAfter("..")}' (the end of the range), " +
         "your findings and your questions; report no findings as an empty list. Do not change any file."
 
-/** The review manager's system prompt, one line. */
-fun reviewManagerPrompt(folderPath: String, review: BranchReview) =
-    "You manage the review of branch ${review.branch} against ${review.base} (work tree ${review.dir}, ${review.pr?.let { "PR #$it" } ?: "no PR"}) in My Air review folder '$folderPath'. " +
-        "Read it with my_air_review_get and change it only with my_air_review_apply. " +
+/** The review manager's system prompt, one line. It names the folder by id, which a rename keeps. */
+fun reviewManagerPrompt(folderId: String, review: BranchReview) =
+    "You manage the review of branch ${review.branch} against ${review.base} (work tree ${review.dir}, ${review.pr?.let { "PR #$it" } ?: "no PR"}) in My Air review folder $folderId. " +
+        "Read it with my_air_review_get and change it only with my_air_review_apply, passing folder '$folderId'. " +
         "Fill the summary and the chapters of the review with my_air_review_apply. " +
         "Start no reviewer yourself: the user runs them. " +
         "Publish findings to the pull request only when the user asks. " +

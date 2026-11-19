@@ -34,9 +34,10 @@ class ReviewPromptsTest {
 
     @Test
     fun `the manager prompt names both review tools and forbids starting reviewers`() {
-        val p = reviewManagerPrompt("Work/Rev", review())
+        val p = reviewManagerPrompt("4f1c-id", review())
         assertTrue("work tree ." in p && "no PR" in p)
-        assertTrue("PR #42" in reviewManagerPrompt("Work/Rev", review().copy(pr = 42)))
+        assertTrue("folder '4f1c-id'" in p, "the manager passes the folder id to the tools, which a rename keeps")
+        assertTrue("PR #42" in reviewManagerPrompt("4f1c-id", review().copy(pr = 42)))
         listOf("my_air_review_get", "my_air_review_apply", "Start no reviewer", "only when the user asks", "only on the user's word").forEach { assertTrue(it in p, it) }
         assertFalse('\n' in p)
     }
