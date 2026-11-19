@@ -193,7 +193,19 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
         runtimes.filterValues { it.project == project }.keys.forEach(::close)
     }
 
-    private fun start(file: ClaudeSessionVirtualFile, pane: SessionPane, project: Project) {
+    /**
+     * Starts [file]'s process with no tab showing it, detached from the start, so it runs at once rather than when a view
+     * first shows; a tab opened later binds it ([attach]) and [retireIdle] ends it as any detached one.
+     */
+    fun startDetached(file: ClaudeSessionVirtualFile, project: Project) {
+        ThreadingAssertions.assertEventDispatchThread()
+        check(file !in runtimes) { "session ${file.sessionId} already has a process" }
+        start(file, null, project)
+        TabsSync.getInstance().publish()
+    }
+
+    /** [pane] null: no view yet, so the terminal must not wait for one to start the process. */
+    private fun start(file: ClaudeSessionVirtualFile, pane: SessionPane?, project: Project) {
         val claude = claudeExecutable()
         val settings = MyAirSettings.getInstance()
         val service = ClaudeSessionsService.getInstance()
@@ -220,9 +232,10 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
             .emulatorType(TerminalEmulatorType.Ghostty)
             .build()
         val runtime = Runtime(promptFile, project, pane)
+        if (pane == null) runtime.detachedAt = Instant.now()
         runtimes[file] = runtime
         scope.launch(Dispatchers.EDT) {
-            val session = TransferableTerminalSessionFactory.getInstance().create(project, options, null, deferSessionStartUntilUiShown = true)
+            val session = TransferableTerminalSessionFactory.getInstance().create(project, options, null, deferSessionStartUntilUiShown = pane != null)
             // Closed while starting (Close and Settle, its project closed): nobody wants this process any more.
             if (runtimes[file] !== runtime) return@launch session.close()
             runtime.session = session
