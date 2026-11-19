@@ -37,6 +37,7 @@
     <postStartupActivity implementation="dev.myair.tabs.TabsSyncStartup"/>
     <editorEmptyStateComponentProvider implementation="dev.myair.prompt.PromptEmptyState"/>
     <notificationGroup id="My Air" displayType="BALLOON"/>
+    <notificationGroup id="My Air Scheduled Tasks" displayType="STICKY_BALLOON"/>
   </extensions>
 
   <applicationListeners>
