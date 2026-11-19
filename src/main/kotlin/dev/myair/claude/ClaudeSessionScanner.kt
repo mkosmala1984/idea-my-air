@@ -416,10 +416,14 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             })
         }
 
-        /** [this] with the artifact of [line] when it is an Artifact publish of the main conversation; a republished one keeps its place. */
+        /**
+         * [this] with the artifact of [line] when it is an Artifact publish of the main conversation; a republished one keeps
+         * its place. An `open` result (`opened`, no `path`) names an artifact without publishing it.
+         */
         private fun Map<String, Artifact>.published(line: Line): Map<String, Artifact> {
             if (ARTIFACT !in line || !line.main) return this
             val r = line.json.getAsJsonObject("toolUseResult") ?: return this
+            if (r["opened"]?.asBoolean == true) return this
             fun field(name: String) = line.check(r[name]?.asString, "artifact result without $name")
             return this + (field("artifact_id") to Artifact(field("artifact_id"), field("title"), field("url"), Path.of(field("path"))))
         }
