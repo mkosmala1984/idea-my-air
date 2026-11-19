@@ -375,7 +375,7 @@ Panel behaviour, card by card (each folds; edits only from menus; rebuild only t
 - Findings: filter chips All / Blockers / Open with counts; head `<n> blockers · <m> to decide`; rows per R24 (`maybe fixed` dim per R28); menu per R25/R26 (Fix with Claude → `startNew(project, sessionProject, review.dir, args = listOf("--", findingMessage(f)), folderId = id)` and `setState(accepted)`; Post to PR → `pane.send(...)`; Open Diff).
 - Questions: open ones with Resolve, resolved folded under a count.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 @Test fun `files no chapter names go to not explained`()
@@ -386,9 +386,9 @@ Panel behaviour, card by card (each folds; edits only from menus; rebuild only t
 @Test fun `a bitbucket origin gives a pr url and another origin none`()  // git@bitbucket.org:ws/repo.git and https forms; github → null
 ```
 
-- [ ] **Step 2–4:** FAIL, implement, PASS, full tests PASS, `buildPlugin` PASS.
+- [x] **Step 2–4:** FAIL, implement, PASS, full tests PASS, `buildPlugin` PASS.
 - [ ] **Step 5: Check in `runIde`** with a profile of one reviewer (`haiku`, prompt `/code-review low`) on a small branch: Run starts a job, the row turns reported, findings appear merged, Accept/Reject/Fix with Claude work, the summary edits and Publish sends the manager a message.
-- [ ] **Step 6: Commit** `Review panel: summary, explanation, reviewers, findings, questions`.
+- [x] **Step 6: Commit** `Review panel: summary, explanation, reviewers, findings, questions`.
 
 ---
 

@@ -9,10 +9,10 @@ import javax.swing.JComponent
 import javax.swing.text.JTextComponent
 
 /**
- * A [PlanEdit] open in the plan view, its text component kept across rebuilds of the panel, so the text, caret and focus
- * survive a change the manager makes meanwhile.
+ * An edit ([PlanEdit], a review's edit) open in a panel, its text component kept across rebuilds of the panel, so the
+ * text, caret and focus survive a change the manager makes meanwhile.
  */
-class OpenEdit(val edit: PlanEdit, val component: JTextComponent)
+class OpenEdit<E>(val edit: E, val component: JTextComponent)
 
 /** A title, next step or new item's title: Enter saves, Esc cancels. */
 fun inlineField(text: String, save: () -> Unit, cancel: () -> Unit) = JBTextField(text).apply {

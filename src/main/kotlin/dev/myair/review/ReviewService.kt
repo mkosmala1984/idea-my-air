@@ -28,11 +28,11 @@ import kotlin.io.path.isDirectory
 /**
  * Git facts of a review's `dir`: its [state], [head], the commits HEAD is past the reviewed commit ([sinceReviewed], null
  * without one or when git does not know it), and [changed]: by each finding's newest report commit, the old-side line
- * ranges changed since it ([Git.changedLines], null for a commit git does not know). [error]: why the read failed, the
- * other fields then empty.
+ * ranges changed since it ([Git.changedLines], null for a commit git does not know); [origin]: the URL of the remote
+ * `origin`, null without one. [error]: why the read failed, the other fields then empty.
  */
 data class ReviewGit(
-    val state: GitState?, val head: String?, val sinceReviewed: Int?, val changed: Map<String, Map<String, List<IntRange>>?>, val error: String?,
+    val state: GitState?, val head: String?, val sinceReviewed: Int?, val changed: Map<String, Map<String, List<IntRange>>?>, val origin: String?, val error: String?,
 )
 
 /** Job id to the session its live entry runs. */
@@ -82,9 +82,11 @@ fun readGit(review: BranchReview): ReviewGit = try {
     val state = checkNotNull(Git.state(review.dir)) { "${review.dir} is not in a git repository" }
     val head = Git.run(state.root, "rev-parse", "HEAD").trim()
     val commits = review.findings.map { it.reports.last().commit }.toSet()
-    ReviewGit(state, head, reviewedCommit(review)?.let { Git.commitsBetween(state.root, it) }, commits.associateWith { Git.changedLines(state.root, it) }, null)
+    ReviewGit(state, head, reviewedCommit(review)?.let { Git.commitsBetween(state.root, it) }, commits.associateWith { Git.changedLines(state.root, it) },
+        // `git config --get` exits 1 for a key not set: a repository without `origin`.
+        Git.run(state.root, "config", "--get", "remote.origin.url", ok = setOf(0, 1)).trim().ifEmpty { null }, null)
 } catch (e: Exception) {
-    ReviewGit(null, null, null, emptyMap(), "${e.javaClass.simpleName}: ${e.message}")
+    ReviewGit(null, null, null, emptyMap(), null, "${e.javaClass.simpleName}: ${e.message}")
 }
 
 /**
@@ -132,6 +134,9 @@ class ReviewService : Disposable {
 
     /** The review of [folderId]; throws when it has none or it cannot be read. */
     fun review(folderId: String): BranchReview = requireNotNull(reviews[folderId]) { "folder $folderId has no review" }.getOrThrow()
+
+    /** The `review.json` of [folderId]. */
+    fun file(folderId: String) = files.file(folderId)
 
     /** Calls [listener] on the EDT after every change, until [parent] is disposed. */
     fun subscribe(parent: Disposable, listener: () -> Unit) {

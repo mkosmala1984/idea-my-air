@@ -1,6 +1,10 @@
 package dev.myair.prompt
 
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.ui.awt.RelativePoint
+import com.intellij.ui.dsl.listCellRenderer.LcrInitParams
+import com.intellij.ui.dsl.listCellRenderer.listCellRenderer
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
@@ -10,6 +14,7 @@ import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Graphics
 import java.awt.Graphics2D
+import java.awt.Point
 import java.awt.RenderingHints
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -119,4 +124,21 @@ internal class SendButton(tooltip: String, click: () -> Unit) : JButton() {
         g2.drawPolyline(intArrayOf(x - r + 1, x, x + r - 1), intArrayOf(y - 1, y - r, y - 1), 3)
         g2.dispose()
     }
+}
+
+/** A popup under [chip] listing [items], [selected] marked, each with its [tag] on the right; picking one runs [chosen]. */
+internal fun <T> choose(
+    chip: Chip, items: List<T>, selected: T?, text: (T) -> String, tag: (T) -> String? = { null },
+    title: String? = null, search: Boolean = false, chosen: (T) -> Unit,
+) {
+    val builder = JBPopupFactory.getInstance().createPopupChooserBuilder(items)
+        .setRenderer(listCellRenderer {
+            text(text(value))
+            tag(value)?.let { text(it) { align = LcrInitParams.Align.RIGHT; foreground = greyForeground } }
+        })
+        .setItemChosenCallback(chosen)
+    if (selected != null) builder.setSelectedValue(selected, true)
+    if (title != null) builder.setTitle(title)
+    if (search) builder.setNamerForFiltering(text).setFilterAlwaysVisible(true).setVisibleRowCount(12)
+    builder.createPopup().show(RelativePoint(chip, Point(0, chip.height)))
 }

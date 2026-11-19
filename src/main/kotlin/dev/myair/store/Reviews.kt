@@ -254,7 +254,7 @@ fun parseReview(text: String, source: Path): BranchReview {
 
 /** `<root>/<folderId>/review.json` of every folder with a review; [readAll] keeps a broken one as a failure. */
 class ReviewFiles(val root: Path) {
-    private fun file(folderId: String) = root.resolve(folderId).resolve("review.json")
+    fun file(folderId: String): Path = root.resolve(folderId).resolve("review.json")
 
     fun readAll(): Map<String, Result<BranchReview>> {
         if (!root.exists()) return emptyMap()

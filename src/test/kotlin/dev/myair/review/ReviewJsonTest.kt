@@ -26,7 +26,7 @@ class ReviewJsonTest {
         emptyList(), mapOf("F" to 4, "W" to 5), mapOf("F1" to "B1"),
     )
 
-    private val git = ReviewGit(null, "c2", 1, mapOf("c1" to mapOf("a.kt" to listOf(12..12)), "gone" to null), null)
+    private val git = ReviewGit(null, "c2", 1, mapOf("c1" to mapOf("a.kt" to listOf(12..12)), "gone" to null), null, null)
 
     @Test fun `review json carries maybe fixed and run status`() {
         val json = JsonParser.parseString(reviewJson("rtm/Review: b", review, git, setOf("j2"))).asJsonObject

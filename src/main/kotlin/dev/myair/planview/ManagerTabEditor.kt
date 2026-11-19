@@ -49,7 +49,10 @@ abstract class ManagerTabEditor(protected val project: Project, private val file
     /** The folder's name while its plan or review is there, else null; asked only once the folders are read. */
     protected abstract fun nameNow(): String?
 
-    /** Why the folder's content cannot be read now, null when it can; asked only while [nameNow] gives a name. */
+    /**
+     * Why the folder's content cannot be read now, null when it can; asked only while [nameNow] gives a name. It holds the
+     * tab back only before the content first showed; after that [render] shows it.
+     */
     protected open fun readError(): String? = null
 
     protected abstract val goneNotice: String
@@ -70,7 +73,7 @@ abstract class ManagerTabEditor(protected val project: Project, private val file
         // Folders not read yet, or unreadable, say nothing about the folder: wait, keeping what shows.
         if (!service.loaded || service.foldersError != null) return waiting(service.foldersError?.let { "Cannot read the folders: $it" } ?: "Loading...")
         val name = nameNow() ?: return folderGone()
-        readError()?.let { return waiting(it) }
+        if (!shown) readError()?.let { return waiting(it) }
         if (title != null && title != name) presentationChanged()
         title = name
         if (shown) return render()

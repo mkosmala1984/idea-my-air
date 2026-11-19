@@ -23,8 +23,6 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.components.panels.VerticalLayout
-import com.intellij.ui.dsl.listCellRenderer.LcrInitParams
-import com.intellij.ui.dsl.listCellRenderer.listCellRenderer
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import dev.myair.actions.Git
@@ -358,22 +356,6 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
             existingDir = it.path
             update(choice)
         }
-    }
-
-    private fun <T> choose(
-        chip: Chip, items: List<T>, selected: T?, text: (T) -> String, tag: (T) -> String? = { null },
-        title: String? = null, search: Boolean = false, chosen: (T) -> Unit,
-    ) {
-        val builder = JBPopupFactory.getInstance().createPopupChooserBuilder(items)
-            .setRenderer(listCellRenderer {
-                text(text(value))
-                tag(value)?.let { text(it) { align = LcrInitParams.Align.RIGHT; foreground = greyForeground } }
-            })
-            .setItemChosenCallback(chosen)
-        if (selected != null) builder.setSelectedValue(selected, true)
-        if (title != null) builder.setTitle(title)
-        if (search) builder.setNamerForFiltering(text).setFilterAlwaysVisible(true).setVisibleRowCount(12)
-        builder.createPopup().show(RelativePoint(chip, Point(0, chip.height)))
     }
 
     /** Haiku's name for the branch, from the message; the message may be no more than a Jira key. */
