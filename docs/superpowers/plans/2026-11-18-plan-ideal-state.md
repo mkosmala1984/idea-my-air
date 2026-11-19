@@ -8,7 +8,7 @@
 | 4 | done | `f7dedc1` |
 | 5 | done | `3cdcf8e` |
 | 6 | done | `2548d84` |
-| 7 | | |
+| 7 | done (global CLAUDE.md awaits approval) | `314f04e` |
 
 ## TL;DR
 
@@ -238,33 +238,33 @@ Header beside the task progress: `requirementsSummary` (when not null) and `revi
 - Modify: `CLAUDE.md` (plan folders paragraph and plan view paragraph), `src/main/kotlin/dev/myair/folders/README.md`, `src/main/kotlin/dev/myair/planview/README.md`
 - Modify (outside the repo, after the user approves the text): `~/.claude/CLAUDE.md` section "Spec requirements and plan evidence"
 
-- [ ] **Step 1: Update the repo docs**: the new `Plan` fields, version 5 written only while used, ids per plan, ops, derived status, sections in the prompt and the view.
+- [x] **Step 1: Update the repo docs**: the new `Plan` fields, version 5 written only while used, ids per plan, ops, derived status, sections in the prompt and the view.
 - [ ] **Step 2: Draft the global section**: with a My Air plan folder, a spec names the plan's path (`**Plan:** <folder path>`) in place of `## Requirements`, requirements live only in the plan and evidence goes through `my_air_plan_apply` `add_evidence` in the same four formats; without one, the Markdown list and table stay as today; drop the `my_air_spec_check` paragraph. Show the diff to the user; save only on approval.
-- [ ] **Step 3: Full run** `./gradlew test buildPlugin` — Expected: BUILD SUCCESSFUL, all tests pass.
-- [ ] **Step 4: Commit** the repo docs: `Document the plan's ideal state sections` with `Plan-Task: 7/7`.
+- [x] **Step 3: Full run** `./gradlew test buildPlugin` — Expected: BUILD SUCCESSFUL, all tests pass.
+- [x] **Step 4: Commit** the repo docs: `Document the plan's ideal state sections` with `Plan-Task: 7/7`.
 
 ## Requirements evidence
 
 | R | Task | Evidence |
 |---|---|---|
-| R1 | 1 | |
-| R2 | 4, 6 | |
-| R3 | 2 | |
-| R4 | 2 | |
-| R5 | 2 | |
-| R6 | 1 | |
-| R7 | 1, 2 | |
-| R8 | 1 | |
-| R9 | 2 | |
-| R10 | 1, 2 | |
-| R11 | 2 | |
-| R12 | 2 | |
-| R13 | 3 | |
-| R14 | 6 | |
-| R15 | 5 | |
-| R16 | 5, 6 | |
-| R17 | 5, 6 | |
-| R18 | 4 | |
-| R19 | 4 | |
-| R20 | 2, 3 | |
-| R21 | 7 | |
+| R1 | 1 | test `SessionFoldersTest` › `a structure without new plan fields is written as version 4 and reads back equal`; test `SessionFoldersTest` › `a plan with new fields is written as version 5 and reads back equal`; test `SessionFoldersTest` › `version 5 rejects unknown plan keys` |
+| R2 | 4, 6 | test `SessionSystemPromptTest` › `a task session gets the ideal state, constraints and only the requirements of its task`; not done: sandbox walk not run (heading in the view) |
+| R3 | 2 | test `PlanChangesTest` › `the new sections are set in order, ids allocated per plan` |
+| R4 | 2 | test `PlanChangesTest` › `the new sections are set in order, ids allocated per plan` |
+| R5 | 2 | test `PlanChangesTest` › `the new sections are set in order, ids allocated per plan`; test `PlanChangesTest` › `ids of another plan are refused` |
+| R6 | 1 | test `SessionFoldersTest` › `requirements, decisions and blockers are numbered per plan and prefix, never reused after a delete`; test `SessionFoldersTest` › `restore keeps the higher next of each plan and prefix` |
+| R7 | 1, 2 | test `PlanTest` › `evidence must be one of the four formats exactly`; test `PlanChangesTest` › `malformed evidence, eval and review status are refused naming the change` |
+| R8 | 1 | test `PlanTest` › `a requirement is unproven without evidence, not done with any not done item, else proven` |
+| R9 | 2 | test `PlanChangesTest` › `update and delete take only the fields of the id's kind` |
+| R10 | 1, 2 | test `SessionFoldersTest` › `deleting a task drops it from requirements`; test `SessionFoldersTest` › `a requirement may name only tasks of its plan` |
+| R11 | 2 | test `PlanChangesTest` › `set_review keeps the commit unless given, null clearing it` |
+| R12 | 2 | test `SessionFoldersTest` › `a blocker on a plan with no review starts one not done` |
+| R13 | 3 | test `FolderQueriesTest` › `a plan's sections come out with derived requirement statuses`; test `FolderQueriesTest` › `a plan without sections has null constraints and review and empty lists` |
+| R14 | 6 | commit `2548d84`; not done: sandbox walk not run |
+| R15 | 5 | test `PlanViewTest` › `requirements start open, review open while a blocker is unresolved, other sections folded when they hold anything` |
+| R16 | 5, 6 | test `PlanViewTest` › `the header counts proven requirements and names the review`; not done: sandbox walk not run (header in the view) |
+| R17 | 5, 6 | test `PlanEditTest` › `new decision, requirement and blocker edits add items, blank refused`; test `PlanEditTest` › `a title edit of a requirement, decision or blocker changes its text`; not done: sandbox walk not run |
+| R18 | 4 | test `SessionSystemPromptTest` › `a task session gets the ideal state, constraints and only the requirements of its task` |
+| R19 | 4 | test `SessionSystemPromptTest` › `a manager gets every requirement and the rules for decisions, evidence and review` |
+| R20 | 2, 3 | test `SessionSystemPromptTest` › `both prompts name every folder tool`; commit `b04711a`; commit `871cf90` |
+| R21 | 7 | commit `314f04e`; not done: ~/.claude/CLAUDE.md awaits the user's approval of the drafted section |
