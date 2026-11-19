@@ -113,10 +113,10 @@ class PlanEditTest {
     }
 
     @Test
-    fun `descriptions, constraints and decisions are edited over several lines, titles and next steps on one`() {
-        val multi = listOf(PlanEdit.Description(null), PlanEdit.Description("T2"), PlanEdit.Constraints, PlanEdit.Title("D1"))
-        val single = listOf(PlanEdit.Title("T2"), PlanEdit.Title("R1"), PlanEdit.Title("B1"), PlanEdit.Next("T2"), PlanEdit.NewDecision, PlanEdit.NewRequirement)
-        assertEquals(List(4) { true } + List(6) { false }, (multi + single).map { it.multiline })
+    fun `descriptions, constraints, decisions, requirements and blockers are edited over several lines, titles and next steps on one`() {
+        val multi = listOf(PlanEdit.Description(null), PlanEdit.Description("T2"), PlanEdit.Constraints, PlanEdit.Title("D1"), PlanEdit.Title("R1"), PlanEdit.Title("B1"))
+        val single = listOf(PlanEdit.Title("T2"), PlanEdit.Title("M1"), PlanEdit.Next("T2"), PlanEdit.NewDecision, PlanEdit.NewRequirement)
+        assertEquals(List(6) { true } + List(5) { false }, (multi + single).map { it.multiline })
     }
 
     @Test
