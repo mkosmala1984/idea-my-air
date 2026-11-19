@@ -144,7 +144,7 @@ fun BranchReview.toJson(): String = GSON.toJson(
 )
 
 /** A JSON object of [source] read with an explicit key set: unknown and missing required keys throw naming file and key. */
-private class Keys(element: JsonElement, private val what: String, private val source: Path, required: Set<String>, optional: Set<String> = emptySet()) {
+internal class Keys(element: JsonElement, private val what: String, private val source: Path, required: Set<String>, optional: Set<String> = emptySet()) {
     private val json: JsonObject
 
     init {

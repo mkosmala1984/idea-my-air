@@ -158,7 +158,7 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 3. a joined finding keeps its state, reason, fixCommit and comment
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 // FindingsTest
@@ -176,10 +176,10 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 @Test fun `a report sets reported on its run and adds its questions`()           // Q<n> ids, reviewer = run's reviewer
 ```
 
-- [ ] **Step 2: Run** both classes → FAIL.
-- [ ] **Step 3: Implement**; JSON parsing of `changes`, `findings`, `questions` as `PlanChanges` does (`FIELDS` map op → allowed keys, a failure message naming the change's index and op).
-- [ ] **Step 4: Run** → PASS; full `./gradlew test` → PASS.
-- [ ] **Step 5: Commit** `Review ops, reports and finding merge`.
+- [x] **Step 2: Run** both classes → FAIL.
+- [x] **Step 3: Implement**; JSON parsing of `changes`, `findings`, `questions` as `PlanChanges` does (`FIELDS` map op → allowed keys, a failure message naming the change's index and op).
+- [x] **Step 4: Run** → PASS; full `./gradlew test` → PASS.
+- [x] **Step 5: Commit** `Review ops, reports and finding merge`.
 
 ---
 
