@@ -21,7 +21,7 @@
 | 7 | done | `dafde05` |
 | 8 | done | `5463c99` |
 | 9 | done | `c2b8c5f` |
-| 10 | | |
+| 10 | done | `5b09d1b` |
 | 11 | | |
 
 **Goal:** a Review folder kind with its own editor tab, reviewers run as `claude --bg` jobs reporting through MCP, findings merged and triaged, blockers mirrored into a linked plan.
