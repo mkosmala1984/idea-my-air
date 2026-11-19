@@ -37,7 +37,7 @@ This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `m
   - `ProjectCloseConfirmation` (a `ProjectCloseHandler`) and `ExitConfirmation` (an `ApplicationListener`).
 - `CloseAndSettleAction` (action `dev.myair.CloseAndSettle`, `CloseAndSettleAction.kt`): settles the session, closes its tab and runs `claude stop <job>` for a background job.
 - Prompts:
-  - `appendedSystemPrompt(briefs, filing)`, `PlanStart(folderId, taskId)`, `sessionPlan(structure, sessionId, session, start, managed)` and `planPrompt(structure, folder, task, briefs, manager)` (`SessionSystemPrompt.kt`).
+  - `appendedSystemPrompt(briefs, filing)`, `PlanStart(folderId, taskId)`, `sessionPlan(structure, sessionId, session, start, managed)` and `planPrompt(structure, folder, task, briefs, manager)`, and `turnIntoPlanMessage(plan, managerPrompt)`, what Turn into Plan sends its session (`SessionSystemPrompt.kt`).
   - `BRIEF_CALL`, `BRIEF_REMINDER`, `briefReminderCommand()` and `writeBriefReminderSettings(dir)` (`BriefReminder.kt`).
 - Tab marks: `TabMark`, `tabMark(...)` and `tabTooltip(title, sessionProject, worktree)` (`TabMark.kt`).
 - Icons and colours (`SessionIcons.kt`):

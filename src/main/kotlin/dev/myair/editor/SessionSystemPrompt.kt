@@ -3,6 +3,7 @@ package dev.myair.editor
 import dev.myair.claude.Brief
 import dev.myair.claude.ClaudeSession
 import dev.myair.folders.Folder
+import dev.myair.folders.Plan
 import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
 
@@ -72,7 +73,10 @@ fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, brief
     return buildString {
         append("# My Air plan: ${folder.name}\n\n")
         append("This session works in the plan \"${folder.name}\" (folder path \"$path\", the plan argument of my_air_plan_apply). ")
-        append("Below are its descriptions as they were when this was written; read current statuses and next steps with my_air_plan_get.\n")
+        if (plan.description != null || plan.constraints != null || plan.requirements.isNotEmpty() || task != null) {
+            append("Below are its descriptions as they were when this was written; ")
+        }
+        append("read current statuses and next steps with my_air_plan_get.\n")
         plan.description?.let { append("\n## Ideal state\n\n$it\n") }
         plan.constraints?.let { append("\n## Constraints\n\n$it\n") }
         val requirements = plan.requirements.filter { manager || (task != null && task.id in it.tasks) }
@@ -104,4 +108,18 @@ fun planPrompt(structure: SessionFolders, folder: Folder, task: PlanTask?, brief
             append("Delete requirements, decisions or blockers only after the user agreed.\n")
         }
     }
+}
+
+/**
+ * The message Turn into Plan sends the session it turns into [plan]'s manager ([managerPrompt]: `planPrompt(manager = true)`):
+ * the plan was just made from this conversation and is empty, so the session fills it from what was said and done, then
+ * reports. Only for a new plan: `my_air_plan_set_manager` hands over a plan that may be filled already.
+ */
+fun turnIntoPlanMessage(plan: Folder, managerPrompt: String): String {
+    check(plan.plan == Plan()) { "folder ${plan.id} holds a plan already filled" }
+    return "I turned this session into the My Air plan \"${plan.name}\", which this session now manages. The plan is empty: " +
+        "fill it from this conversation with my_air_plan_apply: the ideal state (set_description), constraints, requirements, " +
+        "decisions taken so far, and milestones and tasks, work already finished as done, with next steps for the rest. " +
+        "Put in only what this conversation settled or did; ask me about the rest. Then tell me briefly what the plan holds.\n\n" +
+        managerPrompt
 }

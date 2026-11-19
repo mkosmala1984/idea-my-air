@@ -12,6 +12,7 @@ import java.nio.file.Path
 import java.time.Instant
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -136,5 +137,23 @@ class SessionSystemPromptTest {
         // The plan's path is the plan argument of my_air_plan_apply for every session, so only the manager section is checked.
         assertFalse("manages this plan" in planPrompt(structure, folder, null, briefs = true, manager = false))
         assertTrue(manager.startsWith(planPrompt(structure, folder, null, briefs = true)))
+    }
+
+    @Test
+    fun `descriptions are announced only when some follow`() {
+        val announced = "Below are its descriptions"
+        assertFalse(announced in planPrompt(structure, structure.find("b")!!, null, briefs = true, manager = true))
+        assertTrue(announced in planPrompt(structure, structure.find("a")!!, null, briefs = true))
+        assertTrue(announced in planPrompt(structure, structure.find("a")!!, structure.findTask("T2")!!.second, briefs = true))
+    }
+
+    @Test
+    fun `turning a session into a plan asks it to fill the empty plan from the conversation`() {
+        val folder = structure.find("b")!!
+        val manager = planPrompt(structure, folder, null, briefs = true, manager = true)
+        val message = turnIntoPlanMessage(folder, manager)
+        listOf("\"b\"", "empty", "from this conversation", "set_description", "decisions", "as done", "ask me").forEach { assertTrue(it in message, it) }
+        assertTrue(message.endsWith(manager))
+        assertThrows(IllegalStateException::class.java) { turnIntoPlanMessage(structure.find("a")!!, manager) }
     }
 }
