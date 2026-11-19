@@ -155,9 +155,6 @@ fun gitStamp(review: BranchReview, reviewFile: Path): GitStamp {
     )
 }
 
-/** The reviews of [stamps] whose git is read again: not read yet, or read at another stamp ([read]). */
-fun gitDue(stamps: Map<String, GitStamp>, read: Map<String, GitStamp>): Set<String> = stamps.filter { (id, stamp) -> read[id] != stamp }.keys
-
 /**
  * Every review of `~/.my-air/reviews`, read and written only here, so the review tabs and the MCP tools see one state.
  * [reviews], [facts] and the listeners are touched on the EDT only. Reviews are read off the EDT on every
