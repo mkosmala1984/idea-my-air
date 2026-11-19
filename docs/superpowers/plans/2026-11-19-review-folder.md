@@ -317,7 +317,7 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
   - `fun startReview(project: Project, branch: String, dirHint: Path, place: String?, pr: Int?)` — EDT, git off the EDT: creates the worktree when needed (`Git.addWorktree`), the folder `Review: <branch>` (`createFolder`, a name taken gets ` (2)`…), `review.json` with `base = Git.baseOf(dir)`, then `ReviewOpener.open` (Task 9)
   - Action `NewReviewAction` asking the branch (searchable popup of local branches, only on project/folder rows) and an optional PR number (`Messages.showInputDialog`, digits or empty)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 @Test fun `a review from inside a plan goes beside the plan and links it`()
@@ -325,8 +325,8 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 @Test fun `the dir is the worktree holding the branch, else the main checkout holding it, else a new worktree`()
 ```
 
-- [ ] **Step 2–4:** FAIL, implement, PASS, full tests PASS.
-- [ ] **Step 5: Commit** `New Review: folder, worktree and review.json`.
+- [x] **Step 2–4:** FAIL, implement, PASS, full tests PASS.
+- [x] **Step 5: Commit** `New Review: folder, worktree and review.json`.
 
 ---
 

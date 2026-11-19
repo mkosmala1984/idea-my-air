@@ -40,6 +40,7 @@ import com.intellij.openapi.application.ApplicationManager
 import dev.myair.planview.PlanOpener
 import dev.myair.actions.Git
 import dev.myair.actions.NewSessionInDirAction
+import dev.myair.reviewview.NewReviewAction
 import dev.myair.actions.openInIdeaAction
 import dev.myair.actions.openInTerminalAction
 import dev.myair.actions.PresetsGroup
@@ -305,6 +306,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             DefaultActionGroup(
                 NewSessionInDirAction("New Claude Session", false, selectedDir, { tree.selectionPaths?.singleOrNull()?.let(::nodeProject) }, editing::selectedPlanStart) { editing.selectedFolder()?.id },
                 NewSessionInDirAction("New Claude Session in Worktree...", true, { selectedDir().takeUnless { selectedItem() is WorktreeRow } }, selectedDir, editing::selectedPlanStart) { editing.selectedFolder()?.id },
+                NewReviewAction({ tree.selectionPaths?.singleOrNull()?.let { reviewStart(it, service.folders) { s -> service.heads[s.workDir]?.branch } } }) { service.foldersError == null },
                 openInIdeaAction(selectedOpenDir), openInTerminalAction(selectedOpenDir), Separator.getInstance(),
                 pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree), TurnIntoPlanAction(inTree),
                 Separator.getInstance(), newFolder, rename, delete, Separator.getInstance(), *planActions.toTypedArray(),

@@ -12,6 +12,7 @@ import dev.myair.folders.Milestone
 import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.startFolder
+import dev.myair.reviewview.ReviewStart
 import java.nio.file.Path
 import java.time.Instant
 import java.util.UUID
@@ -235,6 +236,20 @@ fun nodeDir(path: TreePath): Path? = when (val item = (path.lastPathComponent as
 
 /** The project of a session started from the node at [path]: a worktree row's main checkout, as other worktree starts give it, else [nodeDir]. */
 fun nodeProject(path: TreePath): Path? = ((path.lastPathComponent as DefaultMutableTreeNode).userObject as? WorktreeRow)?.root ?: nodeDir(path)
+
+/**
+ * Where New Review starts from the node at [path]: a session's work dir and the branch [branchOf] says is checked out
+ * there, in the folder it shows in; a worktree row's branch, in its project's bound folder; for a project row or a folder
+ * with a start directory ([nodeDir]) a branch to pick, in that folder or the project's. Null elsewhere, and without a branch.
+ */
+fun reviewStart(path: TreePath, structure: SessionFolders, branchOf: (ClaudeSession) -> String?): ReviewStart? =
+    when (val item = (path.lastPathComponent as DefaultMutableTreeNode).userObject) {
+        is ClaudeSession -> branchOf(item)?.let { ReviewStart(item.workDir, it, structure.placeOf(item)) }
+        is WorktreeRow -> item.branch?.let { ReviewStart(item.path, it, structure.projectFolder(item.root)?.id) }
+        is Path -> ReviewStart(item, null, structure.projectFolder(item)?.id)
+        is Folder -> nodeDir(path)?.let { ReviewStart(it, null, item.id) }
+        else -> null
+    }
 
 /** The directory to open from the node at [path]: a session's own cwd, else [nodeDir]. */
 fun openDir(path: TreePath): Path? = ((path.lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession)?.cwd ?: nodeDir(path)

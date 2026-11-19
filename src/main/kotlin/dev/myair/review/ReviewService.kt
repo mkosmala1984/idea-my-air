@@ -130,6 +130,18 @@ class ReviewService : Disposable {
         return stored
     }
 
+    /** Writes the new [review] of [folderId] and notifies; refuses a folder with a `review.json` on disk, in the structure or not. */
+    fun create(folderId: String, review: BranchReview) {
+        ThreadingAssertions.assertEventDispatchThread()
+        require(!files.exists(folderId)) { "folder $folderId has a review already" }
+        files.write(folderId, review)
+        // Drops a read started before this write, which would land without the new review.
+        requested++
+        all = all + (folderId to Result.success(review))
+        changed()
+        refresh()
+    }
+
     /** Reads every review and its git facts off the EDT; callable from any thread. */
     fun refresh() = ApplicationManager.getApplication().invokeLater {
         val generation = ++requested

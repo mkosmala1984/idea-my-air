@@ -264,6 +264,8 @@ class ReviewFiles(val root: Path) {
         }
     }
 
+    fun exists(folderId: String) = file(folderId).exists()
+
     fun read(folderId: String): BranchReview = file(folderId).let { parseReview(it.readText(), it) }
 
     fun write(folderId: String, review: BranchReview) {
