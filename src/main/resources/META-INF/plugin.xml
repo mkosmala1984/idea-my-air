@@ -31,12 +31,15 @@
     <editorTabTitleProvider implementation="dev.myair.planview.PlanTabTitleProvider"/>
     <virtualFileSystem key="myair-dashboard" implementationClass="dev.myair.dashboard.DashboardFileSystem"/>
     <fileEditorProvider implementation="dev.myair.dashboard.DashboardEditorProvider"/>
+    <virtualFileSystem key="myair-scheduled" implementationClass="dev.myair.schedule.ui.ScheduledTasksFileSystem"/>
+    <fileEditorProvider implementation="dev.myair.schedule.ui.ScheduledTasksEditorProvider"/>
     <applicationConfigurable parentId="tools" instance="dev.myair.MyAirConfigurable" id="dev.myair.settings" displayName="My Air"/>
     <editorTabTitleProvider implementation="dev.myair.editor.ClaudeSessionTabTitleProvider"/>
     <editorTabColorProvider implementation="dev.myair.editor.ClaudeSessionTabColorProvider"/>
     <postStartupActivity implementation="dev.myair.tabs.TabsSyncStartup"/>
     <editorEmptyStateComponentProvider implementation="dev.myair.prompt.PromptEmptyState"/>
     <notificationGroup id="My Air" displayType="BALLOON"/>
+    <notificationGroup id="My Air Scheduled Tasks" displayType="STICKY_BALLOON"/>
   </extensions>
 
   <applicationListeners>
@@ -46,7 +49,7 @@
 
   <projectListeners>
     <listener class="dev.myair.tabs.TabsSyncListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
-    <listener class="dev.myair.dashboard.DashboardSingleTab" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    <listener class="dev.myair.tabs.SingleTabListener" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
   </projectListeners>
 
   <actions>
@@ -66,6 +69,10 @@
     </action>
     <action id="dev.myair.OpenSessionsDashboard" class="dev.myair.dashboard.OpenDashboardAction" text="Open Sessions Dashboard"
             description="Show what needs you now, what was left unfinished and what is finished, across all sessions" icon="AllIcons.Actions.ListFiles">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+    <action id="dev.myair.OpenScheduledTasks" class="dev.myair.schedule.ui.OpenScheduledTasksAction" text="Scheduled Tasks"
+            description="Claude sessions started at fixed times: add, edit, run now, and see their runs" icon="AllIcons.Vcs.History">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
     <action id="dev.myair.FocusClaudeSession" class="dev.myair.actions.FocusClaudeSessionAction" text="Focus Claude Session..."

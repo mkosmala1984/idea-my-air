@@ -12,9 +12,10 @@ val DETACHED_GRACE = 60.seconds
 /**
  * Whether a session whose tab closed [detachedFor] ago ends now: only when it is idle and none of its own background tasks
  * runs. One working or waiting for the user stays; [status] is null until the process registers, which also keeps it.
+ * A [held] one (a scheduled run whose result the user has not seen) stays too.
  */
-fun retires(detachedFor: Duration, status: SessionStatus?, runningTasks: Int): Boolean =
-    detachedFor >= DETACHED_GRACE && status == SessionStatus.IDLE && runningTasks == 0
+fun retires(detachedFor: Duration, status: SessionStatus?, runningTasks: Int, held: Boolean = false): Boolean =
+    !held && detachedFor >= DETACHED_GRACE && status == SessionStatus.IDLE && runningTasks == 0
 
 /**
  * The background tasks the process started at [processStart] still runs. The transcript never records that the tasks of an

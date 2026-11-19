@@ -18,6 +18,12 @@ class RetirementTest {
     }
 
     @Test
+    fun `a held session never retires, however long idle`() {
+        assertFalse(retires(600.minutes, SessionStatus.IDLE, 0, held = true))
+        assertTrue(retires(600.minutes, SessionStatus.IDLE, 0, held = false))
+    }
+
+    @Test
     fun `a running task of its own keeps an idle session`() {
         assertFalse(retires(10.minutes, SessionStatus.IDLE, 1))
     }

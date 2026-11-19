@@ -145,13 +145,16 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
     fun detached(): List<Pair<Project, ClaudeSessionVirtualFile>> =
         runtimes.filter { it.value.owner == null && it.value.detachedAt != null }.map { it.value.project to it.key }
 
-    /** Ends every detached process that [retires] at [now], reading its status from [live] by pid and its tasks from [sessions]. */
-    fun retireIdle(live: Map<String, LiveSession>, sessions: Map<String, ClaudeSession>, now: Instant) {
+    /**
+     * Ends every detached process that [retires] at [now], reading its status from [live] by pid and its tasks from
+     * [sessions]; one whose session is in [held] stays.
+     */
+    fun retireIdle(live: Map<String, LiveSession>, sessions: Map<String, ClaudeSession>, now: Instant, held: Set<String>) {
         val before = runtimes.size
         for ((project, file) in detached()) {
             val detachedAt = checkNotNull(runtimes.getValue(file).detachedAt)
             val (status, tasks) = activity(file, live, sessions)
-            if (!retires(java.time.Duration.between(detachedAt, now).toKotlinDuration(), status, tasks)) continue
+            if (!retires(java.time.Duration.between(detachedAt, now).toKotlinDuration(), status, tasks, file.sessionId in held)) continue
             thisLogger().info("claude for session ${file.sessionId} (pid ${file.pid}) ends: idle without a tab since $detachedAt in ${project.name}")
             close(file)
         }
@@ -193,7 +196,19 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
         runtimes.filterValues { it.project == project }.keys.forEach(::close)
     }
 
-    private fun start(file: ClaudeSessionVirtualFile, pane: SessionPane, project: Project) {
+    /**
+     * Starts [file]'s process with no tab showing it, detached from the start, so it runs at once rather than when a view
+     * first shows; a tab opened later binds it ([attach]) and [retireIdle] ends it as any detached one.
+     */
+    fun startDetached(file: ClaudeSessionVirtualFile, project: Project) {
+        ThreadingAssertions.assertEventDispatchThread()
+        check(file !in runtimes) { "session ${file.sessionId} already has a process" }
+        start(file, null, project)
+        TabsSync.getInstance().publish()
+    }
+
+    /** [pane] null: no view yet, so the terminal must not wait for one to start the process. */
+    private fun start(file: ClaudeSessionVirtualFile, pane: SessionPane?, project: Project) {
         val claude = claudeExecutable()
         val settings = MyAirSettings.getInstance()
         val service = ClaudeSessionsService.getInstance()
@@ -220,9 +235,10 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
             .emulatorType(TerminalEmulatorType.Ghostty)
             .build()
         val runtime = Runtime(promptFile, project, pane)
+        if (pane == null) runtime.detachedAt = Instant.now()
         runtimes[file] = runtime
         scope.launch(Dispatchers.EDT) {
-            val session = TransferableTerminalSessionFactory.getInstance().create(project, options, null, deferSessionStartUntilUiShown = true)
+            val session = TransferableTerminalSessionFactory.getInstance().create(project, options, null, deferSessionStartUntilUiShown = pane != null)
             // Closed while starting (Close and Settle, its project closed): nobody wants this process any more.
             if (runtimes[file] !== runtime) return@launch session.close()
             runtime.session = session

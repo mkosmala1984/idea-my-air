@@ -338,6 +338,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val newSession = ActionManager.getInstance().getAction("dev.myair.NewClaudeSession")
         val newSessionInWorktree = ActionManager.getInstance().getAction("dev.myair.NewClaudeSessionInWorktree")
         val dashboard = ActionManager.getInstance().getAction("dev.myair.OpenSessionsDashboard")
+        val scheduled = ActionManager.getInstance().getAction("dev.myair.OpenScheduledTasks")
         val clickToOpen = object : ToggleAction("Open Sessions with Single Click"), DumbAware {
             override fun getActionUpdateThread() = ActionUpdateThread.EDT
             override fun isSelected(e: AnActionEvent) = singleClick
@@ -384,7 +385,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         fun bar(place: String, vararg actions: AnAction) =
             ActionManager.getInstance().createActionToolbar(place, DefaultActionGroup(*actions), true).apply { targetComponent = tree }.component
         val actions = JPanel(BorderLayout()).apply {
-            add(bar("ClaudeSessions", withPrompt, newSession, newSessionInWorktree, PresetsGroup(), newFolder, dashboard), BorderLayout.CENTER)
+            add(bar("ClaudeSessions", withPrompt, newSession, newSessionInWorktree, PresetsGroup(), newFolder, dashboard, scheduled), BorderLayout.CENTER)
             add(bar("ClaudeSessionsView", workTree, options, search), BorderLayout.EAST)
         }
         val close = InplaceButton(IconButton("Close Search", AllIcons.Actions.Close, AllIcons.Actions.CloseHovered)) { showSearch(false) }

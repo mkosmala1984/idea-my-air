@@ -1,5 +1,6 @@
 package dev.myair.service
 
+import dev.myair.schedule.ScheduledRuns
 import dev.myair.store.Homes
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
@@ -49,6 +50,9 @@ class ClaudeSessionsService : Disposable {
     private val desktop = DesktopSessionReader(Path.of(checkNotNull(System.getenv("LOCALAPPDATA")) { "LOCALAPPDATA is not set" }, "Claude-Data"))
     private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
     private val board = BoardWriter(structure.file.parent)
+
+    /** When the user last looked at each session (`~/.my-air/seen`). */
+    val seenStore get() = board.seenStore
 
     /** Opened on first use, off the EDT: creating the file loads sqlite's native library. */
     private val index by lazy { SessionIndex(structure.file.parent.resolve("search.db")) }
@@ -115,6 +119,8 @@ class ClaudeSessionsService : Disposable {
 
     init {
         refresh()
+        // Scheduled tasks run while sessions are tracked.
+        ScheduledRuns.getInstance()
     }
 
     /** Calls [listener] on the EDT after every change, until [parent] is disposed. */
@@ -155,7 +161,7 @@ class ClaudeSessionsService : Disposable {
                 // Before the check below: a session the user looked at changes the board and nothing else.
                 val unreadChanged = updateBoard(scanned, current, pinned.settled)
                 // On every refresh, changed or not: an idle detached session changes nothing, yet its time runs out.
-                SessionTerminals.getInstance().retireIdle(current, scanned.associateBy { it.id }, Instant.now())
+                SessionTerminals.getInstance().retireIdle(current, scanned.associateBy { it.id }, Instant.now(), ScheduledRuns.getInstance().held(unread))
                 val next = State(scanned, current, pinned, read, error, heads, unscanned)
                 if (loaded && !unreadChanged && next == state) return@invokeLater
                 if (failure != null && error != foldersError) thisLogger().error("Cannot read ${structure.file}", failure)

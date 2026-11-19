@@ -8,7 +8,7 @@ The sessions dashboard: one editor tab per IDE that lists, for every session not
 
 - `Dashboard.kt`: `SessionGit`, `Chip`, `chipText`, `Row`, `Area`, `Dashboard`, `dashboardOf` (pure), `areaOf`.
 - `GitFacts.kt`: `class GitFacts` with `read(sessions): Map<String, Result<SessionGit>>`, blocking, cached per work tree root.
-- `DashboardFiles.kt`: `DashboardVirtualFile`, `DashboardFileSystem` (`myair-dashboard://sessions`), `DashboardFiles` (application service, the one file), `OpenDashboardAction`, `DashboardSingleTab` (project listener closing a second tab).
+- `DashboardFiles.kt`: `DashboardVirtualFile`, `DashboardFileSystem` (`myair-dashboard://sessions`), `DashboardFiles` (application service, the one file), `OpenDashboardAction` (a `SingleTabFile`, see `tabs/SingleTab.kt`).
 - `DashboardEditor.kt`: `DashboardEditorProvider` (type id `myair-dashboard`) and `DashboardEditor`, with Analyze and its days chooser.
 - `Analyses.kt`: `Verdict`, `Analysis`, `AnalysisStore` (`~/.my-air/analysis/<sessionId>.json`).
 - `Digest.kt`: `Excerpt`, `excerptOf` (prompts and last agent texts of a transcript), `digestOf` (what Haiku reads).
