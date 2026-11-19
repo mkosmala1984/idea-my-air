@@ -26,7 +26,7 @@ class ReviewsTest {
             Finding("F2", "b.kt", "bug", listOf(report(), report("W2", 20, Severity.major)), FindingState.fixed, fixCommit = "def5678"),
             Finding("F3", "c.kt", "bug", listOf(report()), FindingState.posted, comment = "c1"),
         ),
-        listOf(Question("Q1", "why?", "style", true), Question("Q2", "how?", null)),
+        listOf(Question("Q1", "why?", "style", true, "W2"), Question("Q2", "how?", null)),
         mapOf("F" to 4, "W" to 3, "Q" to 3), blockers,
     )
 

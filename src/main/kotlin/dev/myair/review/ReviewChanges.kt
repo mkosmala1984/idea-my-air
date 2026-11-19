@@ -29,8 +29,8 @@ fun BranchReview.setChapters(chapters: List<Chapter>) = copy(chapters = chapters
 
 fun BranchReview.setPr(pr: Int?) = copy(pr = pr)
 
-fun BranchReview.addQuestion(text: String, reviewer: String?): BranchReview =
-    nextId("Q").let { (id, next) -> next.copy(questions = next.questions + Question(id, text, reviewer)) }
+fun BranchReview.addQuestion(text: String, reviewer: String?, run: String? = null): BranchReview =
+    nextId("Q").let { (id, next) -> next.copy(questions = next.questions + Question(id, text, reviewer, run = run)) }
 
 fun BranchReview.resolveQuestion(id: String): BranchReview {
     val q = requireNotNull(questions.firstOrNull { it.id == id }) { "no question '$id'" }
@@ -127,7 +127,7 @@ object ReviewChanges {
             q.asString
         }
         val merged = mergeFindings(review, r, commit, incoming)
-        val marked = merged.copy(runs = merged.runs.map { if (it.id == run) it.copy(reported = now.toString()) else it })
-        return asked.fold(marked) { acc, q -> acc.addQuestion(q, r.reviewer) }
+        val marked = merged.copy(runs = merged.runs.map { if (it.id == run) it.copy(reported = now.toString()) else it }, questions = merged.questions.filter { it.run != run })
+        return asked.fold(marked) { acc, q -> acc.addQuestion(q, r.reviewer, run) }
     }
 }

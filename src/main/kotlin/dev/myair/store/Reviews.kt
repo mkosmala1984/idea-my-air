@@ -66,7 +66,7 @@ data class Run(
 
 data class Chapter(val title: String, val text: String, val files: List<String>)
 
-data class Question(val id: String, val text: String, val reviewer: String?, val resolved: Boolean = false)
+data class Question(val id: String, val text: String, val reviewer: String?, val resolved: Boolean = false, val run: String? = null)
 
 /** The review of [branch] against [base] in [dir]; [next] counts ids per prefix and is never lowered. */
 data class BranchReview(
@@ -138,7 +138,7 @@ fun BranchReview.toJson(): String = GSON.toJson(
                 "state" to f.state.name, "reason" to f.reason, "fixCommit" to f.fixCommit, "comment" to f.comment,
             )
         },
-        "questions" to questions.array { q -> obj("id" to q.id, "text" to q.text, "reviewer" to q.reviewer, "resolved" to q.resolved) },
+        "questions" to questions.array { q -> obj("id" to q.id, "text" to q.text, "reviewer" to q.reviewer, "resolved" to q.resolved, "run" to q.run) },
         "next" to obj(next),
     ).also { if (blockers.isNotEmpty()) it.add("blockers", obj(blockers)) },
 )
@@ -236,8 +236,8 @@ fun parseReview(text: String, source: Path): BranchReview {
             }
         },
         questions = root.array("questions").map {
-            Keys(it, "question", source, setOf("id", "text", "reviewer", "resolved")).run {
-                Question(string("id"), string("text"), stringOrNull("reviewer"), boolean("resolved"))
+            Keys(it, "question", source, setOf("id", "text", "reviewer", "resolved", "run")).run {
+                Question(string("id"), string("text"), stringOrNull("reviewer"), boolean("resolved"), stringOrNull("run"))
             }
         },
         next = root.map("next").mapValues { (k, v) ->

@@ -52,6 +52,21 @@ class ReviewChangesTest {
         assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "c", one, "[1]", now) }
     }
 
+    @Test fun `set_state replaces the companion fields, null clearing them`() {
+        val rejected = apply("""[{"op":"set_state","id":"F1","state":"rejected","reason":"intended"}]""")
+        assertEquals("intended", rejected.findings.single().reason)
+        val accepted = ReviewChanges.apply(rejected, """[{"op":"set_state","id":"F1","state":"accepted"}]""")
+        assertNull(accepted.findings.single().reason)
+    }
+
+    @Test fun `a second report of the same run replaces its questions`() {
+        val manual = ReviewChanges.apply(reported, """[{"op":"add_question","text":"mine"}]""")
+        val first = ReviewChanges.report(manual, "W1", "c", one, """["a?","b?"]""", now)
+        val second = ReviewChanges.report(first, "W1", "c", one, """["a?"]""", now)
+        assertEquals(listOf("mine", "a?"), second.questions.map { it.text })
+        assertEquals(listOf(null, "W1"), second.questions.map { it.run })
+    }
+
     @Test fun `a report sets reported on its run and adds its questions`() {
         val r = ReviewChanges.report(base, "W1", "abc1234", one, """["a?","b?"]""", now)
         assertEquals("2026-11-19T10:05:00Z", r.runs.single().reported)
