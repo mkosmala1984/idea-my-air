@@ -3,6 +3,7 @@ package dev.myair.store
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
+import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.JsonPrimitive
@@ -91,13 +92,13 @@ data class BranchReview(
 
 private const val FORMAT = 1
 
-private val GSON = GsonBuilder().setPrettyPrinting().create()
+private val GSON = GsonBuilder().setPrettyPrinting().serializeNulls().create()
 
-/** A JSON object of the non-null [entries]. */
+/** A JSON object of [entries]; a null value is written as JSON null. */
 private fun obj(entries: Map<String, Any?>) = JsonObject().also { o ->
     entries.forEach { (k, v) ->
         when (v) {
-            null -> {}
+            null -> o.add(k, JsonNull.INSTANCE)
             is String -> o.addProperty(k, v)
             is Number -> o.addProperty(k, v)
             is Boolean -> o.addProperty(k, v)
@@ -139,8 +140,7 @@ fun BranchReview.toJson(): String = GSON.toJson(
         },
         "questions" to questions.array { q -> obj("id" to q.id, "text" to q.text, "reviewer" to q.reviewer, "resolved" to q.resolved) },
         "next" to obj(next),
-        "blockers" to blockers.takeIf { it.isNotEmpty() }?.let(::obj),
-    ),
+    ).also { if (blockers.isNotEmpty()) it.add("blockers", obj(blockers)) },
 )
 
 /** A JSON object of [source] read with an explicit key set: unknown and missing required keys throw naming file and key. */
@@ -167,13 +167,13 @@ private class Keys(element: JsonElement, private val what: String, private val s
 
     fun string(key: String): String = primitive(key, "a string") { it.isString }.asString
 
-    fun stringOrNull(key: String): String? = if (has(key)) string(key) else null
+    fun stringOrNull(key: String): String? = if (element(key).isJsonNull) null else string(key)
 
     fun int(key: String): Int = primitive(key, "a number") { it.isNumber }.asInt
 
-    fun intOrNull(key: String): Int? = if (has(key)) int(key) else null
+    fun intOrNull(key: String): Int? = if (element(key).isJsonNull) null else int(key)
 
-    fun boolean(key: String): Boolean = if (has(key)) primitive(key, "a boolean") { it.isBoolean }.asBoolean else false
+    fun boolean(key: String): Boolean = primitive(key, "a boolean") { it.isBoolean }.asBoolean
 
     fun array(key: String): List<JsonElement> = element(key).let {
         check(it.isJsonArray) { "$source: $key of $what is not an array: $it" }
@@ -198,8 +198,8 @@ private class Keys(element: JsonElement, private val what: String, private val s
 fun parseReview(text: String, source: Path): BranchReview {
     val root = Keys(
         JsonParser.parseString(text), "review", source,
-        required = setOf("format", "branch", "base", "dir", "chapters", "runs", "findings", "questions", "next"),
-        optional = setOf("pr", "plan", "manager", "summary", "blockers"),
+        required = setOf("format", "branch", "base", "dir", "pr", "plan", "manager", "summary", "chapters", "runs", "findings", "questions", "next"),
+        optional = setOf("blockers"),
     )
     check(root.int("format") == FORMAT) { "$source: format is ${root.element("format")}, not $FORMAT" }
     return BranchReview(
@@ -208,7 +208,7 @@ fun parseReview(text: String, source: Path): BranchReview {
         dir = Path.of(root.string("dir")),
         pr = root.intOrNull("pr"),
         plan = root.stringOrNull("plan"),
-        manager = if (root.has("manager")) Keys(root.element("manager"), "manager", source, setOf("session", "cwd", "project")).run {
+        manager = if (!root.element("manager").isJsonNull) Keys(root.element("manager"), "manager", source, setOf("session", "cwd", "project")).run {
             PlanManager(string("session"), Path.of(string("cwd")), Path.of(string("project")))
         } else null,
         summary = root.stringOrNull("summary"),
@@ -216,12 +216,12 @@ fun parseReview(text: String, source: Path): BranchReview {
             Keys(it, "chapter", source, setOf("title", "text", "files")).run { Chapter(string("title"), string("text"), strings("files")) }
         },
         runs = root.array("runs").map {
-            Keys(it, "run", source, setOf("id", "reviewer", "range", "started"), setOf("session", "job", "reported")).run {
+            Keys(it, "run", source, setOf("id", "reviewer", "session", "job", "range", "started", "reported")).run {
                 Run(string("id"), string("reviewer"), stringOrNull("session"), stringOrNull("job"), string("range"), string("started"), stringOrNull("reported"))
             }
         },
         findings = root.array("findings").map {
-            Keys(it, "finding", source, setOf("id", "file", "category", "reports", "state"), setOf("reason", "fixCommit", "comment")).run {
+            Keys(it, "finding", source, setOf("id", "file", "category", "reports", "state", "reason", "fixCommit", "comment")).run {
                 val id = string("id")
                 val reports = array("reports").map { r ->
                     Keys(r, "report of finding $id", source, setOf("run", "reviewer", "commit", "line", "severity", "summary", "failure_scenario")).run {
@@ -236,7 +236,7 @@ fun parseReview(text: String, source: Path): BranchReview {
             }
         },
         questions = root.array("questions").map {
-            Keys(it, "question", source, setOf("id", "text"), setOf("reviewer", "resolved")).run {
+            Keys(it, "question", source, setOf("id", "text", "reviewer", "resolved")).run {
                 Question(string("id"), string("text"), stringOrNull("reviewer"), boolean("resolved"))
             }
         },

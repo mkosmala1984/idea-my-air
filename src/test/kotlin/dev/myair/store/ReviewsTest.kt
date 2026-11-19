@@ -37,6 +37,23 @@ class ReviewsTest {
         assertEquals(bare, parseReview(bare.toJson(), src))
     }
 
+    @Test fun `a review with every nullable field null round-trips and writes the keys`() {
+        val r = BranchReview(
+            "b", "main", Path.of("E:/d"), null, null, null, null, emptyList(),
+            listOf(Run("W1", "x", null, null, "r", "2026-11-19T10:00:00Z")),
+            listOf(Finding("F1", "a", "c", listOf(report()))), listOf(Question("Q1", "t", null)), emptyMap(),
+        )
+        val json = r.toJson()
+        assertEquals(r, parseReview(json, src))
+        assertTrue("\"pr\": null" in json && "\"reason\": null" in json && "\"reviewer\": null" in json, json)
+    }
+
+    @Test fun `a missing nullable key throws naming the file and the key`() {
+        val json = JsonParser.parseString(review().toJson()).asJsonObject.also { it.remove("pr") }.toString()
+        val e = assertThrows<IllegalStateException> { parseReview(json, src) }
+        assertTrue(src.toString() in e.message!! && "pr" in e.message!!, e.message)
+    }
+
     @Test fun `an unknown key throws naming the file`() {
         val json = JsonParser.parseString(review().toJson()).asJsonObject.also { it.addProperty("bogus", 1) }.toString()
         val e = assertThrows<IllegalStateException> { parseReview(json, src) }
