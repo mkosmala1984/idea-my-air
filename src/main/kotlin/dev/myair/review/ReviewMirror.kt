@@ -40,6 +40,7 @@ fun mirrorToPlan(review: BranchReview, plan: Plan, liveJobs: Set<String>): Mirro
     val mapping = review.blockers.toMutableMap()
     for (f in review.findings.filter { it.severity == Severity.blocker }) {
         val text = "${f.id} ${f.file}:${f.line} ${f.reports.last().summary}"
+        check('\n' !in text && '\r' !in text) { "blocker text of ${f.id} has a line break" }
         val resolved = f.state !in setOf(FindingState.open, FindingState.accepted)
         val id = mapping[f.id]?.takeIf { it in existing }
         if (id == null) {
@@ -49,6 +50,10 @@ fun mirrorToPlan(review: BranchReview, plan: Plan, liveJobs: Set<String>): Mirro
         } else if (existing.getValue(id).text != text || existing.getValue(id).resolved != resolved) {
             ops.add(op("update", "id" to id, "text" to text, "resolved" to resolved))
         }
+    }
+    val standing = review.findings.filter { it.severity == Severity.blocker }.map { it.id }.toSet()
+    for ((findingId, blockerId) in review.blockers) {
+        if (findingId !in standing && existing[blockerId]?.resolved == false) ops.add(op("update", "id" to blockerId, "resolved" to true))
     }
     return if (ops.isEmpty) null else Mirror(ops.toString(), mapping)
 }

@@ -83,4 +83,17 @@ class ReviewMirrorTest {
         val (plan, mirror) = applied(r)
         assertNull(mirrorToPlan(r.copy(blockers = mirror.blockers), plan, emptySet()))
     }
+
+    @Test fun `a blocker finding downgraded or dropped by a re-report resolves its plan blocker and keeps its mapping`() {
+        val (plan, mirror) = applied(review(listOf(finding("F1"), finding("F2"))))
+        val downgraded = review(listOf(finding("F1", severity = Severity.minor), finding("F2")), blockers = mirror.blockers)
+        val (afterDowngrade, m1) = applied(downgraded, plan)
+        assertEquals(listOf(true, false), afterDowngrade.review!!.blockers.map { it.resolved })
+        assertEquals(mirror.blockers, m1.blockers)
+        val dropped = review(listOf(finding("F1")), blockers = mirror.blockers)
+        val (afterDrop, m2) = applied(dropped, plan)
+        assertEquals(listOf(false, true), afterDrop.review!!.blockers.map { it.resolved })
+        assertEquals(mirror.blockers, m2.blockers)
+        assertNull(mirrorToPlan(dropped, afterDrop, emptySet()))
+    }
 }

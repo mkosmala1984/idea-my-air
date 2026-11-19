@@ -52,6 +52,13 @@ class ReviewChangesTest {
         assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "c", one, "[1]", now) }
     }
 
+    @Test fun `a report finding with a line break in its summary, file or category records nothing`() {
+        listOf("summary", "file", "category").forEach { key ->
+            val bad = one.replace("\"$key\":\"", "\"$key\":\"a\nb")
+            assertTrue(assertThrows<IllegalArgumentException> { ReviewChanges.report(base, "W1", "c", bad, "[]", now) }.message!!.startsWith("finding 1 "), key)
+        }
+    }
+
     @Test fun `set_state replaces the companion fields, null clearing them`() {
         val rejected = apply("""[{"op":"set_state","id":"F1","state":"rejected","reason":"intended"}]""")
         assertEquals("intended", rejected.findings.single().reason)

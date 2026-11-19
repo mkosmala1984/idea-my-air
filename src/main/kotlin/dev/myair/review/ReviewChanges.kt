@@ -119,7 +119,9 @@ object ReviewChanges {
         val r = review.run(run)
         val incoming = each(array(findings, "findings"), "finding") {
             Keys(it, "finding", SOURCE, FINDING_KEYS).run {
-                IncomingFinding(string("file"), int("line"), string("category"), enum("severity", Severity.entries.toTypedArray()), string("summary"), string("failure_scenario"))
+                IncomingFinding(string("file"), int("line"), string("category"), enum("severity", Severity.entries.toTypedArray()), string("summary"), string("failure_scenario")).also { f ->
+                    require(listOf(f.file, f.category, f.summary).none { s -> '\n' in s || '\r' in s }) { "file, category and summary must be one line" }
+                }
             }
         }
         val asked = each(array(questions, "questions"), "question") { q ->
