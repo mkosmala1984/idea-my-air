@@ -1,22 +1,27 @@
 package dev.myair.review
 
+import dev.myair.claude.SessionStatus
 import dev.myair.store.BranchReview
 import dev.myair.store.Finding
 import dev.myair.store.FindingState
 import dev.myair.store.Run
 import dev.myair.store.Severity
 
-enum class RunStatus { running, reported, failed }
+/** [text]: how the panel names it. */
+enum class RunStatus(val text: String) { running("running"), waiting("needs input"), stopped("stopped without report"), reported("reported"), failed("failed") }
 
 /**
- * A run is starting until its session is learned from the registry: `claude --bg` ignores `--session-id`, so a run is
- * recorded before its job exists, and the registry skips a starting `claude`'s entry. It fails only once its session was
- * seen and its job is no longer live without a report.
+ * A reported run is reported, whatever its job does: reviewers stay attachable for follow-up questions. Otherwise its
+ * job's live entry in [liveJobs] (job id to status) tells: working is running, needing input waiting, idle stopped
+ * without a report. Without an entry a run is starting until its session is learned from the registry (`claude --bg`
+ * ignores `--session-id`, so a run is recorded before its job exists, and the registry skips a starting `claude`'s
+ * entry), and failed once its session was seen.
  */
-fun runStatus(run: Run, liveJobs: Set<String>): RunStatus = when {
-    run.reported != null -> RunStatus.reported
-    run.session == null || run.job in liveJobs -> RunStatus.running
-    else -> RunStatus.failed
+fun runStatus(run: Run, liveJobs: Map<String, SessionStatus>): RunStatus = if (run.reported != null) RunStatus.reported else when (liveJobs[run.job]) {
+    SessionStatus.WORKING -> RunStatus.running
+    SessionStatus.NEEDS_INPUT -> RunStatus.waiting
+    SessionStatus.IDLE -> RunStatus.stopped
+    null -> if (run.session == null) RunStatus.running else RunStatus.failed
 }
 
 private const val NEAR = 3

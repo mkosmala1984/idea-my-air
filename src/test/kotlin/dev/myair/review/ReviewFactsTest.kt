@@ -1,5 +1,6 @@
 package dev.myair.review
 
+import dev.myair.claude.SessionStatus
 import dev.myair.store.BranchReview
 import dev.myair.store.Finding
 import dev.myair.store.FindingState
@@ -21,13 +22,22 @@ class ReviewFactsTest {
     private fun review(runs: List<Run>, findings: List<Finding>) =
         BranchReview("b", "main", Path.of("E:/d"), null, null, null, null, emptyList(), runs, findings, emptyList(), emptyMap())
 
-    @Test fun `a run is running while its job is live and unreported`() {
-        assertEquals(RunStatus.running, runStatus(run("W1"), setOf("j")))
-        assertEquals(RunStatus.running, runStatus(run("W1", job = null), emptySet()))
-        assertEquals(RunStatus.reported, runStatus(run("W1", reported = "2026-11-19T11:00:00Z"), emptySet()))
-        assertEquals(RunStatus.running, runStatus(run("W1"), emptySet()), "a job the registry has not listed yet is starting")
-        assertEquals(RunStatus.running, runStatus(run("W1", session = "s"), setOf("j")))
-        assertEquals(RunStatus.failed, runStatus(run("W1", session = "s"), emptySet()))
+    @Test fun `a run is running while its job works and is unreported`() {
+        val working = mapOf("j" to SessionStatus.WORKING)
+        assertEquals(RunStatus.running, runStatus(run("W1"), working))
+        assertEquals(RunStatus.running, runStatus(run("W1", job = null), emptyMap()))
+        assertEquals(RunStatus.reported, runStatus(run("W1", reported = "2026-11-19T11:00:00Z"), emptyMap()))
+        assertEquals(RunStatus.running, runStatus(run("W1"), emptyMap()), "a job the registry has not listed yet is starting")
+        assertEquals(RunStatus.running, runStatus(run("W1", session = "s"), working))
+        assertEquals(RunStatus.failed, runStatus(run("W1", session = "s"), emptyMap()))
+    }
+
+    @Test fun `an unreported run whose job needs input is waiting, one whose job is idle stopped, a reported one stays reported`() {
+        assertEquals(RunStatus.waiting, runStatus(run("W1", session = "s"), mapOf("j" to SessionStatus.NEEDS_INPUT)))
+        assertEquals(RunStatus.stopped, runStatus(run("W1", session = "s"), mapOf("j" to SessionStatus.IDLE)))
+        assertEquals(RunStatus.reported, runStatus(run("W1", session = "s", reported = "2026-11-19T11:00:00Z"), mapOf("j" to SessionStatus.IDLE)))
+        assertEquals("needs input", RunStatus.waiting.text)
+        assertEquals("stopped without report", RunStatus.stopped.text)
     }
 
     @Test fun `a finding is maybe fixed when a changed range comes within three lines`() {

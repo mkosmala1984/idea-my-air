@@ -2,6 +2,7 @@ package dev.myair.review
 
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
+import dev.myair.claude.SessionStatus
 import dev.myair.store.BranchReview
 import dev.myair.store.toJson
 
@@ -11,7 +12,7 @@ private val GSON = GsonBuilder().setPrettyPrinting().serializeNulls().create()
  * What `my_air_review_get` returns: the review as `review.json` holds it, without `format`, `next` and `blockers`, plus
  * [path], each finding's `line`, `severity` and derived `maybe_fixed`, each run's derived `status`, and the git facts.
  */
-fun reviewJson(path: String, review: BranchReview, git: ReviewGit?, liveJobs: Set<String>): String {
+fun reviewJson(path: String, review: BranchReview, git: ReviewGit?, liveJobs: Map<String, SessionStatus>): String {
     val json = JsonParser.parseString(review.toJson()).asJsonObject
     listOf("format", "next", "blockers").forEach { json.remove(it) }
     json.addProperty("folder", path)

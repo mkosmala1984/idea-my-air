@@ -33,7 +33,7 @@ class ReviewViewTest {
         BranchReview("b", "main", Path.of("E:/d"), pr, null, null, null, chapters, runs, findings, emptyList(), emptyMap())
 
     private fun view(review: BranchReview, git: ReviewGit? = null, filter: FindingFilter = FindingFilter.all) =
-        reviewViewOf(review, git, emptySet(), emptyMap(), filter, emptyMap())
+        reviewViewOf(review, git, emptyMap(), emptyMap(), filter, emptyMap())
 
     @Test fun `files no chapter names go to not explained`() {
         val v = view(review(listOf(Chapter("Model", "text", listOf("a.kt")))), git(listOf(change("a.kt"), change("b.kt"))))

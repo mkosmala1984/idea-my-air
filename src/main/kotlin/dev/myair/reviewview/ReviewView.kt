@@ -4,6 +4,7 @@ import dev.myair.actions.FileChange
 import dev.myair.claude.ClaudeSession
 import dev.myair.review.Precision
 import dev.myair.review.ReviewGit
+import dev.myair.claude.SessionStatus
 import dev.myair.review.RunStatus
 import dev.myair.review.maybeFixed
 import dev.myair.review.reviewedCommit
@@ -68,7 +69,7 @@ private fun agreement(review: BranchReview): (Finding) -> Pair<Int, Int> {
 
 /** What the review panel shows of [review], its findings narrowed by [filter], [git] null before its git facts are read. */
 fun reviewViewOf(
-    review: BranchReview, git: ReviewGit?, liveJobs: Set<String>, precision: Map<String, Precision>, filter: FindingFilter, sessions: Map<String, ClaudeSession>,
+    review: BranchReview, git: ReviewGit?, liveJobs: Map<String, SessionStatus>, precision: Map<String, Precision>, filter: FindingFilter, sessions: Map<String, ClaudeSession>,
 ): ReviewView {
     val reviewed = reviewedCommit(review)
     val header = Header(

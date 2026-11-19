@@ -1,6 +1,7 @@
 package dev.myair.review
 
 import dev.myair.folders.Blocker
+import dev.myair.claude.SessionStatus
 import dev.myair.folders.Plan
 import dev.myair.folders.PlanChanges
 import dev.myair.folders.ReviewStatus
@@ -32,7 +33,7 @@ class ReviewMirrorTest {
 
     /** Applies the mirror to [plan] and returns the resulting plan. */
     private fun applied(review: BranchReview, plan: Plan = Plan()): Pair<Plan, Mirror> {
-        val mirror = assertNotNull(mirrorToPlan(review, plan, emptySet()))
+        val mirror = assertNotNull(mirrorToPlan(review, plan, emptyMap()))
         return PlanChanges.apply(structure(plan), "p", mirror.changes, today).find("p")!!.plan!! to mirror
     }
 
@@ -78,10 +79,21 @@ class ReviewMirrorTest {
         assertNull(status(listOf(starting.copy(job = "dead"))).commit)
     }
 
+    @Test fun `a run that needs input or stopped without a report does not keep the review in progress`() {
+        fun status(job: SessionStatus, runs: List<Run>) = PlanChanges.apply(structure(), "p", assertNotNull(mirrorToPlan(review(emptyList(), runs), Plan(), mapOf("j2" to job))).changes, today)
+            .find("p")!!.plan!!.review!!.status
+        val run = Run("W2", "a", "s", "j2", "main..HEAD", "2026-11-19T11:00:00Z")
+        assertEquals(ReviewStatus.IN_PROGRESS, status(SessionStatus.WORKING, listOf(reported, run)))
+        assertEquals(ReviewStatus.DONE, status(SessionStatus.NEEDS_INPUT, listOf(reported, run)))
+        assertEquals(ReviewStatus.DONE, status(SessionStatus.IDLE, listOf(reported, run)))
+        assertEquals(ReviewStatus.NOT_DONE, status(SessionStatus.NEEDS_INPUT, listOf(run)))
+        assertEquals(ReviewStatus.NOT_DONE, status(SessionStatus.IDLE, listOf(run)))
+    }
+
     @Test fun `nothing to change gives no mirror`() {
         val r = review(listOf(finding("F1")))
         val (plan, mirror) = applied(r)
-        assertNull(mirrorToPlan(r.copy(blockers = mirror.blockers), plan, emptySet()))
+        assertNull(mirrorToPlan(r.copy(blockers = mirror.blockers), plan, emptyMap()))
     }
 
     @Test fun `a blocker finding downgraded or dropped by a re-report resolves its plan blocker and keeps its mapping`() {
@@ -94,6 +106,6 @@ class ReviewMirrorTest {
         val (afterDrop, m2) = applied(dropped, plan)
         assertEquals(listOf(false, true), afterDrop.review!!.blockers.map { it.resolved })
         assertEquals(mirror.blockers, m2.blockers)
-        assertNull(mirrorToPlan(dropped, afterDrop, emptySet()))
+        assertNull(mirrorToPlan(dropped, afterDrop, emptyMap()))
     }
 }

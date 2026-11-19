@@ -13,6 +13,7 @@ import dev.myair.actions.Git
 import dev.myair.actions.GitState
 import dev.myair.claude.ClaudeHomeWatcher
 import dev.myair.claude.LiveSession
+import dev.myair.claude.SessionStatus
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.Plan
 import dev.myair.folders.PlanChanges
@@ -97,7 +98,7 @@ fun refuseReviewPlacement(before: SessionFolders, after: SessionFolders, reviews
 fun linkedPlan(review: BranchReview, structure: SessionFolders): Plan? = review.plan?.let(structure::find)?.plan
 
 /** The plan changes [review] still needs in [structure]; null without a linked plan or when it already follows. */
-fun mirrorDue(review: BranchReview, structure: SessionFolders, liveJobs: Set<String>): Mirror? =
+fun mirrorDue(review: BranchReview, structure: SessionFolders, liveJobs: Map<String, SessionStatus>): Mirror? =
     linkedPlan(review, structure)?.let { mirrorToPlan(review, it, liveJobs) }
 
 /**
@@ -155,8 +156,8 @@ class ReviewService : Disposable {
     /** The folder ids of every `review.json` on disk, readable or not: what [refuseReviewPlacement] knows as review folders. */
     val onDiskIds: Set<String> get() = all.keys
 
-    /** The jobs of the registry's live entries, which [runStatus] and the mirror read. */
-    val liveJobs: Set<String> get() = jobSessions(sessions.live).keys
+    /** The job of each registry entry that runs one, to its status: what [runStatus] and the mirror read. */
+    val liveJobs: Map<String, SessionStatus> get() = sessions.live.values.mapNotNull { live -> live.job?.let { it to live.status } }.toMap()
 
     /** By folder id, of the watched reviews read without failure; [stamps] says what each was read at, kept in step. */
     var facts: Map<String, ReviewGit> = emptyMap()

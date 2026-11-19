@@ -3,6 +3,7 @@ package dev.myair.review
 import com.google.gson.JsonArray
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
+import dev.myair.claude.SessionStatus
 import dev.myair.folders.Plan
 import dev.myair.folders.ReviewStatus
 import dev.myair.store.BranchReview
@@ -24,8 +25,11 @@ private fun op(name: String, vararg fields: Pair<String, Any?>) = JsonObject().a
     }
 }
 
-/** The changes that make [plan]'s review and blockers follow [review], null when the plan already does. */
-fun mirrorToPlan(review: BranchReview, plan: Plan, liveJobs: Set<String>): Mirror? {
+/**
+ * The changes that make [plan]'s review and blockers follow [review], null when the plan already does; a run waiting for
+ * input or stopped without a report does not keep it in progress.
+ */
+fun mirrorToPlan(review: BranchReview, plan: Plan, liveJobs: Map<String, SessionStatus>): Mirror? {
     val runs = review.runs.map { runStatus(it, liveJobs) }
     val status = when {
         RunStatus.running in runs -> ReviewStatus.IN_PROGRESS

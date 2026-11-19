@@ -1,6 +1,7 @@
 package dev.myair.review
 
 import com.google.gson.JsonParser
+import dev.myair.claude.SessionStatus
 import dev.myair.store.BranchReview
 import dev.myair.store.Finding
 import dev.myair.store.Report
@@ -29,7 +30,7 @@ class ReviewJsonTest {
     private val git = ReviewGit(null, "c2", 1, mapOf("c1" to mapOf("a.kt" to listOf(12..12)), "gone" to null), null, null)
 
     @Test fun `review json carries maybe fixed and run status`() {
-        val json = JsonParser.parseString(reviewJson("rtm/Review: b", review, git, setOf("j2"))).asJsonObject
+        val json = JsonParser.parseString(reviewJson("rtm/Review: b", review, git, mapOf("j2" to SessionStatus.WORKING, "j3" to SessionStatus.NEEDS_INPUT, "j4" to SessionStatus.IDLE))).asJsonObject
         assertEquals("rtm/Review: b", json["folder"].asString)
         val findings = json["findings"].asJsonArray.associate { it.asJsonObject["id"].asString to it.asJsonObject }
         assertTrue(findings.getValue("F1")["maybe_fixed"].asBoolean)
@@ -38,7 +39,7 @@ class ReviewJsonTest {
         assertEquals("blocker", findings.getValue("F1")["severity"].asString)
         assertEquals(10, findings.getValue("F1")["line"].asInt)
         val runs = json["runs"].asJsonArray.associate { it.asJsonObject["id"].asString to it.asJsonObject["status"].asString }
-        assertEquals(mapOf("W1" to "reported", "W2" to "running", "W3" to "failed", "W4" to "running"), runs)
+        assertEquals(mapOf("W1" to "reported", "W2" to "running", "W3" to "waiting", "W4" to "stopped"), runs)
         assertEquals("c1", json["reviewed"].asString)
         assertEquals("c2", json["head"].asString)
         assertEquals(1, json["since_reviewed"].asInt)
@@ -47,7 +48,7 @@ class ReviewJsonTest {
     }
 
     @Test fun `without git facts nothing is maybe fixed and the git keys are null`() {
-        val json = JsonParser.parseString(reviewJson("r", review, null, emptySet())).asJsonObject
+        val json = JsonParser.parseString(reviewJson("r", review, null, emptyMap())).asJsonObject
         assertTrue(json["findings"].asJsonArray.none { it.asJsonObject["maybe_fixed"].asBoolean })
         listOf("head", "since_reviewed", "git_error").forEach { assertTrue(json[it].isJsonNull, it) }
     }

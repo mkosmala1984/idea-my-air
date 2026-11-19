@@ -30,7 +30,8 @@ class ReviewMcpToolset : McpToolset {
             "review, or null), manager (the session managing the review: session, cwd, project; or null), summary (Markdown or null), " +
             "chapters (the explanation of the changes: title, text in Markdown, files), runs (reviewer runs: id W<n>, reviewer, session, " +
             "job, range (the git range it reviews), started, reported (when it reported, or null), commit (the commit it reported on, " +
-            "or null), status: running, reported or failed (its job ended without a report)), findings (id F<n>, file, category, " +
+            "or null), status: running, waiting (its job needs input), stopped (its job is idle without a report), reported or failed " +
+            "(its job ended without a report)), findings (id F<n>, file, category, " +
             "line (of its newest report), severity (the highest of its reports: blocker, major, minor or nit), reports (run, reviewer, " +
             "commit, line, severity, summary, failure_scenario), state (open, accepted, rejected, fixed or posted), reason (why rejected), " +
             "fixCommit (the commit that fixed it), comment (the pull request comment id it was posted as), maybe_fixed (true when the " +

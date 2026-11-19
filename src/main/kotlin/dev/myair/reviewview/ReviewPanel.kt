@@ -310,7 +310,7 @@ class ReviewPanel(
                 card {
                     row { comment("Run at " + TIME.format(Instant.parse(started))) }
                     for (r in runs) row {
-                        label(r.status.name).applyToComponent { if (r.status == RunStatus.failed) foreground = UIUtil.getErrorForeground() }
+                        label(r.status.text).applyToComponent { if (r.status == RunStatus.failed || r.status == RunStatus.stopped) foreground = UIUtil.getErrorForeground() }
                         val session = r.session
                         if (session != null) link(r.run.reviewer) { ClaudeSessionOpener.open(project, session) } else label(r.run.reviewer)
                         comment(listOfNotNull(
@@ -324,8 +324,8 @@ class ReviewPanel(
     /** How long a reported run took; how long ago a running one started; nothing for a failed one. */
     private fun runTime(run: Run, status: RunStatus, now: Instant): String? = when (status) {
         RunStatus.reported -> durationText(Duration.between(Instant.parse(run.started), Instant.parse(checkNotNull(run.reported))))
-        RunStatus.running -> "started " + shortAge(Instant.parse(run.started), now)
-        RunStatus.failed -> null
+        RunStatus.running, RunStatus.waiting -> "started " + shortAge(Instant.parse(run.started), now)
+        RunStatus.stopped, RunStatus.failed -> null
     }
 
     private fun findings(review: BranchReview, view: ReviewView): List<JComponent> {
