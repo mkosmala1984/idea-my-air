@@ -27,8 +27,8 @@ class ReviewPromptsTest {
 
     @Test
     fun `the reviewer prompt names folder, run, range and the report tool on one line`() {
-        val p = reviewerPrompt("Work/Rev", "W3", review(), "abc..def")
-        listOf("Work/Rev", "W3", "feat", "main", "abc..def", "my_air_review_report").forEach { assertTrue(it in p, it) }
+        val p = reviewerPrompt("4f1c-id", "W3", review(), "abc..def")
+        listOf("folder '4f1c-id'", "W3", "feat", "main", "abc..def", "commit 'def'", "my_air_review_report").forEach { assertTrue(it in p, it) }
         assertFalse('\n' in p)
     }
 

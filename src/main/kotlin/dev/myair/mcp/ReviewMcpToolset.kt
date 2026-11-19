@@ -6,11 +6,12 @@ import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.openapi.application.EDT
 import dev.myair.review.ReviewChanges
+import dev.myair.review.ReviewGit
 import dev.myair.review.ReviewService
 import dev.myair.review.readGit
 import dev.myair.review.reviewJson
-import dev.myair.store.BranchReview
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.store.BranchReview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -26,8 +27,8 @@ class ReviewMcpToolset : McpToolset {
     @McpTool
     @McpDescription(
         "The review of a My Air review folder as JSON: folder (its path), branch, base, dir (the work tree under review), " +
-            "pr (the pull request number or null), plan (the folder id of the linked plan, whose review and blockers follow this " +
-            "review, or null), manager (the session managing the review: session, cwd, project; or null), summary (Markdown or null), " +
+            "pr (the pull request number or null), plan (the path of the linked plan's folder, which my_air_plan_apply takes and " +
+            "whose review and blockers follow this review, or null), manager (the session managing the review: session, cwd, project; or null), summary (Markdown or null), " +
             "chapters (the explanation of the changes: title, text in Markdown, files), runs (reviewer runs: id W<n>, reviewer, session, " +
             "job, range (the git range it reviews), started, reported (when it reported, or null), commit (the commit it reported on, " +
             "or null), status: running, waiting (its job needs input), stopped (its job is idle without a report), reported or failed " +
@@ -40,7 +41,9 @@ class ReviewMcpToolset : McpToolset {
             "head (HEAD of dir), since_reviewed (commits HEAD is past reviewed, null when unknown) and git_error (why git could not be " +
             "read, else null; head, since_reviewed and maybe_fixed are then empty).",
     )
-    suspend fun my_air_review_get(@McpDescription("The review folder's path, names joined by /, such as rtm/Review: feature-x.") folder: String): String =
+    suspend fun my_air_review_get(
+        @McpDescription("The review folder's id, or its path, names joined by /, such as rtm/Review: feature-x; an id is looked up first.") folder: String,
+    ): String =
         reviewJsonOf(folder) { service, id -> service.review(id) }
 
     @McpTool
@@ -59,7 +62,7 @@ class ReviewMcpToolset : McpToolset {
             "{\"op\":\"resolve_question\",\"id\":\"Q2\"}. An unknown op or field fails naming the change. Returns the review as my_air_review_get does.",
     )
     suspend fun my_air_review_apply(
-        @McpDescription("The review folder's path, as for my_air_review_get.") folder: String,
+        @McpDescription("The review folder's id or path, as for my_air_review_get.") folder: String,
         @McpDescription("The JSON array of changes.") changes: String,
     ): String = reviewJsonOf(folder) { service, id -> service.update(id) { ReviewChanges.apply(it, changes) } }
 
@@ -71,9 +74,9 @@ class ReviewMcpToolset : McpToolset {
             "and category at most 3 lines away that no other finding of this report joined, else becomes a new one. Returns how many findings and questions were recorded.",
     )
     suspend fun my_air_review_report(
-        @McpDescription("The review folder's path, as the reviewer's prompt names it.") folder: String,
+        @McpDescription("The review folder's id, as the reviewer's prompt names it (a path is taken too).") folder: String,
         @McpDescription("The run id the reviewer's prompt names, such as W3.") run: String,
-        @McpDescription("The commit reviewed (git rev-parse HEAD), 7 to 40 lowercase hex characters.") commit: String,
+        @McpDescription("The commit reviewed: the end of the run's range, as the reviewer's prompt names it; any other is refused.") commit: String,
         @McpDescription(
             "JSON array of findings, [] when there are none, each {\"file\": repository-relative path, \"line\": line number in " +
                 "the reviewed commit, \"category\": a short kind such as bug, security or performance, \"severity\": blocker, major, " +
@@ -89,23 +92,29 @@ class ReviewMcpToolset : McpToolset {
         "ok, run $run recorded: $reported findings, ${review.questions.count { it.run == run }} questions"
     }
 
-    /** [reviewJson] of the review [block] returns for the folder at [path], its git read now, off the EDT. */
-    private suspend fun reviewJsonOf(path: String, block: (ReviewService, String) -> BranchReview): String {
-        val (review, jobs) = withReview(path) { service, id -> block(service, id) to service.liveJobs }
-        return reviewJson(path, review, withContext(Dispatchers.IO) { readGit(review) }, jobs)
+    /** [reviewJson] of the review [block] returns for the folder [folder] names, its git read now, off the EDT. */
+    private suspend fun reviewJsonOf(folder: String, block: (ReviewService, String) -> BranchReview): String {
+        val (json, review) = withReview(folder) { service, id ->
+            val review = block(service, id)
+            val structure = ClaudeSessionsService.getInstance().folders
+            val jobs = service.liveJobs
+            { git: ReviewGit -> reviewJson(structure, id, review, git, jobs) } to review
+        }
+        return json(withContext(Dispatchers.IO) { readGit(review) })
     }
 
     /**
-     * Runs [block] on the EDT with the review folder at [path]; a folder that is no review, an unreadable review or an
-     * input error reaches the agent with its message.
+     * Runs [block] on the EDT with the review folder [folder] names, a folder id or else a path; a folder that is no
+     * review, an unreadable review or an input error reaches the agent with its message.
      */
-    private suspend fun <T> withReview(path: String, block: (ReviewService, String) -> T): T = withContext(Dispatchers.EDT) {
+    private suspend fun <T> withReview(folder: String, block: (ReviewService, String) -> T): T = withContext(Dispatchers.EDT) {
         val sessions = ClaudeSessionsService.getInstance()
         sessions.foldersError?.let { throw McpExpectedError("Cannot read ${sessions.structureFile}: $it") }
         try {
             val service = ReviewService.getInstance()
-            val id = sessions.folders.findByPath(path)?.id?.takeIf { it in service.reviews } ?: throw IllegalArgumentException("no review folder at '$path'")
-            service.reviews.getValue(id).onFailure { throw IllegalArgumentException("the review at '$path' cannot be read: ${it.message}", it) }
+            val id = (sessions.folders.find(folder) ?: sessions.folders.findByPath(folder))?.id?.takeIf { it in service.reviews }
+                ?: throw IllegalArgumentException("no review folder '$folder'")
+            service.reviews.getValue(id).onFailure { throw IllegalArgumentException("the review '$folder' cannot be read: ${it.message}", it) }
             block(service, id)
         } catch (e: IllegalArgumentException) {
             throw McpExpectedError(e.message ?: e.toString())

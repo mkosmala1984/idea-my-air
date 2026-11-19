@@ -47,6 +47,7 @@ import dev.myair.prompt.choose
 import dev.myair.review.ReviewService
 import dev.myair.review.Reviewers
 import dev.myair.review.RunStatus
+import dev.myair.review.acceptIfOpen
 import dev.myair.review.addRun
 import dev.myair.review.blockerCount
 import dev.myair.review.precision
@@ -276,12 +277,11 @@ class ReviewPanel(
         val review = reviews.review(folderId)
         val range = rangeFor(review, checkNotNull(git.state?.mergeBase), checkNotNull(git.head), newOnly)
         val started = Instant.now().toString()
-        val folderPath = service.folders.pathOf(folderId)
         startErrors = emptyMap()
         for (reviewer in profile.reviewers) {
             lateinit var runId: String
             reviews.update(folderId) { r -> r.nextId("W").let { (id, next) -> runId = id; next.addRun(Run(id, reviewer.name, null, null, range, started)) } }
-            val args = reviewerArgs(reviewer, reviewerPrompt(folderPath, runId, review, range))
+            val args = reviewerArgs(reviewer, reviewerPrompt(folderId, runId, review, range))
             ApplicationManager.getApplication().executeOnPooledThread {
                 val job = try {
                     Result.success(Reviewers.start(review.dir, args))
@@ -375,7 +375,7 @@ class ReviewPanel(
         action("Fix with Claude") {
             val dir = reviews.review(folderId).dir
             ClaudeSessionOpener.startNew(project, Git.mainCheckout(dir), dir, args = listOf("--", findingMessage(f)), folderId = folderId)
-            stateTo(f, FindingState.accepted)
+            reviews.update(folderId) { it.acceptIfOpen(f.id) }
         },
         action("Post to PR", { pr() != null && managerRuns() }) {
             send("Post finding ${f.id} of the review (my_air_review_get) as a comment on PR #${checkNotNull(pr())} at ${f.file} line ${f.line}, then set it posted with the comment id (my_air_review_apply).")

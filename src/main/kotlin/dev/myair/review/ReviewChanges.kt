@@ -23,6 +23,9 @@ fun BranchReview.setState(id: String, state: FindingState, reason: String? = nul
     return copy(findings = findings.map { if (it === f) f.copy(state = state, reason = reason, fixCommit = commit, comment = comment) else it })
 }
 
+/** What Fix with Claude does to [id]: accepts it when open, else leaves it, keeping a posted comment or a fix commit. */
+fun BranchReview.acceptIfOpen(id: String) = if (finding(id).state == FindingState.open) setState(id, FindingState.accepted) else this
+
 fun BranchReview.setSummary(text: String?) = copy(summary = text)
 
 fun BranchReview.setChapters(chapters: List<Chapter>) = copy(chapters = chapters)

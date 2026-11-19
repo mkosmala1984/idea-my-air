@@ -3,11 +3,11 @@ package dev.myair.review
 import dev.myair.store.BranchReview
 import dev.myair.store.Reviewer
 
-/** The reviewer's system prompt, one line: a Windows command line passes it whole. */
-fun reviewerPrompt(folderPath: String, run: String, review: BranchReview, range: String) =
-    "You are a code reviewer in My Air review folder '$folderPath', run $run, of branch ${review.branch} against ${review.base}. " +
+/** The reviewer's system prompt, one line: a Windows command line passes it whole. It names the folder by id, which a rename keeps. */
+fun reviewerPrompt(folderId: String, run: String, review: BranchReview, range: String) =
+    "You are a code reviewer in My Air review folder $folderId, run $run, of branch ${review.branch} against ${review.base}. " +
         "Review only the changes in the git range $range (git diff $range) and read the surrounding code as needed. " +
-        "At the end call my_air_review_report exactly once with folder '$folderPath', run '$run', commit '${range.substringAfter("..")}' (the end of the range), " +
+        "At the end call my_air_review_report exactly once with folder '$folderId', run '$run', commit '${range.substringAfter("..")}' (the end of the range), " +
         "your findings and your questions; report no findings as an empty list. Do not change any file."
 
 /** The review manager's system prompt, one line. */

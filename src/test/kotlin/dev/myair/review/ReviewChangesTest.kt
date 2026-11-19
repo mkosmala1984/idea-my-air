@@ -64,6 +64,14 @@ class ReviewChangesTest {
         }
     }
 
+    @Test fun `fix with claude accepts an open finding and leaves any other state with its field`() {
+        assertEquals(FindingState.accepted, reported.acceptIfOpen("F1").findings.single().state)
+        val posted = reported.setState("F1", FindingState.posted, comment = "c9")
+        assertEquals(posted, posted.acceptIfOpen("F1"))
+        val fixed = reported.setState("F1", FindingState.fixed, commit = "abc1234")
+        assertEquals(fixed, fixed.acceptIfOpen("F1"))
+    }
+
     @Test fun `set_state replaces the companion fields, null clearing them`() {
         val rejected = apply("""[{"op":"set_state","id":"F1","state":"rejected","reason":"intended"}]""")
         assertEquals("intended", rejected.findings.single().reason)

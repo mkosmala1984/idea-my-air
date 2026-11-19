@@ -430,6 +430,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             renderPinned()
             updateTree()
         }
+        // A review folder's row paints its blocker count, which a triage in the review tab changes alone.
+        ReviewService.getInstance().subscribe(toolWindow.disposable) { tree.repaint() }
         renderPinned()
         render()
         ActiveSession.getInstance(project).subscribe(toolWindow.disposable, ::activeChanged)

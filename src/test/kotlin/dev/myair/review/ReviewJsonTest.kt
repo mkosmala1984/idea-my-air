@@ -2,6 +2,8 @@ package dev.myair.review
 
 import com.google.gson.JsonParser
 import dev.myair.claude.SessionStatus
+import dev.myair.folders.Plan
+import dev.myair.folders.SessionFolders
 import dev.myair.store.BranchReview
 import dev.myair.store.Finding
 import dev.myair.store.Report
@@ -27,10 +29,12 @@ class ReviewJsonTest {
         emptyList(), mapOf("F" to 4, "W" to 5), mapOf("F1" to "B1"),
     )
 
+    private val structure = SessionFolders().createFolder(null, "rtm", "rtm").createFolder("rtm", "r", "Review: b").createFolder("rtm", "p", "Feature", plan = Plan())
+
     private val git = ReviewGit(null, "c2", 1, mapOf("c1" to mapOf("a.kt" to listOf(12..12)), "gone" to null), null, null)
 
     @Test fun `review json carries maybe fixed and run status`() {
-        val json = JsonParser.parseString(reviewJson("rtm/Review: b", review, git, mapOf("j2" to SessionStatus.WORKING, "j3" to SessionStatus.NEEDS_INPUT, "j4" to SessionStatus.IDLE))).asJsonObject
+        val json = JsonParser.parseString(reviewJson(structure, "r", review, git, mapOf("j2" to SessionStatus.WORKING, "j3" to SessionStatus.NEEDS_INPUT, "j4" to SessionStatus.IDLE))).asJsonObject
         assertEquals("rtm/Review: b", json["folder"].asString)
         val findings = json["findings"].asJsonArray.associate { it.asJsonObject["id"].asString to it.asJsonObject }
         assertTrue(findings.getValue("F1")["maybe_fixed"].asBoolean)
@@ -48,8 +52,16 @@ class ReviewJsonTest {
     }
 
     @Test fun `without git facts nothing is maybe fixed and the git keys are null`() {
-        val json = JsonParser.parseString(reviewJson("r", review, null, emptyMap())).asJsonObject
+        val json = JsonParser.parseString(reviewJson(structure, "r", review, null, emptyMap())).asJsonObject
         assertTrue(json["findings"].asJsonArray.none { it.asJsonObject["maybe_fixed"].asBoolean })
         listOf("head", "since_reviewed", "git_error").forEach { assertTrue(json[it].isJsonNull, it) }
+    }
+
+    @Test fun `the linked plan is given as its folder's path, null once that folder holds no plan or is gone`() {
+        fun plan(review: BranchReview, s: SessionFolders = structure) = JsonParser.parseString(reviewJson(s, "r", review, null, emptyMap())).asJsonObject["plan"]
+        assertEquals("rtm/Feature", plan(review.copy(plan = "p")).asString)
+        assertTrue(plan(review.copy(plan = "p"), structure.removePlan("p")).isJsonNull)
+        assertTrue(plan(review.copy(plan = "gone")).isJsonNull)
+        assertTrue(plan(review).isJsonNull)
     }
 }
