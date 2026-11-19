@@ -41,6 +41,7 @@
 - Files under `~/.my-air` written with `writeAtomically`.
 - Classes registered in `plugin.xml` / `my-air-mcp.xml` must be updated on a move.
 - Run `./gradlew test buildPlugin` green before every commit of a code task.
+- The My Air plan `my-air/plans/Węzeł Review brancha-PR – propozycja` holds the requirements; keep its task status current.
 - Every commit's trailer block ends with `Plan-Task: <n>/11` and `Plan: docs/superpowers/plans/2026-11-19-review-folder.md`.
 
 ## Review Focus
@@ -381,40 +382,4 @@ Panel behaviour, card by card (each folds; edits only from menus; rebuild only t
 
 ## Requirements evidence
 
-| R | Task | Evidence |
-|---|---|---|
-| R1 | 2, 7, 8 | |
-| R2 | 2 | |
-| R3 | 2, 7 | |
-| R4 | 8 | |
-| R5 | 8 | |
-| R6 | 8 | |
-| R7 | 9 | |
-| R8 | 9 | |
-| R9 | 5, 9 | |
-| R10 | 10 | |
-| R11 | 10 | |
-| R12 | 10 | |
-| R13 | 10 | |
-| R14 | 3, 7 | |
-| R15 | 7 | |
-| R16 | 3, 7 | |
-| R17 | 3 | |
-| R18 | 5 | |
-| R19 | 10 | |
-| R20 | 5, 10 | |
-| R21 | 4, 10 | |
-| R22 | 10, 11 | |
-| R23 | 3 | |
-| R24 | 10 | |
-| R25 | 3, 10 | |
-| R26 | 10 | |
-| R27 | 5, 10 | |
-| R28 | 4, 10 | |
-| R29 | 4, 10 | |
-| R30 | 4, 10 | |
-| R31 | 6, 7 | |
-| R32 | 10 | |
-| R33 | 11 | |
-| R34 | 7 | |
-| R35 | 11 | |
+Requirements and their evidence live in the My Air plan `my-air/plans/Węzeł Review brancha-PR – propozycja` (task ids: plan Task n is `T<217+n>`, so Task 1 is `T218`). The agent closing a task adds one `add_evidence` item per requirement it proves, through `my_air_plan_apply`, and sets the task done there too.

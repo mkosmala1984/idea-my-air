@@ -10,43 +10,9 @@
 - **Risks:** whether `claude --bg` takes `--session-id`, `--append-system-prompt` and a first prompt must be checked first (task 1), else reviewers fall back to tabs, which the design does not cover.
 - **Out of scope:** the plugin calling Bitbucket, reading PR comments back, gutter annotations, tokens per reviewer, a settings editor for profiles.
 
-## Requirements
+**Plan:** my-air/plans/Węzeł Review brancha-PR – propozycja
 
-- **R1** A folder is a review folder exactly when `~/.my-air/reviews/<its id>/review.json` exists; a review folder holds no plan, and Add Plan is not offered on it.
-- **R2** `review.json` has `format` 1 and the keys `branch`, `base`, `dir`, `pr` (number or null), `plan` (folder id or null), `manager` (`PlanManager` shape or null), `summary`, `chapters`, `runs`, `findings`, `questions`, `next`; any other key or format throws naming the file.
-- **R3** A review's data is never deleted by the plugin; a `review.json` whose folder id is not in the structure is ignored, so a history restore of a deleted review folder brings the review back.
-- **R4** New Review... is offered on a session row (branch checked out in its `workDir`), a worktree row (its branch) and a project row or a folder with a start directory (branch picked in a searchable popup of the repository's local branches); it asks for an optional PR number.
-- **R5** New Review creates the folder `Review: <branch>` where the start point shows (`placeOf` for a session, the project's bound folder for a worktree row, the folder itself for a folder row; for a place inside a plan folder, the plan folder's parent) and writes `review.json` with `base` from `Git.baseOf` and `plan` set to that plan folder's id, else null.
-- **R6** The review's `dir` is the existing linked worktree holding the branch, else the main checkout when it holds it, else a new worktree `<worktrees dir>/review-<branch>` checking the branch out (`Git.addWorktree`); a branch missing locally fails with git's message.
-- **R7** A review folder opens in an editor tab (`myair-review://<folderId>`, restored with the open tabs, never in Recent Files) from Open Review in its menu and by opening its manager session from anywhere; one tab per review per IDE, focused rather than opened twice.
-- **R8** The tab shows the review panel on the left and the manager's terminal on the right, the manager started, resumed and moved on `/clear` as a plan's manager is (`PlanFiles` lifecycle), stored in `review.json`'s `manager`, run in `dir`, filed in the review folder.
-- **R9** The manager gets `--append-system-prompt-file` naming the review's branch, base, dir, PR and the rules: fill the summary and chapters with `my_air_review_apply`, start no reviewer itself, publish to the PR only when the user asks, change finding states only on the user's word.
-- **R10** The header shows `branch → base`, the PR number when set (a link to `https://bitbucket.org/<workspace>/<repo>/pull-requests/<n>` built from `origin`'s URL; not a link for a non-Bitbucket origin), the reviewed commit (the newest commit of a completed run), HEAD of `dir` and how many commits HEAD is past it.
-- **R11** Section Summary shows `summary` as Markdown; Edit Summary edits it in place; Publish sends the manager (`SessionPane.send`) a message asking it to set the PR's description to the summary, disabled without `pr`.
-- **R12** Section Explanation lists `chapters` (title, Markdown text, files), each file with `+added −removed` from `Git.state` of `dir`; a click on a file opens its base diff (`showBaseDiff`); a chapter file not among the changed files shows grey with "not changed".
-- **R13** Changed files that no chapter names are listed under a last chapter "Not explained".
-- **R14** `my_air_review_apply(folder, changes)` takes a JSON array of ops, all-or-none: `set_summary {text}`, `set_chapters {chapters}`, `set_pr {pr}`, `set_state {id, state, reason, commit, comment}`, `add_question {text, reviewer}`, `resolve_question {id}`; an unknown op or field throws naming the change.
-- **R15** `my_air_review_get(folder)` returns the review as JSON with each finding's derived `maybe_fixed` and each run's derived status.
-- **R16** `my_air_review_report(folder, reviewer, commit, findings, questions)` records a run's report; each finding needs `file`, `line`, `category`, `severity` (`blocker`, `major`, `minor`, `nit`), `summary`, `failure_scenario`; a missing field or unknown severity is refused with nothing recorded.
-- **R17** A second report of the same run replaces its first; a report for a session not started as a run of that review is refused.
-- **R18** Reviewer profiles live in `~/.my-air/review-profiles.json`: profiles of a `name` and `reviewers`, each reviewer a `name`, a `prompt` (such as `/rtm-pr-review`), optional `model` and `effort`; unknown keys throw; a missing file means no profiles.
-- **R19** Section Reviewers has a profile chooser and Run; with no profiles it says so and names the file; a broken file names its error there.
-- **R20** Run starts one background job per reviewer of the profile (`claude --bg` in `dir` with the reviewer's model and effort, its prompt as the first message and an appended prompt naming folder, branch, base, range and the duty to call `my_air_review_report` once at the end) and records a run (`id`, reviewer, session, job, range, started).
-- **R21** A run's status is derived: running while its job's entry is in the live registry and no report came, reported once a report came, failed when the job is gone without a report; the row shows status, finding count and duration, and a click opens the session (`ClaudeSessionOpener.open`, which attaches to the job).
-- **R22** Reviewer sessions are filed in the review folder and show in the tree under it; the review panel lists them as runs, newest first, grouped by Run.
-- **R23** Findings of all reports are merged: one finding per (file, category) with lines at most 3 apart, its reports listed with reviewer and commit; the merged finding's severity is the highest of its reports; ids `F<n>` are per review and never reused.
-- **R24** A finding row shows severity, `file:line`, summary, how many distinct reviewers of the latest run of each reviewer reported it over how many reviewers ran (`3/4`), and its state; its tooltip the failure scenario and each report.
-- **R25** Finding states: `open`, `accepted`, `rejected` (needs a reason), `fixed` (needs a commit), `posted` (needs a comment id); the row's menu sets accepted, rejected (asking the reason) and fixed (asking the commit); posted is set only through `set_state`.
-- **R26** A finding's menu offers Fix with Claude (a new session in `dir`, filed in the review folder, its first message the finding, the finding set accepted), Post to PR (a message to the manager asking it to post the finding as a comment at file and line and set it posted with the comment id), and Open Diff (its file's base diff).
-- **R27** When a reviewed commit exists and HEAD moved past it, Run offers New commits only (range `reviewed..HEAD`, the default) and Whole branch (`merge-base..HEAD`); the range goes into each reviewer's prompt.
-- **R28** A finding is `maybe_fixed` when the diff from its newest report's commit to HEAD changes a line of its file within 3 lines of it; it shows dim with "maybe fixed", its state unchanged.
-- **R29** Section Findings filters by All / Blockers / Open (open or accepted), and shows `<n> blockers · <m> to decide` in its head, blockers being blocker-severity findings open or accepted.
-- **R30** Reviewer rows show the reviewer's precision over every review on disk: accepted, fixed and posted findings over those plus rejected ones, with the count of reviews (`7/10 · 5 reviews`); none before any finding of it was triaged.
-- **R31** When `plan` names a plan folder that still has a plan, every change of the review sets that plan's `review` (status `in_progress` while a run runs, else `done` once a run reported, else `not_done`; `commit` the reviewed commit) and keeps one blocker per blocker-severity finding, unresolved while open or accepted, resolved otherwise, its text `F<n> file:line summary`; plan blockers not made by the review are left alone.
-- **R32** Section Questions lists open questions (text, reviewer); Resolve marks one resolved; resolved ones fold away under a count.
-- **R33** The tree's review folder row has a review icon and, on its right, its blocker count when any, in the needs-input colour.
-- **R34** `appendedSystemPrompt` names the three review tools and what each is for; `SessionSystemPromptTest`'s check that every tool of `FoldersMcpToolset` is named passes.
-- **R35** `CLAUDE.md` of this repo describes the review folder, its files, tools and tab.
+Requirements R1–R35 live only in that plan (`my_air_plan_get`), each with its eval kind, delivering tasks and evidence.
 
 ## Intent and why
 
