@@ -310,9 +310,7 @@ object Git {
     fun addWorktree(mainRoot: Path, path: Path, pick: String, fallback: String, inUse: (Path) -> Boolean) {
         val isLocal = isBranch(mainRoot, pick)
         val local = if (isLocal) pick else pick.removePrefix(run(mainRoot, "remote").lines().filter { it.isNotEmpty() }.single { pick.startsWith("$it/") } + "/")
-        // A worktree whose directory is gone still holds its branch until pruned.
-        run(mainRoot, "worktree", "prune")
-        val worktrees = parseWorktrees(run(mainRoot, "worktree", "list", "--porcelain"))
+        val worktrees = worktrees(mainRoot)
         val holder = worktrees.indexOfFirst { it.branch == local }
         if (holder != -1) {
             val tree = worktrees[holder]
@@ -322,6 +320,12 @@ object Git {
         }
         if (isBranch(mainRoot, local)) run(mainRoot, "worktree", "add", path.toString(), local)
         else run(mainRoot, "worktree", "add", "--track", "-b", local, path.toString(), pick)
+    }
+
+    /** The worktrees of the repository of [mainRoot], the main checkout first, after pruning those whose directory is gone (which still hold their branch until pruned). */
+    fun worktrees(mainRoot: Path): List<Worktree> {
+        run(mainRoot, "worktree", "prune")
+        return parseWorktrees(run(mainRoot, "worktree", "list", "--porcelain"))
     }
 
     private fun isBranch(dir: Path, name: String) = run(dir, "rev-parse", "--verify", "-q", "refs/heads/$name", ok = setOf(0, 1)).isNotBlank()

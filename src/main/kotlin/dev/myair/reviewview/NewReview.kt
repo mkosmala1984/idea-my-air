@@ -18,7 +18,6 @@ import dev.myair.actions.copyIncluded
 import dev.myair.actions.declineProjectMcpServers
 import dev.myair.actions.dirName
 import dev.myair.actions.parseBranches
-import dev.myair.actions.parseWorktrees
 import dev.myair.actions.popupPoint
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.SessionFolders
@@ -32,12 +31,18 @@ import kotlin.io.path.isDirectory
 /** Where a new review folder goes: under [parent] (null: the top level), linked to the plan folder [plan] when it came from one. */
 data class ReviewPlace(val parent: String?, val plan: String?)
 
-/** A review started from [place]: into it, or beside the plan folder it is or lies in, since a plan folder holds no review. */
-fun reviewParent(structure: SessionFolders, place: String?): ReviewPlace {
+/**
+ * A review started from [place]: into it, or beside the review folder of [reviews] it is or lies in, as review folders
+ * do not nest; then beside the plan folder that place is or lies in, linked to it, since a plan folder holds no review.
+ */
+fun reviewParent(structure: SessionFolders, reviews: Set<String>, place: String?): ReviewPlace {
     if (place == null) return ReviewPlace(null, null)
     require(structure.find(place) != null) { "folder $place is gone" }
-    val plan = structure.planFolderAt(place) ?: return ReviewPlace(place, null)
-    return ReviewPlace(structure.ancestry(plan.id).dropLast(1).lastOrNull()?.id, plan.id)
+    fun parentOf(id: String) = structure.ancestry(id).dropLast(1).lastOrNull()?.id
+    val review = structure.ancestry(place).firstOrNull { it.id in reviews }
+    val outside = if (review == null) place else parentOf(review.id)
+    val plan = outside?.let(structure::planFolderAt) ?: return ReviewPlace(outside, null)
+    return ReviewPlace(parentOf(plan.id), plan.id)
 }
 
 /** `Review: <branch>`, a `/` as `-` since folder paths are joined by `/`; a name taken under [parent] gets ` (2)`, ` (3)`... */
@@ -63,9 +68,7 @@ fun reviewDir(linked: List<Worktree>, mainRoot: Path, mainBranch: String?, branc
  */
 fun reviewWorkTree(dirHint: Path, branch: String, worktreesSetting: String): Path {
     val mainRoot = Git.mainRoot(dirHint)
-    // A worktree whose directory is gone still holds its branch until pruned.
-    Git.run(mainRoot, "worktree", "prune")
-    val trees = parseWorktrees(Git.run(mainRoot, "worktree", "list", "--porcelain"))
+    val trees = Git.worktrees(mainRoot)
     val (dir, new) = reviewDir(trees.drop(1), trees.first().path, trees.first().branch, branch, mainRoot.resolve(worktreesSetting))
     if (new) {
         // worktree add would make a missing branch off a remote namesake; the review is of the local branch only.
@@ -80,7 +83,7 @@ fun reviewWorkTree(dirHint: Path, branch: String, worktreesSetting: String): Pat
 /** A PR number typed: null when empty; anything but a positive number in plain digits throws. */
 fun prNumber(input: String): Int? {
     if (input.isEmpty()) return null
-    val n = input.takeIf { it.all(Char::isDigit) }?.toIntOrNull()
+    val n = input.takeIf { it.all { c -> c in '0'..'9' } }?.toIntOrNull()
     require(n != null && n > 0) { "'$input' is not a PR number" }
     return n
 }
@@ -95,11 +98,12 @@ fun startReview(project: Project, branch: String, dirHint: Path, place: String?,
     val setting = MyAirSettings.getInstance().worktreesDir
     background(project, "Preparing review of $branch", { reviewWorkTree(dirHint, branch, setting).let { it to Git.baseOf(it) } }) { (dir, base) ->
         val service = ClaudeSessionsService.getInstance()
-        val target = reviewParent(service.folders, place)
+        val reviews = ReviewService.getInstance().reviews.keys
+        val target = reviewParent(service.folders, reviews, place)
         val id = UUID.randomUUID().toString()
         ReviewService.getInstance().create(id, BranchReview(branch, base, dir, pr, target.plan, null, null, emptyList(), emptyList(), emptyList(), emptyList(), emptyMap()))
         service.updateFolders(ChangeSource.UI) { structure ->
-            check(reviewParent(structure, place) == target) { "the place of the review of $branch changed meanwhile" }
+            check(reviewParent(structure, reviews, place) == target) { "the place of the review of $branch changed meanwhile" }
             structure.createFolder(target.parent, id, reviewFolderName(structure, target.parent, branch))
         }
     }

@@ -49,6 +49,22 @@ fun learnSessions(review: BranchReview, jobs: Map<String, String>): Pair<BranchR
 fun inStructure(all: Map<String, Result<BranchReview>>, structure: SessionFolders): Map<String, Result<BranchReview>> =
     all.filterKeys { structure.find(it) != null }
 
+/** Whether folder [id] is or lies in a review folder of [reviews], which [SessionFolders] does not know. */
+fun inReview(structure: SessionFolders, reviews: Set<String>, id: String) = structure.ancestry(id).any { it.id in reviews }
+
+/**
+ * Throws naming the first plan folder of [after] that is or lies in a review folder of [reviews] and was not so in
+ * [before]: a review folder holds no plan, whether a change list adds one, creates one inside or moves one in.
+ */
+fun refusePlansInReviews(before: SessionFolders, after: SessionFolders, reviews: Set<String>) {
+    fun inReviews(s: SessionFolders) = s.all().filter { it.plan != null && inReview(s, reviews, it.id) }
+    val old = inReviews(before).map { it.id }.toSet()
+    inReviews(after).firstOrNull { it.id !in old }?.let { plan ->
+        val review = after.ancestry(plan.id).first { it.id in reviews }
+        throw IllegalArgumentException("'${after.pathOf(plan.id)}' would be a plan in review folder '${after.pathOf(review.id)}', which holds no plan")
+    }
+}
+
 /** The plan [review] is linked to, while its folder still has one. */
 fun linkedPlan(review: BranchReview, structure: SessionFolders): Plan? = review.plan?.let(structure::find)?.plan
 

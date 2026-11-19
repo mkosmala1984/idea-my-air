@@ -4,8 +4,10 @@ import dev.myair.actions.Git
 import dev.myair.actions.GitFailure
 import dev.myair.actions.Worktree
 import dev.myair.claude.ClaudeSession
+import dev.myair.folders.FolderChanges
 import dev.myair.folders.Plan
 import dev.myair.folders.SessionFolders
+import dev.myair.review.refusePlansInReviews
 import dev.myair.toolwindow.WorktreeRow
 import dev.myair.toolwindow.reviewStart
 import org.junit.jupiter.api.Test
@@ -29,18 +31,46 @@ class NewReviewTest {
         .createFolder(null, "topPlan", "Top plan", plan = Plan())
 
     @Test fun `a review from inside a plan goes beside the plan and links it`() {
-        assertEquals(ReviewPlace("top", "plan"), reviewParent(structure, "plan"))
-        assertEquals(ReviewPlace("top", "plan"), reviewParent(structure, "inPlan"))
-        assertEquals(ReviewPlace(null, "topPlan"), reviewParent(structure, "topPlan"))
+        assertEquals(ReviewPlace("top", "plan"), reviewParent(structure, emptySet(), "plan"))
+        assertEquals(ReviewPlace("top", "plan"), reviewParent(structure, emptySet(), "inPlan"))
+        assertEquals(ReviewPlace(null, "topPlan"), reviewParent(structure, emptySet(), "topPlan"))
     }
 
     @Test fun `a review elsewhere goes into the place`() {
-        assertEquals(ReviewPlace("top", null), reviewParent(structure, "top"))
-        assertEquals(ReviewPlace(null, null), reviewParent(structure, null))
+        assertEquals(ReviewPlace("top", null), reviewParent(structure, emptySet(), "top"))
+        assertEquals(ReviewPlace(null, null), reviewParent(structure, emptySet(), null))
+    }
+
+    @Test fun `a review from inside a review goes beside that review, a plan linked only from a plan folder`() {
+        val withReviews = structure.createFolder("top", "rev", "Review: a").createFolder("rev", "inRev", "x").createFolder(null, "topRev", "Review: b")
+            .createFolder("topPlan", "planRev", "Review: c")
+        val reviews = setOf("rev", "topRev", "planRev")
+        assertEquals(ReviewPlace("top", null), reviewParent(withReviews, reviews, "rev"))
+        assertEquals(ReviewPlace("top", null), reviewParent(withReviews, reviews, "inRev"))
+        assertEquals(ReviewPlace(null, null), reviewParent(withReviews, reviews, "topRev"))
+        assertEquals(ReviewPlace(null, "topPlan"), reviewParent(withReviews, reviews, "planRev"))
+    }
+
+    @Test fun `a plan made, created or moved into a review folder by a change list is refused naming both, one there before is not`() {
+        val base = SessionFolders().createFolder(null, "r", "Review: a").createFolder("r", "sub", "sub").createFolder(null, "p", "plan", plan = Plan())
+        val reviews = setOf("r")
+        fun apply(changes: String) = FolderChanges.apply(base, changes, emptySet(), emptySet()).let { refusePlansInReviews(base, it, reviews) }
+        listOf(
+            """[{"op":"add_plan","path":"Review: a"}]""",
+            """[{"op":"add_plan","path":"Review: a/sub"}]""",
+            """[{"op":"create","path":"Review: a/new","plan":true}]""",
+            """[{"op":"move","path":"plan","to":"Review: a/sub"}]""",
+        ).forEach { changes ->
+            val e = assertThrows<IllegalArgumentException>(changes) { apply(changes) }
+            assertContains(e.message!!, "review folder 'Review: a'")
+        }
+        apply("""[{"op":"create","path":"plan2","plan":true},{"op":"create","path":"Review: a/plain"}]""")
+        val already = base.addPlan("sub")
+        refusePlansInReviews(already, already.rename("r", "Review: z"), reviews)
     }
 
     @Test fun `a place no longer in the structure throws`() {
-        assertThrows<IllegalArgumentException> { reviewParent(structure, "gone") }
+        assertThrows<IllegalArgumentException> { reviewParent(structure, emptySet(), "gone") }
     }
 
     @Test fun `the folder is named after the branch, a slash as a hyphen, a name taken numbered`() {
@@ -64,7 +94,7 @@ class NewReviewTest {
     @Test fun `a pr number is plain positive digits or empty, anything else throws`() {
         assertNull(prNumber(""))
         assertEquals(42, prNumber("42"))
-        listOf("0", "-3", "+3", " 42", "4a", "99999999999").forEach { assertThrows<IllegalArgumentException>(it) { prNumber(it) } }
+        listOf("0", "-3", "+3", " 42", "4a", "99999999999", "٣").forEach { assertThrows<IllegalArgumentException>(it) { prNumber(it) } }
     }
 
     private fun path(vararg items: Any) = TreePath(items.map(::DefaultMutableTreeNode).toTypedArray())

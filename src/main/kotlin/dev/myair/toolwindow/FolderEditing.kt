@@ -22,6 +22,7 @@ import dev.myair.editor.SessionTerminals
 import dev.myair.editor.confirmed
 import dev.myair.planview.PlanFiles
 import dev.myair.review.ReviewService
+import dev.myair.review.inReview
 import dev.myair.service.ClaudeSessionsService
 import java.nio.file.Path
 import java.util.UUID
@@ -71,8 +72,7 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
     /** Outside every plan folder, since plans do not nest, and every review folder, which holds no plan. */
     fun canNewPlan() = tree.selectionPath?.let(::targetFolder)?.let { service.folders.planFolderAt(it) == null && !inReview(it) } ?: true
 
-    /** Whether the folder [id] is or lies in a review folder; [SessionFolders] does not know reviews. */
-    private fun inReview(id: String) = ReviewService.getInstance().reviews.keys.let { reviews -> service.folders.ancestry(id).any { it.id in reviews } }
+    private fun inReview(id: String) = inReview(service.folders, ReviewService.getInstance().reviews.keys, id)
 
     /** Renames the selected folder, milestone or task. */
     fun rename() {

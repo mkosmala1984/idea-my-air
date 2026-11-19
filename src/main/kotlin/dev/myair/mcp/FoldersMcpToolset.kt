@@ -22,6 +22,8 @@ import dev.myair.folders.Folder
 import dev.myair.folders.FolderChanges
 import dev.myair.folders.PlanChanges
 import dev.myair.folders.SessionFolders
+import dev.myair.review.ReviewService
+import dev.myair.review.refusePlansInReviews
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.planview.PlanEditor
 import dev.myair.planview.PlanFiles
@@ -178,7 +180,10 @@ class FoldersMcpToolset : McpToolset {
     suspend fun my_air_folders_apply(@McpDescription("The JSON array of changes.") changes: String): String = withFolders { service, _ ->
         val scanned = service.sessions.map { it.id }.toSet()
         val projects = service.sessions.map { it.cwd.toString() }.toSet()
-        service.updateFolders(ChangeSource.MCP) { FolderChanges.apply(it, changes, scanned, projects) }
+        val reviews = ReviewService.getInstance().reviews.keys
+        service.updateFolders(ChangeSource.MCP) { before ->
+            FolderChanges.apply(before, changes, scanned, projects).also { refusePlansInReviews(before, it, reviews) }
+        }
         service.folders.treeJson()
     }
 
