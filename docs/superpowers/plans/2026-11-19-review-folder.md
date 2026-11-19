@@ -12,7 +12,7 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | blocked: --session-id ignored by claude --bg | `98a88b0` |
+| 1 | done | `98a88b0` |
 | 2 | | |
 | 3 | | |
 | 4 | | |
