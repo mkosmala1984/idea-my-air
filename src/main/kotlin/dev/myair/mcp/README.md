@@ -57,7 +57,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - drops the preset's base when `worktree=false`.
 - `my_air_session_start` refuses a `branch` without a worktree and a `folder` with no working or bound directory at or above it.
 - `requireTask` lists the open tasks when an id is unknown.
-- `planJson` and `plansJson` require a plan folder (`checkNotNull(folder.plan)`). Tasks are listed with their sessions, newest first. `manager` is the plan's entry in `plan-managers.json`, null without one. `my_air_plan_get(dir)` also lists plan folders whose `workdir` holds `dir` (`SessionFolders.planFoldersOf`).
+- `planJson` and `plansJson` require a plan folder (`checkNotNull(folder.plan)`). Tasks are listed with their sessions, newest first. `manager` is the plan's entry in `plan-managers.json`, null without one. The plan JSON also gives `constraints`, `decisions`, `requirements` (each with its derived `status`) and `review` with its blockers; `my_air_plan_apply` takes the ops of `PlanChanges`, among them `add_requirement` and `add_evidence`. `my_air_plan_get(dir)` also lists plan folders whose `workdir` holds `dir` (`SessionFolders.planFoldersOf`).
 - `managerSetJson` adds a `hint` (set the plan's `workdir`) only when the manager's cwd lies outside the plan's `dirs` and `workdir`.
 - `my_air_plan_set_manager` refuses, before changing anything, what `managerRefusal` (`planview/PlanFiles.kt`) names: a session managing a plan already, unknown (neither scanned nor running here), run by a background job, running outside this IDE, or still starting here.
 

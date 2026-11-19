@@ -15,10 +15,11 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
   - `@Service(APP) class PlanFiles`, with `store`, `file(folderId)`, `manager(folderId)`, `startManager(folder, structure, ideProject)`, `planOf(file)` and `forgetManager(folderId)`.
 - `PlanOpener.kt`: `object PlanOpener`, with `open(project, folderId)`.
 - `PlanPanel.kt`: `class PlanPanel(project, folderId, parent) : JPanel, Scrollable`, with `show(view)`.
-- `PlanView.kt`: `data class TaskView`, `MilestoneView`, `PlanView`, `Folding`, `fun planViewOf(structure, folderId, sessions, managerId)`, `fun statusCounts(tasks)` and `fun openWork(counts)`.
+- `PlanView.kt`: `data class TaskView`, `MilestoneView`, `PlanView`, `enum Section` (`IDEAL`, `CONSTRAINTS`, `DECISIONS`, `REQUIREMENTS`, `REVIEW`), `Folding`, `fun planViewOf(structure, folderId, sessions, managerId)`, `fun statusCounts(tasks)`, `fun openWork(counts)`, `fun requirementsSummary(requirements)`, `fun reviewSummary(review)` and `fun newestFirst(decisions)`.
+- `PlanSections.kt`: `PlanPanel.sectionCard(section, plan)`, the grey card of each section with its rows and `...` menu.
 - `MarkdownHtml.kt`: `data class MarkdownColors`, `fun markdownHtml(markdown, colors)`.
 - `PlanEdit.kt`:
-  - `sealed interface PlanEdit`: `Title`, `Next`, `Description`, `NewTask`, `NewMilestone`.
+  - `sealed interface PlanEdit`: `Title`, `Next`, `Description`, `Constraints`, `NewDecision`, `NewRequirement`, `NewBlocker`, `NewTask`, `NewMilestone`.
   - `fun PlanEdit.apply(folderId, text)`.
   - `fun PlanEdit.current(plan)`.
 - `InlineEdits.kt`: `class OpenEdit(edit, component)`, `fun inlineField`, `fun inlineArea`.
@@ -40,6 +41,8 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
 - `parsePlanTabPath` rejects an empty path or one containing `/`, `?` or `&`. `PlanVirtualFile` is kept out of Recent Files (`isIncludedInEditorHistory = false`).
 
 ### Editor and panel
+
+- The panel's header shows the name, the task progress and the summaries `R <proven>/<all>` and the review's, not the description, which is the Ideal state section. `Folding.open(section, plan)` is by default true for Requirements, for Code review while a blocker is unresolved and for the other sections while empty.
 
 - `PlanEditor` builds nothing until `service.loaded` and while `foldersError` is set. Until then it shows "Loading..." or the error.
   - A plan that is gone sets `gone` for good: the editor shows only a notice, and `PlanOpener.open` closes that tab before opening the plan again.
