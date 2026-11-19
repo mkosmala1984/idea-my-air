@@ -2,7 +2,7 @@
 
 ## Overview
 
-The My Air tools offered to agents through the IDE's MCP server. They cover finding sessions, starting a session, and reading and changing folders, plans, undo snapshots and session briefs. Two toolsets are registered in `src/main/resources/META-INF/my-air-mcp.xml`, which `plugin.xml` loads through an optional `<depends>` on `com.intellij.mcpServer`. Without the MCP server the rest of the plugin still works. The pure parts (paging and time bounds, preset merging, JSON output) are kept apart from the toolsets so they can be tested.
+The My Air tools offered to agents through the IDE's MCP server. They cover finding sessions, starting a session, and reading and changing folders, plans, undo snapshots and session briefs. Three toolsets are registered in `src/main/resources/META-INF/my-air-mcp.xml`, which `plugin.xml` loads through an optional `<depends>` on `com.intellij.mcpServer`. Without the MCP server the rest of the plugin still works. The pure parts (paging and time bounds, preset merging, JSON output) are kept apart from the toolsets so they can be tested.
 
 ## Interface
 
@@ -18,6 +18,10 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - `my_air_history_restore(name)`
 - `BriefMcpToolset.kt`, `class BriefMcpToolset : McpToolset`:
   - `my_air_set_brief(goal, tasks, plan_task, folder, title)`
+- `ReviewMcpToolset.kt`, `class ReviewMcpToolset : McpToolset`, each tool naming the review folder by its id, else its path; get and apply read git on each call, off the EDT:
+  - `my_air_review_get(folder)`
+  - `my_air_review_apply(folder, changes)`
+  - `my_air_review_report(folder, run, commit, findings, questions)`
 - `SessionSearch.kt`:
   - `data class SessionPage(total, offset, sessions, snippets)`
   - `fun findSessions(...)`: a `query` also matches a session found in `content`, the conversation index's answer for it (`SessionIndex.search`, run by the tool off the EDT); `snippets` (and `match` in the JSON) give the text around the hit of each session on the page
@@ -59,7 +63,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
 - `requireTask` lists the open tasks when an id is unknown.
 - `planJson` and `plansJson` require a plan folder (`checkNotNull(folder.plan)`). Tasks are listed with their sessions, newest first. `manager` is the plan's entry in `plan-managers.json`, null without one. The plan JSON also gives `constraints`, `decisions`, `requirements` (each with its derived `status`) and `review` with its blockers; `my_air_plan_apply` takes the ops of `PlanChanges`, among them `add_requirement` and `add_evidence`. `my_air_plan_get(dir)` also lists plan folders whose `workdir` holds `dir` (`SessionFolders.planFoldersOf`).
 - `managerSetJson` adds a `hint` (set the plan's `workdir`) only when the manager's cwd lies outside the plan's `dirs` and `workdir`.
-- `my_air_plan_set_manager` refuses, before changing anything, what `managerRefusal` (`planview/PlanFiles.kt`) names: a session managing a plan already, unknown (neither scanned nor running here), run by a background job, running outside this IDE, or still starting here.
+- `my_air_plan_set_manager` refuses, before changing anything, what `managerRefusal` (`planview/PlanFiles.kt`) names: a session managing a plan already, or a review, unknown (neither scanned nor running here), run by a background job, running outside this IDE, or still starting here.
 
 ## Side Effects
 

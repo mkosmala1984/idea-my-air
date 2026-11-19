@@ -124,6 +124,17 @@ class GitTest {
     private fun branches(repo: Path) = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads").lines()
 
     @Test
+    fun `the main checkout read from files is the one git names, for the checkout and a linked worktree`() {
+        val repo = init("main-checkout")
+        git(repo, "branch", "topic")
+        val path = dir.resolve("wt-main")
+        Git.addWorktree(repo, path, "topic", "worktree-x", idle)
+        assertEquals(Git.mainRoot(repo), Git.mainCheckout(repo))
+        assertEquals(Git.mainRoot(path), Git.mainCheckout(path).toRealPath())
+        assertEquals(repo.toRealPath(), Git.mainCheckout(path).toRealPath())
+    }
+
+    @Test
     fun `a free local branch is checked out in the new worktree without a new branch`() {
         val repo = init("plain")
         git(repo, "branch", "topic")
@@ -482,5 +493,68 @@ class GitTest {
         git(repo, "add", "b.txt")
         git(repo, "commit", "-m", "b")
         assertEquals(BranchFate(1, null), Git.branchFate(repo, "feature"))
+    }
+
+    @Test
+    fun `changedLines gives old-side ranges since a commit, uncommitted edits included`() {
+        val repo = init("ranges")
+        repo.resolve("a.txt").writeText((1..10).joinToString("\n", postfix = "\n"))
+        repo.resolve("b.txt").writeText("-- one\ntwo\n")
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "base")
+        val base = git(repo, "rev-parse", "HEAD")
+        repo.resolve("a.txt").writeText((1..10).filter { it != 3 && it != 4 }.joinToString("\n", postfix = "\n").replace("7\n", "7\nnew\n").replace("9\n", "nine\n"))
+        git(repo, "commit", "-am", "edit")
+        repo.resolve("b.txt").writeText("two\n")
+        repo.resolve("c.txt").writeText("x\n")
+        git(repo, "add", "c.txt")
+        assertEquals(mapOf("a.txt" to listOf(3..4, 7..7, 9..9), "b.txt" to listOf(1..1), "c.txt" to listOf(0..0)), Git.changedLines(repo, base))
+        assertEquals(1, Git.commitsBetween(repo, base))
+    }
+
+    @Test
+    fun `changedLines and commitsBetween are null for a commit that is gone`() {
+        val repo = init("gone")
+        assertEquals(null, Git.changedLines(repo, "0".repeat(40)))
+        assertEquals(null, Git.commitsBetween(repo, "0".repeat(40)))
+    }
+
+    @Test
+    fun `commitsBetween and changedLines are null for a commit a rebase took out of the history`() {
+        val repo = init("rebased")
+        repo.resolve("a.txt").writeText("1\n")
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "old")
+        val old = git(repo, "rev-parse", "HEAD")
+        git(repo, "commit", "--amend", "-m", "rewritten")
+        assertEquals(null, Git.commitsBetween(repo, old), "the old commit is still in the reflog, but not an ancestor of HEAD")
+        assertEquals(null, Git.changedLines(repo, old))
+        assertEquals(emptyMap(), Git.changedLines(repo, "HEAD"))
+        assertEquals(0, Git.commitsBetween(repo, "HEAD"))
+    }
+
+    @Test
+    fun `changedLines keys are exact paths for names with a space or non-ASCII letters`() {
+        val repo = init("names")
+        val names = listOf("a b.txt", "zażółć.txt")
+        names.forEach { repo.resolve(it).writeText("1\n2\n3\n") }
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "base")
+        val base = git(repo, "rev-parse", "HEAD")
+        names.forEach { repo.resolve(it).writeText("1\nx\n3\n") }
+        assertEquals(names.associateWith { listOf(2..2) }, Git.changedLines(repo, base))
+    }
+
+    @Test
+    fun `headerPath strips the TAB git adds after a name with a space and maps dev null to null`() {
+        assertEquals("a b.txt", Git.headerPath("--- a b.txt\t"))
+        assertEquals("a.txt", Git.headerPath("+++ a.txt"))
+        assertEquals(null, Git.headerPath("--- /dev/null"))
+    }
+
+    @Test
+    fun `headerPath throws on a quoted name, naming the whole header line`() {
+        val e = assertThrows<IllegalStateException> { Git.headerPath("+++ \"a\tb.txt\"") }
+        assertContains(e.message.orEmpty(), "+++ \"a\tb.txt\"")
     }
 }

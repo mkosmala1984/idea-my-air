@@ -3,6 +3,7 @@ package dev.myair.toolwindow
 import dev.myair.claude.ClaudeSession
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.Folder
+import dev.myair.review.ReviewService
 import dev.myair.service.ClaudeSessionsService
 import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.Transferable
@@ -49,6 +50,6 @@ class FolderDrop(private val tree: DropLineTree, private val service: ClaudeSess
     private fun drop(support: TransferSupport): Drop? {
         if (!canEdit() || dragged.isEmpty()) return null
         val location = support.dropLocation as JTree.DropLocation
-        return dropChange(service.folders, dragged, location.path ?: return null, location.childIndex)
+        return dropChange(service.folders, ReviewService.getInstance().onDiskIds, dragged, location.path ?: return null, location.childIndex)
     }
 }

@@ -29,6 +29,10 @@
     <fileEditorProvider implementation="dev.myair.planview.PlanEditorProvider"/>
     <fileIconProvider order="first" implementation="dev.myair.planview.PlanFileIconProvider"/>
     <editorTabTitleProvider implementation="dev.myair.planview.PlanTabTitleProvider"/>
+    <virtualFileSystem key="myair-review" implementationClass="dev.myair.reviewview.ReviewFileSystem"/>
+    <fileEditorProvider implementation="dev.myair.reviewview.ReviewEditorProvider"/>
+    <fileIconProvider order="first" implementation="dev.myair.reviewview.ReviewFileIconProvider"/>
+    <editorTabTitleProvider implementation="dev.myair.reviewview.ReviewTabTitleProvider"/>
     <virtualFileSystem key="myair-dashboard" implementationClass="dev.myair.dashboard.DashboardFileSystem"/>
     <fileEditorProvider implementation="dev.myair.dashboard.DashboardEditorProvider"/>
     <virtualFileSystem key="myair-scheduled" implementationClass="dev.myair.schedule.ui.ScheduledTasksFileSystem"/>
@@ -37,6 +41,7 @@
     <editorTabTitleProvider implementation="dev.myair.editor.ClaudeSessionTabTitleProvider"/>
     <editorTabColorProvider implementation="dev.myair.editor.ClaudeSessionTabColorProvider"/>
     <postStartupActivity implementation="dev.myair.tabs.TabsSyncStartup"/>
+    <postStartupActivity implementation="dev.myair.review.ReviewServiceStartup"/>
     <editorEmptyStateComponentProvider implementation="dev.myair.prompt.PromptEmptyState"/>
     <notificationGroup id="My Air" displayType="BALLOON"/>
     <notificationGroup id="My Air Scheduled Tasks" displayType="STICKY_BALLOON"/>

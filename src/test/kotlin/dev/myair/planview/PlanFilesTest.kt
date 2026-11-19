@@ -28,14 +28,17 @@ class PlanFilesTest {
     }
 
     @Test fun `a plan tab path is the folder id`() {
-        assertEquals("3f2a9c1e-0000-4000-8000-000000000001", parsePlanTabPath("3f2a9c1e-0000-4000-8000-000000000001"))
-        for (bad in listOf("", "a/b", "a?b", "a&b")) assertThrows<IllegalArgumentException>(bad) { parsePlanTabPath(bad) }
+        assertEquals("3f2a9c1e-0000-4000-8000-000000000001", parseFolderTabPath("3f2a9c1e-0000-4000-8000-000000000001"))
+        for (bad in listOf("", "a/b", "a?b", "a&b")) assertThrows<IllegalArgumentException>(bad) { parseFolderTabPath(bad) }
     }
 
     private val managers = PlanManagers().set("p", PlanManager("old", cwd, cwd)).set("q", PlanManager("other", cwd, cwd))
     private fun live(job: String? = null) = LiveSession(7, "cli", SessionStatus.IDLE, null, Instant.EPOCH, cwd, Instant.EPOCH, job)
-    private fun refusal(session: String = "s", known: Boolean = true, live: LiveSession? = null, runsHere: Boolean = false, starting: Boolean = false) =
-        managerRefusal(managers, "p", session, known, live, runsHere, starting) { "plans/$it" }
+    private fun refusal(session: String = "s", known: Boolean = true, live: LiveSession? = null, runsHere: Boolean = false, starting: Boolean = false, review: String? = null) =
+        managerRefusal(managers, "p", session, known, live, runsHere, starting, review) { "plans/$it" }
+
+    @Test fun `a review's manager is refused naming the review`() =
+        assertEquals("session s manages the review 'rtm/Review: x'", refusal(live = live(), runsHere = true, review = "rtm/Review: x"))
 
     @Test fun `a known session not running anywhere may manage a plan`() = assertNull(refusal())
 

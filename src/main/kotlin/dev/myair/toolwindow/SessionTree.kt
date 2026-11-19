@@ -12,6 +12,10 @@ import dev.myair.folders.Milestone
 import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.startFolder
+import dev.myair.review.blockerCount
+import dev.myair.review.placementProblem
+import dev.myair.reviewview.ReviewStart
+import dev.myair.store.BranchReview
 import java.nio.file.Path
 import java.time.Instant
 import java.util.UUID
@@ -183,20 +187,24 @@ fun urgencyOf(live: LiveSession?, unread: Boolean): Urgency? = when (live?.statu
 }
 
 /** What a group row shows on its right: how many sessions it holds and the most urgent of them. */
-data class FolderSummary(val sessions: Int, val urgent: Urgency?)
+data class FolderSummary(val sessions: Int, val urgent: Urgency?, val blockers: Int = 0)
 
 /**
  * The [FolderSummary] of a group node (folder, project, worktree, recent or unfiled sessions), counting the sessions below it
  * as shown, a session under both its folder and a worktree once; null for a session and its children.
  */
-fun folderSummary(node: DefaultMutableTreeNode, urgency: (ClaudeSession) -> Urgency?): FolderSummary? = when (node.userObject) {
+fun folderSummary(node: DefaultMutableTreeNode, blockers: (Folder) -> Int = { 0 }, urgency: (ClaudeSession) -> Urgency?): FolderSummary? = when (node.userObject) {
     is ClaudeSession, is WorkDirRow, is AddedDir, is BranchRow, is BriefGroup, is BriefGoal, is BriefTaskRow, is AgentsGroup, is AgentRow, is FilesGroup, is ChangedFile -> null
     is Folder, is Path, RecentSessions, UnfiledSessions, is MilestoneRow, is PlanTaskRow, is NoTask, is WorktreesGroup, is WorktreeRow -> {
         val sessions = groupSessions(node).distinctBy { it.id }
-        FolderSummary(sessions.size, sessions.mapNotNull(urgency).minOrNull())
+        FolderSummary(sessions.size, sessions.mapNotNull(urgency).minOrNull(), (node.userObject as? Folder)?.let(blockers) ?: 0)
     }
     else -> error("Unexpected tree node ${node.userObject}")
 }
+
+/** The standing blockers of [folder]'s review ([blockerCount]); null when it is no review folder, 0 when its `review.json` cannot be read. */
+fun reviewBlockers(folder: Folder, reviews: Map<String, Result<BranchReview>>): Int? =
+    reviews[folder.id]?.let { it.getOrNull()?.let(::blockerCount) ?: 0 }
 
 /** The sessions below [node], not looking inside a session. */
 fun groupSessions(node: DefaultMutableTreeNode): List<ClaudeSession> = node.children().toList().flatMap {
@@ -236,6 +244,20 @@ fun nodeDir(path: TreePath): Path? = when (val item = (path.lastPathComponent as
 /** The project of a session started from the node at [path]: a worktree row's main checkout, as other worktree starts give it, else [nodeDir]. */
 fun nodeProject(path: TreePath): Path? = ((path.lastPathComponent as DefaultMutableTreeNode).userObject as? WorktreeRow)?.root ?: nodeDir(path)
 
+/**
+ * Where New Review starts from the node at [path]: a session's work dir and the branch [branchOf] says is checked out
+ * there, in the folder it shows in; a worktree row's branch, in its project's bound folder; for a project row or a folder
+ * with a start directory ([nodeDir]) a branch to pick, in that folder or the project's. Null elsewhere, and without a branch.
+ */
+fun reviewStart(path: TreePath, structure: SessionFolders, branchOf: (ClaudeSession) -> String?): ReviewStart? =
+    when (val item = (path.lastPathComponent as DefaultMutableTreeNode).userObject) {
+        is ClaudeSession -> branchOf(item)?.let { ReviewStart(item.workDir, it, structure.placeOf(item)) }
+        is WorktreeRow -> item.branch?.let { ReviewStart(item.path, it, structure.projectFolder(item.root)?.id) }
+        is Path -> ReviewStart(item, null, structure.projectFolder(item)?.id)
+        is Folder -> nodeDir(path)?.let { ReviewStart(it, null, item.id) }
+        else -> null
+    }
+
 /** The directory to open from the node at [path]: a session's own cwd, else [nodeDir]. */
 fun openDir(path: TreePath): Path? = ((path.lastPathComponent as DefaultMutableTreeNode).userObject as? ClaudeSession)?.cwd ?: nodeDir(path)
 
@@ -247,13 +269,14 @@ class Drop(val change: (SessionFolders) -> SessionFolders, val path: TreePath, v
  * the node at [path] does, or null where the drop is refused. A milestone moves among its plan's milestones, before the
  * one it is dropped in front of or after the last; a task into a milestone of its plan, before the task it is dropped in
  * front of or last. A session whose brief names a task stays under it, so it does not move, and no session drops onto a
- * milestone or task, which only a brief puts it under. A plan folder does not go into another. [childIndex] is JTree's: -1 drops onto the node, otherwise between its children.
+ * milestone or task, which only a brief puts it under. A plan folder does not go into another, nor a folder where the
+ * review folders of [reviews] forbid it ([placementProblem]). [childIndex] is JTree's: -1 drops onto the node, otherwise between its children.
  * Sessions land in the folder of whatever they are dropped on or into, and that folder is what the drop shows; under
  * [UnfiledSessions] they stay there ([SessionFolders.unfile]), whatever their project or brief say. A folder goes into a folder or the top level, before the folder it is dropped in front of, or after the last one;
  * the drop shows that spot, not the pointer's, since [RecentSessions] always comes before the folders and [UnfiledSessions] after them. Nothing drops on or into [RecentSessions] or a [WorktreesGroup]. A project
  * lands the same way, as a new folder named after its directory and bound to it.
  */
-fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, childIndex: Int): Drop? {
+fun dropChange(structure: SessionFolders, reviews: Set<String>, dragged: List<Any>, path: TreePath, childIndex: Int): Drop? {
     val target = path.lastPathComponent as DefaultMutableTreeNode
     // Recent sessions and worktrees are views of the others: nothing is filed into them.
     if (path.path.any { (it as DefaultMutableTreeNode).userObject.let { item -> item == RecentSessions || item is WorktreesGroup } }) return null
@@ -277,7 +300,8 @@ fun dropChange(structure: SessionFolders, dragged: List<Any>, path: TreePath, ch
     val place: (Int) -> (SessionFolders) -> SessionFolders = when (moved) {
         is Folder -> {
             val current = structure.find(moved.id) ?: return null
-            if (current.subtree().any { it.id == parentId } || structure.nameTaken(parentId, moved.name, except = moved.id) || !structure.canHold(parentId, current)) return null
+            if (current.subtree().any { it.id == parentId } || structure.nameTaken(parentId, moved.name, except = moved.id) || !structure.canHold(parentId, current) ||
+                placementProblem(structure, structure.moveFolder(moved.id, parentId, 0), reviews) != null) return null
             { index -> { it.moveFolder(moved.id, parentId, index) } }
         }
         else -> {

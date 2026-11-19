@@ -16,13 +16,24 @@ import dev.myair.planview.PlanOpener
 import dev.myair.planview.PlanEditor
 import dev.myair.editor.planPrompt
 import dev.myair.MyAirSettings
+import dev.myair.review.ReviewService
+import dev.myair.review.inReview
+import dev.myair.review.managedReviewFolder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.PlanManager
 import dev.myair.tabs.SessionHosts
 import java.util.UUID
 
-/** Whether a plan may go where [session] shows (`placeOf`, the top level when nowhere): not in a plan, as plans do not nest. */
-private fun canHoldPlan(folders: SessionFolders, session: ClaudeSession) = folders.placeOf(session)?.let { folders.planFolderAt(it) == null } ?: true
+/**
+ * Whether [session] may become a plan's manager where it shows (`placeOf`, the top level when nowhere): not in a plan, as
+ * plans do not nest, nor in a review folder ([inReview]), and not while it manages a review. Only enables the action:
+ * [ClaudeSessionsService.updateFolders] refuses a plan in a review folder whoever writes it.
+ */
+private fun canTurn(folders: SessionFolders, session: ClaudeSession): Boolean {
+    val reviews = ReviewService.getInstance().reviews
+    val place = folders.placeOf(session)
+    return (place == null || folders.planFolderAt(place) == null && !inReview(folders, reviews.keys, place)) && managedReviewFolder(reviews, session.id) == null
+}
 
 /**
  * On a session's menu: a new plan folder, named in a dialog (the session's title to start with), in the folder the session
@@ -35,7 +46,7 @@ class TurnIntoPlanAction(private val selected: () -> List<ClaudeSession>) :
     override fun update(e: AnActionEvent) {
         val session = selected().singleOrNull()
         e.presentation.isVisible = session != null
-        e.presentation.isEnabled = session != null && canHoldPlan(ClaudeSessionsService.getInstance().folders, session) &&
+        e.presentation.isEnabled = session != null && canTurn(ClaudeSessionsService.getInstance().folders, session) &&
             PlanFiles.getInstance().store.read().folderOf(session.id) == null
     }
 
@@ -43,7 +54,7 @@ class TurnIntoPlanAction(private val selected: () -> List<ClaudeSession>) :
         val project = e.project!!
         val session = selected().single()
         val service = ClaudeSessionsService.getInstance()
-        check(canHoldPlan(service.folders, session)) { "session ${session.id} lies in a plan" }
+        check(canTurn(service.folders, session)) { "session ${session.id} lies in a plan or review, or manages a review" }
         val parentId = service.folders.placeOf(session)
         val name = askFolderName(project, "Turn into Plan", session.title, parentId, null) ?: return
         val tab = SessionHosts.findTab(session.id)?.takeIf { it.file is ClaudeSessionVirtualFile }

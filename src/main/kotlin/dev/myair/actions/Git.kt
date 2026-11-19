@@ -86,10 +86,10 @@ object Git {
     }
 
     /**
-     * The work tree of [dir] against its base; null when neither [dir] nor a folder above it has a `.git`. Any other
-     * failure throws: git's exit code 128 means every kind of fatal error, not only "no repository".
+     * The work tree of [dir] against [against], else against its base ([baseOf]); null when neither [dir] nor a folder
+     * above it has a `.git`. Any other failure throws: git's exit code 128 means every kind of fatal error, not only "no repository".
      */
-    fun state(dir: Path): GitState? {
+    fun state(dir: Path, against: String? = null): GitState? {
         if (!inRepo(dir)) return null
         check(run(dir, "rev-parse", "--is-inside-work-tree").trim() == "true") { "$dir is not in a work tree" }
         val root = Path.of(run(dir, "rev-parse", "--show-toplevel").trim())
@@ -100,7 +100,7 @@ object Git {
         val stored = current?.let { storedBase(root, it) }
         fun problem(base: String?, problem: String) = GitState(branch, current == null, root, base, stored != null, null, null, problem)
         // defaultBranch throws when the repository names no default; the branch row stays, the reason goes to Changes.
-        val base = runCatching { baseFrom(root, stored) }.getOrElse { return problem(null, it.message.orEmpty()) }
+        val base = against ?: runCatching { baseFrom(root, stored) }.getOrElse { return problem(null, it.message.orEmpty()) }
         if (!isCommit(root, base)) return problem(base, "Base $base no longer exists")
         // merge-base exits 1, saying nothing, when the two share no commit.
         val mergeBase = run(root, "merge-base", base, "HEAD", ok = setOf(0, 1)).trim().ifEmpty { return problem(base, "Base $base shares no history with $branch") }
@@ -130,14 +130,39 @@ object Git {
      * repository above it (a removed worktree, its main checkout's). A linked worktree's `.git` is a file naming its git dir.
      */
     fun head(dir: Path): Head? {
-        if (!dir.exists()) return null
-        val dotGit = generateSequence(dir.toAbsolutePath()) { it.parent }.map { it.resolve(".git") }.firstOrNull { it.exists() } ?: return null
-        val gitDir = if (dotGit.isDirectory()) dotGit else dotGit.readText().trim().let {
-            check(it.startsWith(GITDIR)) { "$dotGit does not name a git dir: $it" }
-            dotGit.parent.resolve(it.removePrefix(GITDIR))
-        }
-        val head = gitDir.resolve("HEAD").readText().trim()
+        val dotGit = dotGit(dir) ?: return null
+        val head = gitDirOf(dotGit).resolve("HEAD").readText().trim()
         return Head(dotGit.parent, if (head.startsWith(BRANCH_REF)) head.removePrefix(BRANCH_REF) else null)
+    }
+
+    /** The `.git` of the work tree [dir] lies in; null as for [head]. */
+    private fun dotGit(dir: Path): Path? =
+        if (!dir.exists()) null else generateSequence(dir.toAbsolutePath()) { it.parent }.map { it.resolve(".git") }.firstOrNull { it.exists() }
+
+    /**
+     * The git dir of the work tree [dir] lies in and its common dir, which holds the refs: the git dir itself in a main
+     * checkout, the one its `commondir` names in a linked worktree. Read from files; null as for [head].
+     */
+    fun gitDirs(dir: Path): Pair<Path, Path>? {
+        val gitDir = gitDirOf(dotGit(dir) ?: return null)
+        val common = gitDir.resolve("commondir").takeIf { it.exists() }?.let { gitDir.resolve(it.readText().trim()).normalize() }
+        return gitDir to (common ?: gitDir)
+    }
+
+    /** The git dir of a `.git`: itself, or the one a linked worktree's `.git` file names. */
+    private fun gitDirOf(dotGit: Path): Path = if (dotGit.isDirectory()) dotGit else dotGit.readText().trim().let {
+        check(it.startsWith(GITDIR)) { "$dotGit does not name a git dir: $it" }
+        dotGit.parent.resolve(it.removePrefix(GITDIR))
+    }
+
+    /**
+     * The main checkout of the work tree root [dir], as [mainRoot] gives it but read from the files git keeps, so callable on
+     * the EDT: [dir] itself, or for a linked worktree the parent of the common dir its git dir's `commondir` names.
+     */
+    fun mainCheckout(dir: Path): Path {
+        val gitDir = gitDirOf(dir.resolve(".git"))
+        if (gitDir == dir.resolve(".git")) return dir
+        return gitDir.resolve(gitDir.resolve("commondir").readText().trim()).normalize().parent
     }
 
     /** The branch [head] reads; null outside a repository and on a detached HEAD. */
@@ -204,6 +229,46 @@ object Git {
     fun uncommitted(root: Path): Set<Path> =
         nulSeparated(run(root, "--no-optional-locks", "status", "--porcelain", "-z", "--untracked-files=all", "--no-renames"))
             .map { root.resolve(it.substring(3)).normalize() }.toSet()
+
+    /**
+     * Old-side line ranges, by repository-relative path, of `git diff -U0 <from>` (work tree included); a pure insertion
+     * after line a is a..a. Null when [from] is no commit or not an ancestor of HEAD, as after a rebase, whose diff
+     * would mix in the changes of the branch's base.
+     */
+    fun changedLines(root: Path, from: String): Map<String, List<IntRange>>? {
+        if (!isCommit(root, from) || !isAncestor(root, from, "HEAD")) return null
+        val result = mutableMapOf<String, MutableList<IntRange>>()
+        var file: String? = null
+        var header = false
+        for (line in run(root, "-c", "core.quotepath=false", "--no-optional-locks", "diff", "-U0", "--no-renames", "--no-color", "--no-prefix", from).lines()) {
+            // Only the lines between `diff --git` and the first hunk are headers; a removed line may itself read `--- x`.
+            if (line.startsWith("diff --git ")) { header = true; file = null }
+            else if (header && line.startsWith("--- ")) file = headerPath(line)
+            else if (header && line.startsWith("+++ ")) { if (file == null) file = headerPath(line) }
+            else HUNK.matchEntire(line)?.let { m ->
+                header = false
+                val a = m.groupValues[1].toInt()
+                val b = m.groupValues[2].ifEmpty { "1" }.toInt()
+                result.getOrPut(checkNotNull(file) { "hunk before a file in git diff" }) { mutableListOf() }.add(a..maxOf(a, a + b - 1))
+            }
+        }
+        return result
+    }
+
+    /** The path of a `---`/`+++` header [line]: git ends a name with a space by a TAB and still quotes one with `"` or control characters. */
+    internal fun headerPath(line: String): String? {
+        check(line[4] != '"') { "git quoted a path in diff header: $line" }
+        return line.substring(4).removeSuffix("\t").takeIf { it != "/dev/null" }
+    }
+
+    private val HUNK = Regex("""@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@.*""")
+
+    /**
+     * Commits HEAD has and [from] lacks; null when [from] is no commit or not an ancestor of HEAD, as after a rebase, which
+     * keeps the old commit in the reflog but out of the history.
+     */
+    fun commitsBetween(root: Path, from: String): Int? =
+        if (isCommit(root, from) && isAncestor(root, from, "HEAD")) run(root, "--no-optional-locks", "rev-list", "--count", "$from..HEAD").trim().toInt() else null
 
     private fun isCommit(root: Path, ref: String) = run(root, "rev-parse", "--verify", "-q", "$ref^{commit}", ok = setOf(0, 1)).isNotBlank()
 
@@ -274,9 +339,7 @@ object Git {
     fun addWorktree(mainRoot: Path, path: Path, pick: String, fallback: String, inUse: (Path) -> Boolean) {
         val isLocal = isBranch(mainRoot, pick)
         val local = if (isLocal) pick else pick.removePrefix(run(mainRoot, "remote").lines().filter { it.isNotEmpty() }.single { pick.startsWith("$it/") } + "/")
-        // A worktree whose directory is gone still holds its branch until pruned.
-        run(mainRoot, "worktree", "prune")
-        val worktrees = parseWorktrees(run(mainRoot, "worktree", "list", "--porcelain"))
+        val worktrees = worktrees(mainRoot)
         val holder = worktrees.indexOfFirst { it.branch == local }
         if (holder != -1) {
             val tree = worktrees[holder]
@@ -286,6 +349,12 @@ object Git {
         }
         if (isBranch(mainRoot, local)) run(mainRoot, "worktree", "add", path.toString(), local)
         else run(mainRoot, "worktree", "add", "--track", "-b", local, path.toString(), pick)
+    }
+
+    /** The worktrees of the repository of [mainRoot], the main checkout first, after pruning those whose directory is gone (which still hold their branch until pruned). */
+    fun worktrees(mainRoot: Path): List<Worktree> {
+        run(mainRoot, "worktree", "prune")
+        return parseWorktrees(run(mainRoot, "worktree", "list", "--porcelain"))
     }
 
     private fun isBranch(dir: Path, name: String) = run(dir, "rev-parse", "--verify", "-q", "refs/heads/$name", ok = setOf(0, 1)).isNotBlank()

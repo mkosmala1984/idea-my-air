@@ -22,6 +22,8 @@ import dev.myair.folders.Folder
 import dev.myair.folders.FolderChanges
 import dev.myair.folders.PlanChanges
 import dev.myair.folders.SessionFolders
+import dev.myair.review.ReviewService
+import dev.myair.review.managedReviewFolder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.planview.PlanEditor
 import dev.myair.planview.PlanFiles
@@ -262,7 +264,7 @@ class FoldersMcpToolset : McpToolset {
             val scanned = service.sessions.firstOrNull { it.id == session }
             val refusal = managerRefusal(
                 files.store.read(), folder.id, session, scanned != null || running != null, service.live[session],
-                running != null, running != null && terminals.starting(running), folders::pathOf,
+                running != null, running != null && terminals.starting(running), managedReviewFolder(ReviewService.getInstance().reviews, session)?.let(folders::pathOf), folders::pathOf,
             )
             require(refusal == null) { refusal!! }
             val manager = PlanManager(session, running?.cwd ?: scanned!!.cwd, running?.project ?: scanned!!.project)
