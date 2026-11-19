@@ -21,15 +21,16 @@ private val PIPES = Executors.newCachedThreadPool { Thread(it, "claude stdin").a
 fun runClaude(args: List<String>, dir: Path, input: String, timeout: Duration): String {
     val out = File.createTempFile("claude", ".out")
     val err = File.createTempFile("claude", ".err")
-    val process = ProcessBuilder(args).directory(dir.toFile()).redirectOutput(out).redirectError(err).start()
+    var process: Process? = null
     try {
+        process = ProcessBuilder(args).directory(dir.toFile()).redirectOutput(out).redirectError(err).start()
         val stdin = CompletableFuture.runAsync({ process.outputStream.use { it.write(input.toByteArray()) } }, PIPES)
         check(process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) { "claude did not answer within $timeout" }
         check(process.exitValue() == 0) { "claude failed (exit ${process.exitValue()}): ${err.readText().trim()} ${out.readText().trim()}".trim() }
         stdin.get()
         return out.readText()
     } finally {
-        if (process.isAlive) {
+        if (process?.isAlive == true) {
             process.descendants().forEach { it.destroyForcibly() }
             process.destroyForcibly()
         }

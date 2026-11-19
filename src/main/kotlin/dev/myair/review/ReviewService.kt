@@ -115,7 +115,24 @@ fun readGit(review: BranchReview): ReviewGit = try {
         // `git config --get` exits 1 for a key not set: a repository without `origin`.
         Git.run(state.root, "config", "--get", "remote.origin.url", ok = setOf(0, 1)).trim().ifEmpty { null }, null)
 } catch (e: Exception) {
-    ReviewGit(null, null, null, emptyMap(), null, "${e.javaClass.simpleName}: ${e.message}")
+    failed(e)
+}
+
+private fun failed(e: Exception) = ReviewGit(null, null, null, emptyMap(), null, "${e.javaClass.simpleName}: ${e.message}")
+
+/**
+ * The stamp and git facts of each of [reviews]: read again when its stamp is not that of [lastStamps], else [lastFacts].
+ * A review whose stamp cannot be taken has no stamp, so it is due on every call, and its failure is its [ReviewGit.error];
+ * the others are not affected.
+ */
+fun readGits(reviews: Map<String, BranchReview>, reviewFile: (String) -> Path, lastStamps: Map<String, GitStamp>, lastFacts: Map<String, ReviewGit>): Pair<Map<String, GitStamp>, Map<String, ReviewGit>> {
+    val stamps = HashMap<String, GitStamp>()
+    val facts = reviews.mapValues { (id, review) ->
+        val stamp = try { gitStamp(review, reviewFile(id)) } catch (e: Exception) { return@mapValues failed(e) }
+        stamps[id] = stamp
+        if (lastStamps[id] != stamp) readGit(review) else lastFacts.getValue(id)
+    }
+    return stamps to facts
 }
 
 /**
@@ -257,9 +274,7 @@ class ReviewService : Disposable {
             // Nobody reads the Future, so an exception would vanish with it; log it as an IDE error instead.
             val (read, git) = try {
                 val read = files.readAll()
-                val now = watching.mapNotNull { id -> read[id]?.getOrNull()?.let { id to gitStamp(it, files.file(id)) } }.toMap()
-                val due = gitDue(now, lastStamps)
-                read to now.mapValues { (id, stamp) -> stamp to if (id in due) readGit(read.getValue(id).getOrThrow()) else lastFacts.getValue(id) }
+                read to readGits(watching.mapNotNull { id -> read[id]?.getOrNull()?.let { id to it } }.toMap(), files::file, lastStamps, lastFacts)
             } catch (e: Throwable) {
                 thisLogger().error("Review refresh failed", e)
                 return@execute
@@ -267,8 +282,8 @@ class ReviewService : Disposable {
             ApplicationManager.getApplication().invokeLater {
                 if (generation != requested) return@invokeLater
                 all = read
-                facts = git.mapValues { it.value.second }
-                stamps = git.mapValues { it.value.first }
+                stamps = git.first
+                facts = git.second
                 sync()
                 changed()
             }
