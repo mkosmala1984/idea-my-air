@@ -20,4 +20,6 @@ The review tab and New Review. A review folder opens as an editor tab, the revie
 - `plugin.xml` names `ReviewFileSystem` (key `myair-review`), `ReviewEditorProvider`, `ReviewFileIconProvider` (`order="first"`) and `ReviewTabTitleProvider`; a rename or move must update it.
 - `ReviewTabs.startManager` asserts the EDT. A new manager runs in the review's work tree with the main checkout as its project; a stored one keeps its directories. The manager is stored in `review.json` and filed in the review folder.
 - `startReview` writes `review.json` before the folder, so a failed structure write leaves an ignored file rather than an empty folder, and checks that the place did not change meanwhile.
-- A review is never started inside a review (`reviewParent`).
+- A review is never started inside a review (`reviewParent`); `ClaudeSessionsService.updateFolders` refuses any structure write that puts a review folder in a review or plan folder.
+- An open `ReviewEditor` watches its review's git (`ReviewService.watchGit`): only watched reviews have git facts.
+- A run's status shows as `RunStatus.text` (needs input, stopped without report); Fix with Claude accepts a finding only when open (`acceptIfOpen`); the reviewer's prompt names the folder by id.

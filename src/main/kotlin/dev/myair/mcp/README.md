@@ -18,7 +18,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - `my_air_history_restore(name)`
 - `BriefMcpToolset.kt`, `class BriefMcpToolset : McpToolset`:
   - `my_air_set_brief(goal, tasks, plan_task, folder, title)`
-- `ReviewMcpToolset.kt`, `class ReviewMcpToolset : McpToolset`:
+- `ReviewMcpToolset.kt`, `class ReviewMcpToolset : McpToolset`, each tool naming the review folder by its id, else its path; get and apply read git on each call, off the EDT:
   - `my_air_review_get(folder)`
   - `my_air_review_apply(folder, changes)`
   - `my_air_review_report(folder, run, commit, findings, questions)`
@@ -63,7 +63,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
 - `requireTask` lists the open tasks when an id is unknown.
 - `planJson` and `plansJson` require a plan folder (`checkNotNull(folder.plan)`). Tasks are listed with their sessions, newest first. `manager` is the plan's entry in `plan-managers.json`, null without one. The plan JSON also gives `constraints`, `decisions`, `requirements` (each with its derived `status`) and `review` with its blockers; `my_air_plan_apply` takes the ops of `PlanChanges`, among them `add_requirement` and `add_evidence`. `my_air_plan_get(dir)` also lists plan folders whose `workdir` holds `dir` (`SessionFolders.planFoldersOf`).
 - `managerSetJson` adds a `hint` (set the plan's `workdir`) only when the manager's cwd lies outside the plan's `dirs` and `workdir`.
-- `my_air_plan_set_manager` refuses, before changing anything, what `managerRefusal` (`planview/PlanFiles.kt`) names: a session managing a plan already, unknown (neither scanned nor running here), run by a background job, running outside this IDE, or still starting here.
+- `my_air_plan_set_manager` refuses, before changing anything, what `managerRefusal` (`planview/PlanFiles.kt`) names: a session managing a plan already, or a review, unknown (neither scanned nor running here), run by a background job, running outside this IDE, or still starting here.
 
 ## Side Effects
 

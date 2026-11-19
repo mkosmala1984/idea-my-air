@@ -17,7 +17,7 @@ Claude Sessions panel:
 - Tree model (`SessionTree.kt`):
   - Builders: `projectsTree`, `foldersTree`.
   - Row types: `ChangedFile`, `WorkDirRow`, `AddedDir`, `BranchRow`, `BriefGroup`, `BriefGoal`, `BriefTaskRow`, `FilesGroup`, `MilestoneRow`, `PlanTaskRow`, `NoTask`, `UnfiledSessions`, `RecentSessions` (first in Folders mode; `RECENT_COUNT` = 10 by default, View Options offers `RECENT_COUNTS`), `WorktreesGroup`, `WorktreeRow`.
-  - Helpers: `inWorkTree`, `Urgency`/`urgencyOf`, `FolderSummary`/`folderSummary`, `groupSessions`, `targetFolder`, `nodeDir`, `nodeProject`, `openDir`, `Drop`/`dropChange`, `projectName`.
+  - Helpers: `inWorkTree`, `Urgency`/`urgencyOf`, `FolderSummary`/`folderSummary`, `groupSessions`, `targetFolder`, `nodeDir`, `nodeProject`, `openDir`, `Drop`/`dropChange(structure, reviews, dragged, path, childIndex)`, `projectName`.
 - Rendering:
   - `SessionRenderers.kt`: `SessionRenderer`, `Density` (COMPACT, LOOSE), `briefCount`, `BriefTask.line`, `PlanStatus.icon`, `statusText`, `tooltipLines`, `sessionTooltip`, `titleAttributes`.
   - `SessionTrailer.kt`: `SessionTrailer` paints the age, the hover buttons (`TrailerButton`) and group summaries; `shortAge`.
@@ -49,7 +49,7 @@ Session Context panel:
 - Drops (`dropChange`):
   - Refused into `RecentSessions` and `WorktreesGroup`, which are views only.
   - A session is refused on the root, under a `MilestoneRow` or `PlanTaskRow`, and when any dragged session has a task.
-  - A folder is refused when the target is inside the folder itself, when its name is already taken under the target, or when the target cannot hold it (`canHold`).
+  - A folder is refused when the target is inside the folder itself, when its name is already taken under the target, when the target cannot hold it (`canHold`), or when the move puts a plan in a review folder or a review folder in a review or plan folder (`placementProblem` over the `reviews` passed in, the ids of every `review.json` on disk).
   - A milestone or task moves only within its own plan.
   - A drop under `UnfiledSessions` unfiles the session.
 - `FolderDrop` drags either sessions alone or exactly one folder, project, milestone or task. It refuses every drop while `canEdit()` is false (not in Folders mode, or `foldersError` is set).
