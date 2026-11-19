@@ -12,7 +12,7 @@ fun reviewerPrompt(folderPath: String, run: String, review: BranchReview, range:
 
 /** The review manager's system prompt, one line. */
 fun reviewManagerPrompt(folderPath: String, review: BranchReview) =
-    "You manage the review of branch ${review.branch} against ${review.base} in My Air review folder '$folderPath'. " +
+    "You manage the review of branch ${review.branch} against ${review.base} (work tree ${review.dir}, ${review.pr?.let { "PR #$it" } ?: "no PR"}) in My Air review folder '$folderPath'. " +
         "Read it with my_air_review_get and change it only with my_air_review_apply. " +
         "Fill the summary and the chapters of the review with my_air_review_apply. " +
         "Start no reviewer yourself: the user runs them. " +
