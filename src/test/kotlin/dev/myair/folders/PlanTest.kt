@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.nio.file.Path
 import java.time.Instant
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -65,6 +66,36 @@ class PlanTest {
         assertEquals(listOf("M4"), closed.deletePlanItem("M1").plan().milestones.map { it.id })
         assertThrows<IllegalArgumentException> { structure.removePlan("rtm") }
         assertNull(structure.deletePlanItem("T2").deletePlanItem("T3").deletePlanItem("M1").deletePlanItem("M4").removePlan("rtm").find("rtm")!!.plan)
+    }
+
+    @Test
+    fun `a plan with constraints, decisions, requirements or a review is not removed`() {
+        val empty = structure.deletePlanItem("T2").deletePlanItem("T3").deletePlanItem("M1").deletePlanItem("M4")
+        assertTrue(empty.plan().removable)
+        listOf(
+            empty.setConstraints("rtm", "c"),
+            empty.addDecision("rtm", "d", LocalDate.of(2026, 11, 18)),
+            empty.addRequirement("rtm", "r", EvalKind.CODE),
+            empty.setReview("rtm", ReviewStatus.NOT_DONE, null, LocalDate.of(2026, 11, 18)),
+        ).forEach { folders ->
+            assertFalse(folders.plan().removable)
+            val error = assertThrows<IllegalArgumentException> { folders.removePlan("rtm") }
+            assertTrue("not empty" in error.message!!, error.message)
+        }
+    }
+
+    @Test
+    fun `requirement and blocker texts are one line, constraints not blank and a requirement's tasks distinct`() {
+        val milestones = listOf(Milestone("M1", "m", tasks = listOf(PlanTask("T2", "t"))))
+        fun review(text: String) = Review(ReviewStatus.DONE, null, "2026-11-18", listOf(Blocker("B1", text)))
+        Plan(milestones = milestones, constraints = "c", requirements = listOf(Requirement("R1", "r", EvalKind.CODE, listOf("T2"))), review = review("b"), next = mapOf("R" to 2, "B" to 2))
+        listOf(
+            { Plan(requirements = listOf(Requirement("R1", "a\nb", EvalKind.CODE)), next = mapOf("R" to 2)) },
+            { Plan(requirements = listOf(Requirement("R1", "a\rb", EvalKind.CODE)), next = mapOf("R" to 2)) },
+            { Plan(review = review("a\nb"), next = mapOf("B" to 2)) },
+            { Plan(constraints = " ") },
+            { Plan(milestones = milestones, requirements = listOf(Requirement("R1", "r", EvalKind.CODE, listOf("T2", "T2"))), next = mapOf("R" to 2)) },
+        ).forEach { assertThrows<IllegalArgumentException> { it() } }
     }
 
     @Test
@@ -160,5 +191,21 @@ class PlanTest {
             """{"version":3,"folders":[]}""",
             """{"version":2,"nextId":1,"folders":[]}""",
         ).forEach { text -> assertThrows<Exception>(text) { SessionFolders.parse(text) } }
+    }
+
+    @Test
+    fun `a requirement is unproven without evidence, not done with any not done item, else proven`() {
+        assertEquals(RequirementStatus.UNPROVEN, Requirement("R1", "x", EvalKind.CODE).status)
+        assertEquals(RequirementStatus.PROVEN, Requirement("R1", "x", EvalKind.CODE, evidence = listOf("commit abc1234")).status)
+        assertEquals(RequirementStatus.NOT_DONE, Requirement("R1", "x", EvalKind.CODE, evidence = listOf("commit abc1234", "not done: sandbox walk not run")).status)
+    }
+
+    @Test
+    fun `evidence must be one of the four formats exactly`() {
+        listOf("test PlanFilesTest › a plan without a manager", "commit 4c91271d91", "checked: opened the plan", "not done: no sandbox").forEach(::requireEvidence)
+        listOf("commit ABC1234", "commit abc", "checked:x", "checked: x ", "test PlanFilesTest", "commit abc1234\n", "commit abc1234 ").forEach {
+            val e = assertThrows<IllegalArgumentException>(it) { requireEvidence(it) }
+            assertTrue("not done: <text>" in e.message!!, e.message)
+        }
     }
 }

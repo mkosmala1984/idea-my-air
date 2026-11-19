@@ -121,7 +121,7 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
         return confirmed(project, closing, working.map { it.title }.toList())
     }
 
-    fun canRemovePlan() = selectedFolder()?.plan?.milestones?.isEmpty() == true
+    fun canRemovePlan() = selectedFolder()?.plan?.removable == true
 
     /** Binds a directory picked in a chooser to the selected folder, unless it is bound already. */
     fun bindDirectory() {

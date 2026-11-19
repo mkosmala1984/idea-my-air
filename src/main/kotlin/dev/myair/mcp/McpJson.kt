@@ -112,6 +112,17 @@ private fun SessionFolders.planMap(folder: Folder, sessions: List<ClaudeSession>
         "workdir" to folder.workdir,
         "manager" to managers.byFolder[folder.id]?.session,
         "description" to plan.description,
+        "constraints" to plan.constraints,
+        "decisions" to plan.decisions.map { linkedMapOf("id" to it.id, "date" to it.date, "text" to it.text, "session" to it.session) },
+        "requirements" to plan.requirements.map {
+            linkedMapOf("id" to it.id, "text" to it.text, "eval" to it.eval.label, "tasks" to it.tasks, "evidence" to it.evidence, "status" to it.status.name.lowercase())
+        },
+        "review" to plan.review?.let { r ->
+            linkedMapOf(
+                "status" to r.status.label, "commit" to r.commit, "date" to r.date,
+                "blockers" to r.blockers.map { linkedMapOf("id" to it.id, "text" to it.text, "resolved" to it.resolved) },
+            )
+        },
         "milestones" to plan.milestones.map { m ->
             linkedMapOf(
                 "id" to m.id, "title" to m.title, "description" to m.description, "status" to if (m.done) "done" else "open", "progress" to progress(m.tasks),

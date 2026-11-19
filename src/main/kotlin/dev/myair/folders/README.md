@@ -13,18 +13,19 @@ The user's folder tree of Folders mode and the plans of plan folders, as one imm
   - `data class SessionFolders(folders, nextId, unfiled)`:
     - Queries: `all`, `find`, `folderOf`, `projectFolder(cwd)`, `startFolder(id)`, `ancestry`, `planFolderAt`, `planFoldersOf(dir)`, `findTask`, `findMilestone`, `taskOf(session)`, `placeOf(session)`, `findByPath`, `pathOf`, `children`, `nameTaken`, `canAddPlan`, `canHold`, `sessionCount`.
     - Folder edits: `createFolder`, `rename`, `delete`, `moveFolder`, `assign`, `unfile`, `carryOver(from, to, scanned)`, `bind`, `unbind`, `setWorkdir`, `briefFolder(path, newId)`.
-    - Plan edits: `addPlan`, `removePlan`, `setDescription`, `addMilestone`, `addTask`, `editMilestone`, `editTask`, `moveMilestone`, `moveTask`, `deletePlanItem`.
+    - Plan edits: `addPlan`, `removePlan`, `setDescription`, `addMilestone`, `addTask`, `editMilestone`, `editTask`, `moveMilestone`, `moveTask`, `deletePlanItem`, `setConstraints`, `addDecision`, `editDecision`, `addRequirement`, `editRequirement`, `setReview`, `addBlocker`, `editBlocker`, `deleteEntry`.
     - Storage: `restore(snapshot)`, `toJson()`, `SessionFolders.parse(text)`.
 - `Plan.kt`
   - `enum PlanStatus`: `PENDING`, `IN_PROGRESS`, `WAITING`, `BLOCKED`, `DONE`, `CANCELED`, serialized as lowercase `label`. It also has `closed` and `PlanStatus.of(label)`.
-  - `data class PlanTask`, `data class Milestone` and `data class Plan`, with `tasks()`.
+  - `data class PlanTask`, `data class Milestone` and `data class Plan` (description, milestones, `constraints`, `decisions`, `requirements`, `review`, `next`), with `tasks()` and `usesVersion5`.
+  - `Requirement` (`status` derived from its evidence: `RequirementStatus` `UNPROVEN`/`NOT_DONE`/`PROVEN`), `EvalKind`, `Decision`, `Review` with `ReviewStatus`, `Blocker`, `requireEvidence(item)` and `Plan.ENTRY_PREFIXES` (`R`, `D`, `B`).
   - `fun progress(tasks)`: `"done/not canceled"`.
 - `FolderChanges.kt`
   - `object FolderChanges`, with `apply(structure, changes, scanned, projects, newId)`.
   - Ops: `create`, `add_plan`, `bind`, `unbind`, `set_workdir`, `rename`, `move`, `delete`, `assign`.
 - `PlanChanges.kt`
-  - `object PlanChanges`, with `apply(structure, folderId, changes)`.
-  - Ops: `set_description`, `add_milestone`, `add_task`, `update`, `move`, `delete`.
+  - `object PlanChanges`, with `apply(structure, folderId, changes, today)`.
+  - Ops: `set_description`, `add_milestone`, `add_task`, `set_constraints`, `add_decision`, `add_requirement`, `add_evidence`, `set_review`, `add_blocker`, `update`, `move`, `delete`.
 - `StructureStore.kt`
   - `enum ChangeSource`: `UI`, `AUTO`, `MCP`, `BRIEF`, `RESTORE`, written as a lowercase `label`.
   - `class StructureStore(file, history)`, with `read()` and `@Synchronized update(source, op)`.
@@ -45,12 +46,14 @@ These checks throw rather than repair:
 - No plan folder holds another plan folder.
 - Milestone and task ids are unique across the file. They have the form `M<n>` and `T<n>` with `n < nextId`.
 - Titles are non-blank, and a task's `next` is never blank.
+- Plan entries (`Plan.init`): `next` keys are `R`, `D` or `B` with values above 1; requirement, decision and blocker ids are unique within the plan and below their prefix's `next`; texts are non-blank; a requirement's tasks are tasks of its plan and its evidence items match `requireEvidence`; dates are ISO local dates; a review commit is not blank.
 
 ### Edits
 
 - Every `SessionFolders` operation that names a folder, milestone or task that is gone returns `this` unchanged, since another IDE may have deleted it. Every other broken rule throws.
 - `addMilestone` and `addTask` take their id from `nextId` and increment it, so an id is never reused. `restore` keeps the higher `nextId` of the two structures.
-- `deletePlanItem` deletes a milestone only when all its tasks are `closed`. `removePlan` removes only a plan without milestones. `moveTask` stays within one plan.
+- `addRequirement`, `addDecision` and `addBlocker` take their id from the plan's `next` (`R`/`D`/`B` per plan), so it is never reused within the plan, even after a delete.
+- `deletePlanItem` deletes a milestone only when all its tasks are `closed`. `removePlan` removes only a `removable` plan: no milestones, constraints, decisions, requirements or review. `moveTask` stays within one plan.
 - `SessionFolders.moveFolder` counts `index` before the move. `FolderChanges` `move` takes the final position and converts it.
 
 ### Placing sessions
@@ -70,8 +73,9 @@ These checks throw rather than repair:
   - An unknown op, an unknown field (the `FIELDS` whitelist), path, session, directory or id throws an `IllegalArgumentException` that names the change.
   - Nothing is written until the whole list has been applied, so a list lands entirely or not at all.
   - `PlanChanges` addresses only milestones and tasks of the plan of `folderId`.
-- `SessionFolders.parse` reads versions 1 to 4 and throws on an unknown version or field.
-- `toJson` always writes version 4 (`VERSION`). `description`, `next` and `workdir` appear in the file only when set.
+- `PlanChanges` `update` accepts the fields of its id's prefix only (`M`/`T`: title, description, status, next; `R`: text, eval, tasks, evidence; `D`: text; `B`: text, resolved); `add_evidence` appends one item; a milestone's status is `open` or `done`.
+- `SessionFolders.parse` reads versions 1 to 5 and throws on an unknown version or field.
+- `toJson` writes version 5 while a plan holds a new field (`Plan.usesVersion5`: constraints, decisions, requirements, review or a non-empty `next`), else version 4. `description`, `next` and `workdir` appear in the file only when set.
 
 ## Side Effects
 
