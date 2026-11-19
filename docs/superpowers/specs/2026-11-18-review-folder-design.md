@@ -7,7 +7,7 @@
 - **Decided with you:** a review linked to a plan mirrors its blockers into the plan's `review` (spec `2026-11-18-plan-ideal-state-design.md`); reviewers are real sessions, not `claude -p`; Bitbucket only, through the manager's Atlassian MCP, never from the plugin.
 - **Decided here, check it:** review data is not in `structure.json`, so the file's version does not move and does not collide with version 5 of the plan spec; a review folder and its data are joined by the folder id.
 - **Needs your input:** which extras stay in scope: reviewer profiles (R18–R20), review of new commits only (R27–R29) and reviewer precision (R30) are in; editor gutter marks, PR comment replies, dashboard and taskbar are out. Say if you want any moved.
-- **Risks:** R31 waits for the plan ideal-state spec to be built; whether `claude --bg` takes `--session-id`, `--append-system-prompt` and a first prompt must be checked first (task 1), else reviewers fall back to tabs, which the design does not cover.
+- **Risks:** whether `claude --bg` takes `--session-id`, `--append-system-prompt` and a first prompt must be checked first (task 1), else reviewers fall back to tabs, which the design does not cover.
 - **Out of scope:** the plugin calling Bitbucket, reading PR comments back, gutter annotations, tokens per reviewer, a settings editor for profiles.
 
 ## Requirements
@@ -96,7 +96,7 @@ data class Finding(val id: String, val file: String, val category: String, val r
 data class Run(val id: String, val reviewer: String, val session: String, val job: String, val range: String, val started: String, val reported: String? = null)
 data class Chapter(val title: String, val text: String, val files: List<String>)
 data class Question(val id: String, val text: String, val reviewer: String?, val resolved: Boolean = false)
-data class Review(val branch: String, val base: String, val dir: Path, val pr: Int?, val plan: String?, val manager: PlanManager?,
+data class BranchReview(val branch: String, val base: String, val dir: Path, val pr: Int?, val plan: String?, val manager: PlanManager?,
                   val summary: String?, val chapters: List<Chapter>, val runs: List<Run>, val findings: List<Finding>,
                   val questions: List<Question>, val next: Map<String, Int>)   // per prefix F/Q/W (run), next number
 ```
@@ -119,7 +119,7 @@ A finding's line and severity are its newest report's line and the highest repor
 
 ### Plan mirror (R31)
 
-`mirrorToPlan(review, plan): PlanChanges` (pure) yields `set_review` and `add_blocker`/`update` ops of the plan ideal-state spec; the mapping finding id → blocker id is kept in `review.json` as `blockers: {"F3": "B2"}`, written only when not empty. Applied through `updateFolders` after every review change whose blocker set or run status changed. Built only after that spec's ops exist.
+`mirrorToPlan(review, plan): PlanChanges` (pure) yields `set_review` and `add_blocker`/`update` ops of the plan ideal-state spec; the mapping finding id → blocker id is kept in `review.json` as `blockers: {"F3": "B2"}`, written only when not empty. Applied through `updateFolders` after every review change whose blocker set or run status changed. Those ops are on `main` since `8a872ef` (`PlanChanges`: `set_review`, `add_blocker`, `update` on a `B` id). The review's model is named `BranchReview`, since `folders.Review` is the plan's.
 
 ### View (`reviewview/`)
 
