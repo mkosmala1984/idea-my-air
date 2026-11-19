@@ -234,7 +234,7 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
   - `fun rangeFor(review: BranchReview, mergeBase: String, head: String, newOnly: Boolean): String` (`<reviewed>..<head>` when `newOnly` and a reviewed commit exists, else `<mergeBase>..<head>`)
   - `object Reviewers { fun start(dir: Path, args: List<String>): String }` — runs `claude` with `args` in `dir` off the EDT, 30 s timeout, non-zero exit throws with stderr, returns `parseJobId(stdout)`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```kotlin
 @Test fun `profiles parse and an unknown key throws`()
@@ -246,8 +246,8 @@ stderr: `warning: --bg manages the session id; ignoring --session-id (use --resu
 @Test fun `parseJobId reads the id claude prints and throws on other output`()   // literal from Task 1
 ```
 
-- [ ] **Step 2–4:** run → FAIL, implement, run → PASS, full tests PASS.
-- [ ] **Step 5: Commit** `Review profiles, prompts and reviewer start`.
+- [x] **Step 2–4:** run → FAIL, implement, run → PASS, full tests PASS.
+- [x] **Step 5: Commit** `Review profiles, prompts and reviewer start`.
 
 ---
 
