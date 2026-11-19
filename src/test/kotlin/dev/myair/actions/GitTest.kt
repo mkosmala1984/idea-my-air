@@ -519,4 +519,17 @@ class GitTest {
         names.forEach { repo.resolve(it).writeText("1\nx\n3\n") }
         assertEquals(names.associateWith { listOf(2..2) }, Git.changedLines(repo, base))
     }
+
+    @Test
+    fun `headerPath strips the TAB git adds after a name with a space and maps dev null to null`() {
+        assertEquals("a b.txt", Git.headerPath("--- a b.txt\t"))
+        assertEquals("a.txt", Git.headerPath("+++ a.txt"))
+        assertEquals(null, Git.headerPath("--- /dev/null"))
+    }
+
+    @Test
+    fun `headerPath throws on a quoted name, naming the whole header line`() {
+        val e = assertThrows<IllegalStateException> { Git.headerPath("+++ \"a\tb.txt\"") }
+        assertContains(e.message.orEmpty(), "+++ \"a\tb.txt\"")
+    }
 }

@@ -217,8 +217,8 @@ object Git {
         for (line in run(root, "-c", "core.quotepath=false", "--no-optional-locks", "diff", "-U0", "--no-renames", "--no-color", "--no-prefix", from).lines()) {
             // Only the lines between `diff --git` and the first hunk are headers; a removed line may itself read `--- x`.
             if (line.startsWith("diff --git ")) { header = true; file = null }
-            else if (header && line.startsWith("--- ")) file = headerPath(line.removePrefix("--- "))
-            else if (header && line.startsWith("+++ ")) { if (file == null) file = headerPath(line.removePrefix("+++ ")) }
+            else if (header && line.startsWith("--- ")) file = headerPath(line)
+            else if (header && line.startsWith("+++ ")) { if (file == null) file = headerPath(line) }
             else HUNK.matchEntire(line)?.let { m ->
                 header = false
                 val a = m.groupValues[1].toInt()
@@ -229,10 +229,10 @@ object Git {
         return result
     }
 
-    /** The path of a `---`/`+++` header: git ends a name with a space by a TAB and still quotes one with `"` or control characters. */
-    private fun headerPath(name: String): String? {
-        check(!name.startsWith("\"")) { "git quoted a path in diff header: $name" }
-        return name.removeSuffix("\t").takeIf { it != "/dev/null" }
+    /** The path of a `---`/`+++` header [line]: git ends a name with a space by a TAB and still quotes one with `"` or control characters. */
+    internal fun headerPath(line: String): String? {
+        check(line[4] != '"') { "git quoted a path in diff header: $line" }
+        return line.substring(4).removeSuffix("\t").takeIf { it != "/dev/null" }
     }
 
     private val HUNK = Regex("""@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@.*""")
