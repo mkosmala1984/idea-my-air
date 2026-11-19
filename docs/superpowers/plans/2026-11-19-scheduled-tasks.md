@@ -2,13 +2,13 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
-| 6 | | |
-| 7 | | |
+| 1 | done | `44c2581` |
+| 2 | done | `16c2e86` |
+| 3 | done | `8f0d081` |
+| 4 | done | `591819d` |
+| 5 | done | `e8b25c4` |
+| 6 | done | `4ae7449` |
+| 7 | done | `a792e23` |
 
 ## TL;DR
 
@@ -58,16 +58,16 @@
 **Interfaces:**
 - Produces: `SessionTerminals.startDetached(file: ClaudeSessionVirtualFile, project: Project)` (EDT): starts `file`'s process with no pane, `owner = null`, `detachedAt = Instant.now()`, then `TabsSync.getInstance().publish()`. Asserts no runtime exists for `file` yet.
 
-- [ ] **Step 1:** Refactor `start(file, pane: SessionPane?, project, deferUntilUiShown: Boolean)`; `attach` passes its pane and `true`, `startDetached` passes `null` and `false` to `TransferableTerminalSessionFactory.create(..., deferSessionStartUntilUiShown = ...)`. With `pane == null` the runtime starts detached (`detachedAt` set).
-- [ ] **Step 2:** Temporary trigger for the spike: an internal action (not committed) that builds a `ClaudeSessionVirtualFile(UUID, cwd = project base, project = project base, NEW_SESSION_TITLE, listOf("--session-id", id, "--", "say hi and stop"))` and calls `startDetached`.
-- [ ] **Step 3:** Run the sandbox (`env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daemon runIde`), trigger it and check, writing each answer into this task as a line:
+- [x] **Step 1:** Refactor `start(file, pane: SessionPane?, project, deferUntilUiShown: Boolean)`; `attach` passes its pane and `true`, `startDetached` passes `null` and `false` to `TransferableTerminalSessionFactory.create(..., deferSessionStartUntilUiShown = ...)`. With `pane == null` the runtime starts detached (`detachedAt` set).
+- [x] **Step 2:** Temporary trigger for the spike: an internal action (not committed) that builds a `ClaudeSessionVirtualFile(UUID, cwd = project base, project = project base, NEW_SESSION_TITLE, listOf("--session-id", id, "--", "say hi and stop"))` and calls `startDetached`.
+- [x] **Step 3:** Run the sandbox (`env $(env | grep -o '^CLAUDE[A-Z_]*' | sed 's/^/-u /') ./gradlew --no-daemon runIde`), trigger it and check, writing each answer into this task as a line:
   - a `~/.claude/sessions/<pid>.json` appears with the session id and goes `busy` then `idle`;
   - the session shows in the pinned list with the working spinner, then idle;
   - opening it from the pinned list binds the same process in a tab (no second `claude`, text readable, columns follow the tab);
   - 60 s after idle with no tab it ends (`retireIdle`).
   If the process does not start without a view: keep a hidden view in the runtime (`session.view` held, never added to a component), retry, and note the result. Stop and report if neither works.
-- [ ] **Step 4:** Remove the temporary action, `./gradlew test buildPlugin` passes.
-- [ ] **Step 5:** Commit `SessionTerminals: start a session's process without a tab (startDetached)`.
+- [x] **Step 4:** Remove the temporary action, `./gradlew test buildPlugin` passes.
+- [x] **Step 5:** Commit `SessionTerminals: start a session's process without a tab (startDetached)`.
 
 ### Task 2: Task model and store
 
@@ -84,17 +84,17 @@
   - `fun parseScheduledTasks(json: String): List<ScheduledTask>`, `fun scheduledTasksJson(tasks: List<ScheduledTask>): String`. Format: `{"version":1,"tasks":[{"id","name","model","effort","project","addDirs","prompt","days":["MONDAY",…],"time":"08:00","enabled","allowedTools","folder","since":"<ISO instant>"}]}`; absent optional keys are null/empty; unknown keys, another `version`, a duplicate `id` throw.
   - `class ScheduledTaskStore(val file: Path)` with `read(): Result<List<ScheduledTask>>` cached by modification time and size as `PresetStore.read`, `write(tasks: List<ScheduledTask>)`; `companion object { val INSTANCE = ScheduledTaskStore(Homes.myAir.resolve("scheduled-tasks.json")) }`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `round trips every field through JSON` (one full task, one minimal).
   - `rejects an unknown key, another version and a duplicate id` (`assertThrows`).
   - `rejects a task without a prompt, with a worktree, with no days`.
   - `puts allowed tools before the preset flags and the prompt after --`: `assertEquals(listOf("--session-id","s1","--allowedTools","Read,Bash(git log:*)","--model","opus","--","triage"), …)`.
   - `an edit moves since only when the schedule changes or the task is enabled again`.
   - `read returns a failure naming a broken file and an empty list for a missing one`.
-- [ ] **Step 2:** `./gradlew test --tests dev.myair.schedule.ScheduledTasksTest` fails (unresolved).
-- [ ] **Step 3:** Implement `ScheduledTasks.kt` as above, parsing with Gson `JsonParser` like `parsePresets`.
-- [ ] **Step 4:** The tests pass.
-- [ ] **Step 5:** Commit `Scheduled tasks: model and ~/.my-air/scheduled-tasks.json store`.
+- [x] **Step 2:** `./gradlew test --tests dev.myair.schedule.ScheduledTasksTest` fails (unresolved).
+- [x] **Step 3:** Implement `ScheduledTasks.kt` as above, parsing with Gson `JsonParser` like `parsePresets`.
+- [x] **Step 4:** The tests pass.
+- [x] **Step 5:** Commit `Scheduled tasks: model and ~/.my-air/scheduled-tasks.json store`.
 
 ### Task 3: Slots
 
@@ -110,17 +110,17 @@
   - `fun nextSlot(schedule: Schedule, now: ZonedDateTime): ZonedDateTime` (the first slot `> now`)
   - `fun dueSlot(task: ScheduledTask, now: ZonedDateTime, claimed: (ZonedDateTime) -> Boolean): ZonedDateTime?`: `latestSlot` when `task.enabled`, slot `>= since`, `now - slot <= CATCH_UP` and not `claimed`; else null.
 
-- [ ] **Step 1: Write the failing tests** (zone `Europe/Warsaw`, schedule Mon–Fri 08:00):
+- [x] **Step 1: Write the failing tests** (zone `Europe/Warsaw`, schedule Mon–Fri 08:00):
   - `the latest slot of Tuesday 07:00 is Monday 08:00 and the next is Tuesday 08:00`.
   - `a slot runs within the catch-up window`: Monday 10:00 → Monday 08:00.
   - `a slot older than 12 hours does not catch up`: Tuesday 07:00 → null; Monday 07:00 after a weekend → null.
   - `a disabled task, a claimed slot and a slot before since never run`.
   - `editing the time to earlier today does not fire today's passed slot` (since = now 09:00, time 08:00 → null).
   - `a slot in the spring-forward gap runs once at the resolved instant` (2026-03-29 02:30 → 03:30 CEST).
-- [ ] **Step 2:** Tests fail.
-- [ ] **Step 3:** Implement with `ZonedDateTime.with(time)` per day back from `now.toLocalDate()`.
-- [ ] **Step 4:** Tests pass.
-- [ ] **Step 5:** Commit `Scheduled tasks: slots, next slot and 12 h catch-up`.
+- [x] **Step 2:** Tests fail.
+- [x] **Step 3:** Implement with `ZonedDateTime.with(time)` per day back from `now.toLocalDate()`.
+- [x] **Step 4:** Tests pass.
+- [x] **Step 5:** Commit `Scheduled tasks: slots, next slot and 12 h catch-up`.
 
 ### Task 4: Run records
 
@@ -138,17 +138,17 @@
     - `fun startTimedOut(record: RunRecord, now: Instant, hasTranscript: Boolean): Boolean` = `STARTED`, `!hasTranscript`, `now - startedAt >= 5.minutes`.
     - `fun blocksNext(status: SessionStatus?): Boolean` = `WORKING` or `NEEDS_INPUT`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `a slot is claimed once`: second `claim` of the same task and slot returns false.
   - `of two threads claiming the same slot exactly one wins` (two threads, `CountDownLatch`, 50 rounds).
   - `update replaces a record and of lists newest first`.
   - `prune deletes records over 90 days old, including those of a deleted task`.
   - `a record with an error must be failed or skipped`.
   - `orphaned`, `startTimedOut` (4:59 no, 5:00 yes, with transcript never), `blocksNext` (working and needs input block, idle and null do not).
-- [ ] **Step 2:** Tests fail.
-- [ ] **Step 3:** Implement; JSON by Gson with explicit fields, unknown keys throw.
-- [ ] **Step 4:** Tests pass.
-- [ ] **Step 5:** Commit `Scheduled tasks: run records, the one-IDE claim and run decisions`.
+- [x] **Step 2:** Tests fail.
+- [x] **Step 3:** Implement; JSON by Gson with explicit fields, unknown keys throw.
+- [x] **Step 4:** Tests pass.
+- [x] **Step 5:** Commit `Scheduled tasks: run records, the one-IDE claim and run decisions`.
 
 ### Task 5: Retirement held while unread
 
@@ -160,11 +160,11 @@
 - Produces: `fun retires(detachedFor: Duration, status: SessionStatus?, runningTasks: Int, held: Boolean = false): Boolean` (false when `held`); `SessionTerminals.retireIdle(live, sessions, now, held: Set<String>)`, `held` checked by `file.sessionId`.
 - Consumes (later, Task 6): `ScheduledRuns.held(unread: Set<String>): Set<String>`; until Task 6 the service passes `emptySet()`.
 
-- [ ] **Step 1:** Test `a held session never retires, however long idle` and that the existing cases are unchanged.
-- [ ] **Step 2:** Fails.
-- [ ] **Step 3:** Implement; update the call in `ClaudeSessionsService`.
-- [ ] **Step 4:** `./gradlew test` passes.
-- [ ] **Step 5:** Commit `Retirement: a held session stays until seen`.
+- [x] **Step 1:** Test `a held session never retires, however long idle` and that the existing cases are unchanged.
+- [x] **Step 2:** Fails.
+- [x] **Step 3:** Implement; update the call in `ClaudeSessionsService`.
+- [x] **Step 4:** `./gradlew test` passes.
+- [x] **Step 5:** Commit `Retirement: a held session stays until seen`.
 
 ### Task 6: Scheduler service
 
@@ -189,11 +189,11 @@ Tick, in order (records on a pooled thread, starts on the EDT):
 
 A run: `preStartError` → `FAILED`; else `SeenStore.mark(session, startedAt)` (so `firstSight` does not swallow the reply), `declineProjectMcpServers(dir)`, `updateFolders(ChangeSource.AUTO) { it.assign(session, folder) }` when `folder` set, `ClaudeSessionVirtualFile(session, dir, dir, task.name, task.claudeArgs(session))`, `SessionTerminals.startDetached(file, project)`, record `STARTED`. An exception in a run → `FAILED` with its message (logged as error).
 
-- [ ] **Step 1:** Tests for `pickProject` (nested bases pick the longest, no match → 0, none → null) and `preStartError` (each reason, in order, null when fine).
-- [ ] **Step 2:** Fail.
-- [ ] **Step 3:** Implement both, then `ScheduledRuns`; register in `plugin.xml`.
-- [ ] **Step 4:** `./gradlew test buildPlugin`; in the sandbox, with a task due now in `scheduled-tasks.json` written by hand: it starts once with two sandbox windows open, shows in the pinned list, stays after idle while unread, ends 60 s after being opened; a task with a missing directory gives the notification once; `claude` killed before its first message gives "claude ended before its first message".
-- [ ] **Step 5:** Commit `Scheduled tasks: the scheduler runs due slots as detached sessions and reports failures`.
+- [x] **Step 1:** Tests for `pickProject` (nested bases pick the longest, no match → 0, none → null) and `preStartError` (each reason, in order, null when fine).
+- [x] **Step 2:** Fail.
+- [x] **Step 3:** Implement both, then `ScheduledRuns`; register in `plugin.xml`.
+- [x] **Step 4:** `./gradlew test buildPlugin`; in the sandbox, with a task due now in `scheduled-tasks.json` written by hand: it starts once with two sandbox windows open, shows in the pinned list, stays after idle while unread, ends 60 s after being opened; a task with a missing directory gives the notification once; `claude` killed before its first message gives "claude ended before its first message".
+- [x] **Step 5:** Commit `Scheduled tasks: the scheduler runs due slots as detached sessions and reports failures`.
 
 ### Task 7: Registry tab, dialog, docs
 
@@ -206,11 +206,11 @@ A run: `preStartError` → `FAILED`; else `SeenStore.mark(session, startedAt)` (
 - Consumes: `ScheduledTaskStore`, `RunRecords`, `nextSlot`, `ScheduledRuns.runNow`, `edited`, `ClaudeSessionOpener.open`.
 - Produces: `fun scheduleText(schedule: Schedule): String` ("daily 07:30", "Mon–Fri 08:00", "Mon, Wed 09:00"); `data class TaskRow(val name: String, val schedule: String, val next: String, val last: String?, val failed: Boolean)`; `fun taskRow(task: ScheduledTask, records: List<RunRecord>, now: ZonedDateTime): TaskRow` (`next` "disabled" for a disabled task; `failed` when the newest non-skipped record failed; `last` "<state> <time>" or "failed: <error>").
 
-- [ ] **Step 1:** Tests for `scheduleText` (the three forms) and `taskRow` (disabled, failed newest, a later started run clears failed, no records → `last` null).
-- [ ] **Step 2:** Fail.
-- [ ] **Step 3:** Implement `TaskRows.kt`, then the tab (rows with Run now, Edit, Enable/Disable, Delete with a confirmation; a row opens to its history: slot, state or error, the session with `sessionIcon` and unread bold, click → `ClaudeSessionOpener.open`), a broken store file shown in place of the list, and the dialog (name, prompt, directory, added directories, model, effort, weekdays, time, allowed tools, folder picked from `SessionFolders` outside plan folders) writing through `edited`. The tab refreshes on `ClaudeSessionsService` notifications and every tick.
-- [ ] **Step 4:** `./gradlew test buildPlugin`; in the sandbox: add a task, Run now, edit its time, disable it, delete it; a failed run shows red and its error; history opens the session.
-- [ ] **Step 5:** Update `CLAUDE.md`; commit `Scheduled tasks: registry tab, task dialog, docs`.
+- [x] **Step 1:** Tests for `scheduleText` (the three forms) and `taskRow` (disabled, failed newest, a later started run clears failed, no records → `last` null).
+- [x] **Step 2:** Fail.
+- [x] **Step 3:** Implement `TaskRows.kt`, then the tab (rows with Run now, Edit, Enable/Disable, Delete with a confirmation; a row opens to its history: slot, state or error, the session with `sessionIcon` and unread bold, click → `ClaudeSessionOpener.open`), a broken store file shown in place of the list, and the dialog (name, prompt, directory, added directories, model, effort, weekdays, time, allowed tools, folder picked from `SessionFolders` outside plan folders) writing through `edited`. The tab refreshes on `ClaudeSessionsService` notifications and every tick.
+- [x] **Step 4:** `./gradlew test buildPlugin`; in the sandbox: add a task, Run now, edit its time, disable it, delete it; a failed run shows red and its error; history opens the session.
+- [x] **Step 5:** Update `CLAUDE.md`; commit `Scheduled tasks: registry tab, task dialog, docs`.
 
 ## Requirements evidence
 
