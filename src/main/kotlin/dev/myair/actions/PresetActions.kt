@@ -12,6 +12,7 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.util.ui.AvatarIcon
 import com.intellij.util.ui.AvatarPalette
@@ -21,9 +22,11 @@ import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.NEW_SESSION_ICON
 import dev.myair.editor.projectBase
 import dev.myair.planview.startAsPlan
+import dev.myair.prompt.modelLabel
 import dev.myair.prompt.showPromptPopup
 import dev.myair.store.Preset
 import dev.myair.store.PresetStore
+import dev.myair.store.Variant
 import dev.myair.store.continuationPrompt
 import dev.myair.store.presetOf
 import java.nio.file.Path
@@ -62,10 +65,15 @@ private fun allExist(project: Project, preset: Preset, dir: Path): Boolean {
     return missing.isEmpty()
 }
 
+/** A model and effort pair as its popup lists it: `Claude Opus · High`. */
+fun variantLabel(variant: Variant) =
+    "${variant.model?.let(::modelLabel) ?: OWN_SETTING} · ${variant.effort?.replaceFirstChar(Char::uppercase) ?: OWN_SETTING}"
+
 /** What a preset sets, for its tooltip. */
 fun Preset.summary() = listOfNotNull(
     model?.let { "model $it" },
     effort?.let { "effort $it" },
+    variants.takeIf { it.isNotEmpty() }?.joinToString(", ", "picks from ") { variantLabel(it) },
     project ?: "the project's directory",
     if (!worktree) null else "worktree off ${base ?: "a branch picked at start"}",
     addDirs.takeIf { it.isNotEmpty() }?.joinToString(", ", "also ") { it },
@@ -73,13 +81,45 @@ fun Preset.summary() = listOfNotNull(
     "opens the composer".takeIf { askMore },
 ).joinToString("; ")
 
-class PresetAction(private val preset: Preset) : DumbAwareAction(preset.name, preset.summary(), AvatarIcon(16, 0.3, preset.name, preset.name, AvatarPalette)) {
+private fun presetIcon(preset: Preset) = AvatarIcon(16, 0.3, preset.name, preset.name, AvatarPalette)
+
+/** Starts [preset], which has no pairs left to pick from, or opens the composer on it with [Preset.askMore]. */
+private fun start(project: Project, preset: Preset, where: RelativePoint) {
+    require(preset.variants.isEmpty()) { "preset ${preset.name} still has pairs to pick from" }
+    if (preset.askMore) showPromptPopup(project, preset) else startPreset(project, preset, where, preset.prompt)
+}
+
+/** A configuration's button: starts it, or with model and effort pairs lists them under the button, the pick starting it. */
+class PresetAction(private val preset: Preset) : DumbAwareAction(preset.name, preset.summary(), presetIcon(preset)) {
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.project?.basePath != null
     }
-    override fun actionPerformed(e: AnActionEvent) =
-        if (preset.askMore) showPromptPopup(e.project!!, preset) else startPreset(e.project!!, preset, popupPoint(e), preset.prompt)
+    override fun actionPerformed(e: AnActionEvent) {
+        if (preset.variants.isEmpty()) return start(e.project!!, preset, popupPoint(e))
+        JBPopupFactory.getInstance().createActionGroupPopup(
+            preset.name, DefaultActionGroup(variantActions(preset)), e.dataContext, JBPopupFactory.ActionSelectionAid.SPEEDSEARCH, false,
+        ).show(popupPoint(e))
+    }
+}
+
+/** One of [preset]'s model and effort pairs, starting it with that pair. */
+private class VariantAction(private val preset: Preset, private val variant: Variant) : DumbAwareAction(variantLabel(variant)) {
+    override fun getActionUpdateThread() = ActionUpdateThread.BGT
+    override fun update(e: AnActionEvent) {
+        e.presentation.isEnabled = e.project?.basePath != null
+    }
+    override fun actionPerformed(e: AnActionEvent) = start(e.project!!, preset.withVariant(variant), popupPoint(e))
+}
+
+private fun variantActions(preset: Preset): List<AnAction> = preset.variants.map { VariantAction(preset, it) }
+
+/** A configuration in the dropdown: its action, or with model and effort pairs a submenu of them. */
+private fun dropdownEntry(preset: Preset): AnAction = if (preset.variants.isEmpty()) PresetAction(preset)
+else DefaultActionGroup(preset.name, variantActions(preset)).apply {
+    isPopup = true
+    templatePresentation.icon = presetIcon(preset)
+    templatePresentation.description = preset.summary()
 }
 
 /**
@@ -108,7 +148,7 @@ class PresetsGroup : ActionGroup(), DumbAware {
             dropdown.add(Separator.create("Broken ${PresetStore.INSTANCE.file}: ${error.message}"))
             return arrayOf(dropdown)
         }
-        dropdown.addAll(presets.map(::PresetAction))
+        dropdown.addAll(presets.map(::dropdownEntry))
         if (presets.isNotEmpty()) dropdown.add(Separator.getInstance())
         dropdown.add(edit)
         return (presets.filter { it.pinned }.map(::PresetAction) + dropdown).toTypedArray()
