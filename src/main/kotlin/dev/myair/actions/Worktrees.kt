@@ -62,14 +62,16 @@ fun parseBranches(refs: String): List<String> = refs.lines().filter { it.isNotEm
 /**
  * The branches of [refs], lines `<refname> <ahead> <behind>` of `%(ahead-behind:HEAD)` newest first, without [branch]
  * and its copies on remotes, nearest first: fewest commits of HEAD they lack (a fork point closer to HEAD), then fewest
- * of their own. A base that moved on since the fork lacks no more than it did, so it stays near the top.
+ * of their own. A base that moved on since the fork lacks no more than it did, so it stays near the top. Without
+ * [keepContaining], refs that lack no commit of HEAD are left out too: as the base of a review they leave nothing to review.
  */
-fun nearestBases(refs: String, branch: String): List<String> = parseBranches(
+fun nearestBases(refs: String, branch: String, keepContaining: Boolean): List<String> = parseBranches(
     refs.lines().filter { it.isNotEmpty() }.map { line ->
         val fields = line.split(' ')
         check(fields.size == 3) { "unexpected git for-each-ref line: $line" }
         Triple(fields[0], fields[2].toInt(), fields[1].toInt())
     }.filterNot { (ref) -> ref == "refs/heads/$branch" || ref.startsWith("refs/remotes/") && ref.removePrefix("refs/remotes/").substringAfter('/') == branch }
+        .filter { keepContaining || it.second > 0 }
         .sortedWith(compareBy({ it.second }, { it.third }))
         .joinToString("\n") { it.first },
 )

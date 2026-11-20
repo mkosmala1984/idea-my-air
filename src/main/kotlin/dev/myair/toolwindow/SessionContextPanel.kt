@@ -599,7 +599,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
      */
     private fun pickBase(git: GitState, anchor: JComponent) {
         val under = RelativePoint.fromScreen(Point(anchor.locationOnScreen).apply { y += anchor.height })
-        background(project, "Reading branches", { Git.nearestBases(git.root, git.branch) }) { bases ->
+        background(project, "Reading branches", { Git.nearestBases(git.root, git.branch, keepContaining = true) }) { bases ->
             if (bases.isEmpty()) return@background Messages.showInfoMessage(project, "The repository has no branch other than ${git.branch}.", "Base Branch")
             // No separators: getSeparatorAbove never meets an index past the last item.
             val choices = BaseChoices(bases, bases.size, bases.size, bases.indexOf(git.base).coerceAtLeast(0))

@@ -1,6 +1,8 @@
 package dev.myair.review
 
 import com.google.gson.JsonParser
+import dev.myair.actions.GitState
+import dev.myair.actions.RangeSize
 import dev.myair.claude.SessionStatus
 import dev.myair.folders.Plan
 import dev.myair.folders.SessionFolders
@@ -31,7 +33,10 @@ class ReviewJsonTest {
 
     private val structure = SessionFolders().createFolder(null, "rtm", "rtm").createFolder("rtm", "r", "Review: b").createFolder("rtm", "p", "Feature", plan = Plan())
 
-    private val git = ReviewGit(null, "c2", 1, mapOf("c1" to mapOf("a.kt" to listOf(12..12)), "gone" to null), null, null)
+    private val git = ReviewGit(
+        GitState("b", false, Path.of("E:/d"), "main", false, "mb", emptyList(), null), "c2", 1,
+        mapOf("c1" to mapOf("a.kt" to listOf(12..12)), "gone" to null), null, "TR-1", "mb..c2", RangeSize(3, 2), null,
+    )
 
     @Test fun `review json carries maybe fixed and run status`() {
         val json = JsonParser.parseString(reviewJson(structure, "r", review, git, mapOf("j2" to SessionStatus.WORKING, "j3" to SessionStatus.NEEDS_INPUT, "j4" to SessionStatus.IDLE))).asJsonObject
@@ -51,10 +56,19 @@ class ReviewJsonTest {
         listOf("format", "next", "blockers").forEach { assertFalse(json.has(it), it) }
     }
 
+    @Test fun `review json carries merge base, range, its size and the stored base`() {
+        val json = JsonParser.parseString(reviewJson(structure, "r", review, git, emptyMap())).asJsonObject
+        assertEquals("mb", json["merge_base"].asString)
+        assertEquals("mb..c2", json["range"].asString)
+        assertEquals(3, json["commits"].asInt)
+        assertEquals(2, json["files"].asInt)
+        assertEquals("TR-1", json["stored_base"].asString)
+    }
+
     @Test fun `without git facts nothing is maybe fixed and the git keys are null`() {
         val json = JsonParser.parseString(reviewJson(structure, "r", review, null, emptyMap())).asJsonObject
         assertTrue(json["findings"].asJsonArray.none { it.asJsonObject["maybe_fixed"].asBoolean })
-        listOf("head", "since_reviewed", "git_error").forEach { assertTrue(json[it].isJsonNull, it) }
+        listOf("head", "since_reviewed", "git_error", "merge_base", "range", "commits", "files", "stored_base").forEach { assertTrue(json[it].isJsonNull, it) }
     }
 
     @Test fun `the linked plan is given as its folder's path, null once that folder holds no plan or is gone`() {

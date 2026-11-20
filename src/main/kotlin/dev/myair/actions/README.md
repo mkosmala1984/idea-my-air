@@ -27,7 +27,8 @@ there by class name, so moving or renaming one means updating that file too.
   - `root(dir)`, `branchOf(dir)`, `currentBranch(dir)` (`detached at <sha7>` on a detached HEAD).
   - `head(dir): Head?` / `headBranch(dir)`: read from the HEAD file without running git; null for a missing folder.
   - `gitDirs(dir)`: the git dir and the common dir of the work tree, read from files; null as for `head`.
-  - `nearestBases(dir, branch)`: every other branch, nearest first: fewest commits of HEAD it lacks, then fewest of its own (`%(ahead-behind:HEAD)`, git 2.41).
+  - `nearestBases(dir, branch, keepContaining)`: every other branch, nearest first: fewest commits of HEAD it lacks, then fewest of its own (`%(ahead-behind:HEAD)`, git 2.41); without `keepContaining` (a review's Change Base...) none that lacks no commit of HEAD, as it leaves nothing to review. Session Context keeps them.
+  - `rangeSize(root, range)`: `RangeSize(commits, files)` of `<start>..<end>`.
   - `show(root, commit, path)`: file bytes at a commit.
   - `addWorktree(mainRoot, path, pick, fallback, inUse)`, `addBranchWorktree(mainRoot, path, branch, base)`.
   - `setBase(dir, branch, base)` / `storedBase(dir, branch)`: config key `branch.<branch>.myAirBase`.
@@ -40,7 +41,7 @@ there by class name, so moving or renaming one means updating that file too.
 
 - `baseChoices(branches, default, recent): BaseChoices` (popup order: default, recent, rest) and `pushRecent`, both bounded by `MAX_RECENT_BASES = 5`.
 - `defaultBranch(remotes, originHead, local)`, `worktreeName(base, date, id)` (`<base>-<date>-<id4>`), `dirName(branch)`, `worktreePath(mainRoot, setting, name)`.
-- `parseBranches(refs)`, `nearestBases(refs, branch)`, `parseWorktrees(porcelain): List<Worktree>`, `copyIncluded(mainRoot, worktree, files)`.
+- `parseBranches(refs)`, `nearestBases(refs, branch, keepContaining)`, `parseWorktrees(porcelain): List<Worktree>`, `copyIncluded(mainRoot, worktree, files)`.
 
 ### Starting sessions
 

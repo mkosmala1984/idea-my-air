@@ -11,6 +11,7 @@ import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.concurrency.ThreadingAssertions
 import dev.myair.actions.Git
 import dev.myair.actions.GitState
+import dev.myair.actions.RangeSize
 import dev.myair.claude.ClaudeHomeWatcher
 import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
@@ -34,10 +35,13 @@ import kotlin.io.path.readText
  * Git facts of a review's `dir`: its [state], [head], the commits HEAD is past the reviewed commit ([sinceReviewed], null
  * without one or when git does not know it), and [changed]: by each finding's newest report commit, the old-side line
  * ranges changed since it ([Git.changedLines], null for a commit git does not know); [origin]: the URL of the remote
- * `origin`, null without one. [error]: why the read failed, the other fields then empty.
+ * `origin`, null without one; [storedBase]: `branch.<branch>.myAirBase` of the review's branch, null when not set;
+ * [range]: `<merge base>..<head>`, what a Whole branch run reviews, and [size] its size, both null while [GitState.problem]
+ * is set. [error]: why the read failed, the other fields then empty.
  */
 data class ReviewGit(
-    val state: GitState?, val head: String?, val sinceReviewed: Int?, val changed: Map<String, Map<String, List<IntRange>>?>, val origin: String?, val error: String?,
+    val state: GitState?, val head: String?, val sinceReviewed: Int?, val changed: Map<String, Map<String, List<IntRange>>?>, val origin: String?,
+    val storedBase: String?, val range: String?, val size: RangeSize?, val error: String?,
 )
 
 /** Job id to the session its live entry runs. */
@@ -103,17 +107,23 @@ fun mirrorDue(review: BranchReview, structure: SessionFolders, liveJobs: Map<Str
 
 /**
  * Reads [review]'s git facts, its work tree's changes counted against the review's base; any failure goes into
- * [ReviewGit.error], also a work tree that has another branch checked out than the review's.
+ * [ReviewGit.error], also a work tree that has another branch checked out than the review's. A base whose merge base
+ * with HEAD is HEAD is a [GitState.problem]: it leaves nothing to review.
  */
 fun readGit(review: BranchReview): ReviewGit = try {
     check(review.dir.isDirectory()) { "${review.dir} does not exist" }
-    val state = checkNotNull(Git.state(review.dir, review.base)) { "${review.dir} is not in a git repository" }
-    check(state.branch == review.branch) { "${review.dir} has ${state.branch} checked out, not ${review.branch}" }
-    val head = Git.run(state.root, "rev-parse", "HEAD").trim()
+    val read = checkNotNull(Git.state(review.dir, review.base)) { "${review.dir} is not in a git repository" }
+    check(read.branch == review.branch) { "${review.dir} has ${read.branch} checked out, not ${review.branch}" }
+    val head = Git.run(read.root, "rev-parse", "HEAD").trim()
+    // A base holding every commit of HEAD (a branch stacked on the review's) has HEAD as merge base: an empty range.
+    val state = if (read.mergeBase != head) read
+    else read.copy(mergeBase = null, changes = null, problem = "Base ${review.base} already contains ${review.branch}: nothing to review")
+    val range = state.mergeBase?.let { "$it..$head" }
     val commits = review.findings.map { it.reports.last().commit }.toSet()
     ReviewGit(state, head, reviewedCommit(review)?.let { Git.commitsBetween(state.root, it) }, commits.associateWith { Git.changedLines(state.root, it) },
         // `git config --get` exits 1 for a key not set: a repository without `origin`.
-        Git.run(state.root, "config", "--get", "remote.origin.url", ok = setOf(0, 1)).trim().ifEmpty { null }, null)
+        Git.run(state.root, "config", "--get", "remote.origin.url", ok = setOf(0, 1)).trim().ifEmpty { null },
+        Git.storedBase(state.root, review.branch), range, range?.let { Git.rangeSize(state.root, it) }, null)
 } catch (e: Exception) {
     failed(e)
 }
@@ -121,7 +131,15 @@ fun readGit(review: BranchReview): ReviewGit = try {
 /** Why [review]'s work tree cannot be counted against its base, as [readGit] tells it; null when it can. */
 fun baseProblem(review: BranchReview): String? = readGit(review).let { it.error ?: it.state?.problem }
 
-private fun failed(e: Exception) = ReviewGit(null, null, null, emptyMap(), null, "${e.javaClass.simpleName}: ${e.message}")
+/**
+ * Checks [base] as the new base of [review] ([baseProblem]) and, when git can count from it, stores it as
+ * `branch.<branch>.myAirBase` of the review's branch (D14), so sessions, Session Context and Branch Diff count from it
+ * too; returns the refusal, null when stored. The caller then sets the review's own base. Runs git: off the EDT.
+ */
+fun storeBase(review: BranchReview, base: String): String? =
+    baseProblem(review.copy(base = base)) ?: run { Git.setBase(review.dir, review.branch, base); null }
+
+private fun failed(e: Exception) = ReviewGit(null, null, null, emptyMap(), null, null, null, null, "${e.javaClass.simpleName}: ${e.message}")
 
 /**
  * The stamp and git facts of each of [reviews]: read again when its stamp is not that of [lastStamps], else [lastFacts].
@@ -140,20 +158,21 @@ fun readGits(reviews: Map<String, BranchReview>, reviewFile: (String) -> Path, l
 
 /**
  * What [readGit] depends on, read from files without running git: the work tree's HEAD file, the times of the ref it
- * names (loose, else in `packed-refs`; a commit changes the ref, not HEAD), of `packed-refs` and of the index, of
+ * names (loose, else in `packed-refs`; a commit changes the ref, not HEAD), of `packed-refs`, of the index, of the
+ * repository's `config` (where `branch.<branch>.myAirBase` lives), of
  * `review.json`, and of each file the review's findings name ([files], by repository-relative path, resolved against the
  * work tree root: `maybe_fixed` follows edits not yet staged); a missing file or work tree reads as null, and without a
  * work tree there are no [files].
  */
-data class GitStamp(val head: String?, val ref: Long?, val packed: Long?, val index: Long?, val review: Long?, val files: Map<String, Long?>)
+data class GitStamp(val head: String?, val ref: Long?, val packed: Long?, val index: Long?, val config: Long?, val review: Long?, val files: Map<String, Long?>)
 
 fun gitStamp(review: BranchReview, reviewFile: Path): GitStamp {
     fun time(p: Path) = if (p.exists()) p.getLastModifiedTime().toMillis() else null
-    val (gitDir, common) = Git.gitDirs(review.dir) ?: return GitStamp(null, null, null, null, time(reviewFile), emptyMap())
+    val (gitDir, common) = Git.gitDirs(review.dir) ?: return GitStamp(null, null, null, null, null, time(reviewFile), emptyMap())
     val root = checkNotNull(Git.head(review.dir)).root
     val head = gitDir.resolve("HEAD").readText().trim()
     return GitStamp(
-        head, head.removePrefix("ref: ").takeIf { it != head }?.let { time(common.resolve(it)) }, time(common.resolve("packed-refs")), time(gitDir.resolve("index")),
+        head, head.removePrefix("ref: ").takeIf { it != head }?.let { time(common.resolve(it)) }, time(common.resolve("packed-refs")), time(gitDir.resolve("index")), time(common.resolve("config")),
         time(reviewFile), review.findings.map { it.file }.toSet().associateWith { time(root.resolve(it)) },
     )
 }

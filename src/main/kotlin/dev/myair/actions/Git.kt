@@ -53,6 +53,9 @@ fun lineCount(bytes: ByteArray): Int {
     return bytes.count { it == newline } + if (bytes.isNotEmpty() && bytes.last() != newline) 1 else 0
 }
 
+/** The size of a git range `<start>..<end>`: its [commits] and the [files] `git diff` of it names. */
+data class RangeSize(val commits: Int, val files: Int)
+
 /** A `git` run that ended with an exit code its caller did not expect; the message carries git's stderr. */
 class GitFailure(message: String) : IllegalStateException(message)
 
@@ -176,10 +179,17 @@ object Git {
 
     /**
      * Every local and remote branch of [dir] but [branch] and its remote copies, the likeliest bases of [branch] first
-     * ([nearestBases]); a base that moved on since [branch] forked from it is among them (`%(ahead-behind)` needs git 2.41).
+     * ([nearestBases]; without [keepContaining] none that holds every commit of HEAD); a base that moved on since [branch] forked
+     * from it is among them (`%(ahead-behind)` needs git 2.41).
      */
-    fun nearestBases(dir: Path, branch: String): List<String> =
-        nearestBases(run(dir, "for-each-ref", "--sort=-committerdate", "--format=%(refname) %(ahead-behind:HEAD)", "refs/heads", "refs/remotes"), branch)
+    fun nearestBases(dir: Path, branch: String, keepContaining: Boolean): List<String> =
+        nearestBases(run(dir, "for-each-ref", "--sort=-committerdate", "--format=%(refname) %(ahead-behind:HEAD)", "refs/heads", "refs/remotes"), branch, keepContaining)
+
+    /** The commits and files of [range] (`<start>..<end>`); names are read NUL-separated, as any character may be in one. */
+    fun rangeSize(root: Path, range: String): RangeSize = RangeSize(
+        run(root, "rev-list", "--count", range).trim().toInt(),
+        nulSeparated(run(root, "diff", "--name-only", "-z", range)).size,
+    )
 
     /** [path], relative to [root], as it was in [commit]. */
     fun show(root: Path, commit: String, path: String): ByteArray = bytes(root, "show", "$commit:$path")

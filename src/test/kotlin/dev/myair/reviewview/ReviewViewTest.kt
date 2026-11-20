@@ -20,8 +20,8 @@ import kotlin.test.assertTrue
 class ReviewViewTest {
     private fun change(path: String) = FileChange(path, FileChange.Kind.MODIFIED, 3, 1, FileChange.Stage.COMMITTED)
 
-    private fun git(changes: List<FileChange>?, head: String? = "h", sinceReviewed: Int? = null, origin: String? = null) =
-        ReviewGit(GitState("b", false, Path.of("E:/d"), "main", false, "mb", changes, null), head, sinceReviewed, emptyMap(), origin, null)
+    private fun git(changes: List<FileChange>?, head: String? = "h", sinceReviewed: Int? = null, origin: String? = null, storedBase: String? = null) =
+        ReviewGit(GitState("b", false, Path.of("E:/d"), "main", false, "mb", changes, null), head, sinceReviewed, emptyMap(), origin, storedBase, null, null, null)
 
     private fun run(id: String, reviewer: String, started: String = "2026-11-19T10:00:00Z", reported: String? = "2026-11-19T10:10:00Z", commit: String? = "c1") =
         Run(id, reviewer, null, null, "mb..h", started, reported, commit)
@@ -34,6 +34,13 @@ class ReviewViewTest {
 
     private fun view(review: BranchReview, git: ReviewGit? = null, filter: FindingFilter = FindingFilter.all) =
         reviewViewOf(review, git, emptyMap(), emptyMap(), filter, emptyMap())
+
+    @Test fun `the header names a myAirBase other than the review's base`() {
+        assertEquals("TR-1", view(review(), git(null, storedBase = "TR-1")).header.myAirBase)
+        assertNull(view(review(), git(null, storedBase = "main")).header.myAirBase)
+        assertNull(view(review(), git(null)).header.myAirBase)
+        assertNull(view(review()).header.myAirBase)
+    }
 
     @Test fun `files no chapter names go to not explained`() {
         val v = view(review(listOf(Chapter("Model", "text", listOf("a.kt")))), git(listOf(change("a.kt"), change("b.kt"))))

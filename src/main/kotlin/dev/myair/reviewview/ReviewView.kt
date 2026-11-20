@@ -29,10 +29,12 @@ val Finding.standing get() = state == FindingState.open || state == FindingState
 
 /**
  * [reviewed]: the commit of the newest reported run; [sinceReviewed]: how many commits [head] is past it, null without
- * one or when [reviewedGone] (git does not know it, as after a rebase); [prUrl] null for an origin not on Bitbucket.
+ * one or when [reviewedGone] (git does not know it, as after a rebase); [prUrl] null for an origin not on Bitbucket;
+ * [myAirBase]: `branch.<branch>.myAirBase` when set and other than the review's [base].
  */
 data class Header(
     val branch: String, val base: String, val pr: Int?, val prUrl: String?, val reviewed: String?, val head: String?, val sinceReviewed: Int?, val reviewedGone: Boolean,
+    val myAirBase: String?,
 )
 
 /** A file a chapter names; [unchanged] when git was read and the file is not among the changed ones, [change] null then. */
@@ -74,6 +76,7 @@ fun reviewViewOf(
     val header = Header(
         review.branch, review.base, review.pr, review.pr?.let { pr -> git?.origin?.let { bitbucketPrUrl(it, pr) } }, reviewed, git?.head, git?.sinceReviewed,
         reviewedGone = reviewed != null && git?.head != null && git.sinceReviewed == null,
+        myAirBase = git?.storedBase?.takeIf { it != review.base },
     )
     val changes = git?.state?.changes
     val byPath = changes.orEmpty().associateBy { it.path }

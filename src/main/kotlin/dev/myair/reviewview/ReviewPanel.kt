@@ -36,6 +36,7 @@ import dev.myair.planview.OpenEdit
 import dev.myair.planview.PAGE
 import dev.myair.planview.SelectableTitle
 import dev.myair.planview.action
+import dev.myair.planview.actionUnless
 import dev.myair.planview.buttons
 import dev.myair.planview.card
 import dev.myair.planview.chevron
@@ -60,11 +61,15 @@ import dev.myair.review.addRun
 import dev.myair.review.blockerCount
 import dev.myair.review.precision
 import dev.myair.review.rangeFor
+import dev.myair.review.reviewedCommit
+import dev.myair.review.runProblem
 import dev.myair.review.removeRun
 import dev.myair.review.resolveQuestion
 import dev.myair.review.reviewerArgs
 import dev.myair.review.reviewerPrompt
 import dev.myair.review.setBase
+import dev.myair.review.storeBase
+import dev.myair.service.ActiveSession
 import dev.myair.review.setJob
 import dev.myair.review.setState
 import dev.myair.review.toDecide
@@ -222,6 +227,12 @@ class ReviewPanel(
             h.head?.let { comment("HEAD ${it.take(SHA)}") }
             h.sinceReviewed?.let { comment(if (it == 0) "HEAD is the reviewed commit" else "$it commits past it") }
         }
+        h.myAirBase?.let { stored ->
+            row {
+                comment(StringUtil.escapeXmlEntities("myAirBase of ${h.branch} is $stored"))
+                link("Use it") { changeBase(stored) }
+            }
+        }
         reviews.facts[folderId]?.error?.let { row { comment(StringUtil.escapeXmlEntities("Git: $it"), MAX_LINE_LENGTH_WORD_WRAP) } }
     }
 
@@ -232,11 +243,24 @@ class ReviewPanel(
     private fun pickBase(anchor: JComponent) {
         val under = RelativePoint.fromScreen(Point(anchor.locationOnScreen).apply { y += anchor.height })
         val review = reviews.review(folderId)
-        background(project, "Reading branches", { Git.nearestBases(review.dir, review.branch) }) { bases ->
-            if (bases.isEmpty()) return@background Messages.showInfoMessage(project, "The repository has no branch other than ${review.branch}.", "Review Base")
+        background(project, "Reading branches", { Git.nearestBases(review.dir, review.branch, keepContaining = false) }) { bases ->
+            if (bases.isEmpty()) return@background Messages.showInfoMessage(project, "The repository has no branch that lacks a commit of ${review.branch}: none would leave anything to review.", "Review Base")
             basePopup("Review Base of ${review.branch}", BaseChoices(bases, bases.size, bases.size, bases.indexOf(review.base).coerceAtLeast(0))) { base ->
-                reviews.update(folderId) { it.setBase(base) }
+                changeBase(base)
             }.show(under)
+        }
+    }
+
+    /**
+     * Makes [base] the review's base through the check and the `myAirBase` write of [storeBase], off the EDT, then the
+     * review's own; a refusal is shown and stores nothing. Session Context and Branch Diff read the stored base again.
+     */
+    private fun changeBase(base: String) {
+        val review = reviews.review(folderId)
+        background(project, "Checking base $base", { storeBase(review, base) }) { problem ->
+            if (problem != null) return@background Messages.showErrorDialog(project, problem, "Review Base Refused")
+            reviews.update(folderId) { it.setBase(base) }
+            ActiveSession.baseStored()
         }
     }
 
@@ -284,15 +308,15 @@ class ReviewPanel(
         val profile = list.firstOrNull { it.name == profileName } ?: list.first()
         val chip = Chip(null) { choose(it, list, profile, ReviewProfile::name) { p -> profileName = p.name; render() } }.apply { text = profile.name }
         val git = reviews.facts[folderId]
-        val ready = { git?.head != null && git.state?.mergeBase != null }
+        fun problem(newOnly: Boolean): () -> String? = { runProblem(reviews.facts[folderId], reviewedCommit(reviews.review(folderId)), newOnly) }
         val run = if ((git?.sinceReviewed ?: 0) > 0) DefaultActionGroup("Run", listOf(
-            action("New commits only", ready) { run(profile, newOnly = true) },
-            action("Whole branch", ready) { run(profile, newOnly = false) },
+            actionUnless("New commits only", problem(newOnly = true)) { run(profile, newOnly = true) },
+            actionUnless("Whole branch", problem(newOnly = false)) { run(profile, newOnly = false) },
         )).apply {
             isPopup = true
             templatePresentation.icon = AllIcons.Actions.Execute
             templatePresentation.putClientProperty(ActionUtil.HIDE_DROPDOWN_ICON, true)
-        } else action("Run", ready) { run(profile, newOnly = false) }.apply { templatePresentation.icon = AllIcons.Actions.Execute }
+        } else actionUnless("Run", problem(newOnly = false)) { run(profile, newOnly = false) }.apply { templatePresentation.icon = AllIcons.Actions.Execute }
         return listOf(chip, buttons(run))
     }
 
@@ -304,16 +328,17 @@ class ReviewPanel(
     private fun run(profile: ReviewProfile, newOnly: Boolean) {
         val git = checkNotNull(reviews.facts[folderId]) { "git of review $folderId not read" }
         val review = reviews.review(folderId)
-        val range = rangeFor(review, checkNotNull(git.state?.mergeBase), checkNotNull(git.head), newOnly)
+        val (mergeBase, head) = checkNotNull(git.state?.mergeBase) to checkNotNull(git.head)
+        val range = rangeFor(review, mergeBase, head, newOnly)
         val started = Instant.now().toString()
         startErrors = emptyMap()
         for (reviewer in profile.reviewers) {
             lateinit var runId: String
             reviews.update(folderId) { r -> r.nextId("W").let { (id, next) -> runId = id; next.addRun(Run(id, reviewer.name, null, null, range, started)) } }
-            val args = reviewerArgs(reviewer, reviewerPrompt(folderId, runId, review, range))
             ApplicationManager.getApplication().executeOnPooledThread {
                 val job = try {
-                    Result.success(Reviewers.start(review.dir, args))
+                    val prompt = reviewerPrompt(folderId, runId, review, mergeBase, head, range, Git.rangeSize(review.dir, range))
+                    Result.success(Reviewers.start(review.dir, reviewerArgs(reviewer, prompt)))
                 } catch (e: Exception) {
                     Result.failure(e)
                 }
@@ -330,8 +355,10 @@ class ReviewPanel(
     private fun reviewers(view: ReviewView, profiles: Result<List<ReviewProfile>>): List<JComponent> {
         val file = ReviewProfileStore.INSTANCE.file
         val note = profiles.fold({ if (it.isEmpty()) "No profiles in $file" else null }) { "Cannot read $file: $it" }
+        // Why Run is disabled, also for the items of its popup, which show no tooltip.
+        val cannotRun = runProblem(reviews.facts[folderId], reviewedCommit(reviews.review(folderId)), newOnly = false)?.let { "Run disabled: $it" }
         val now = Instant.now()
-        return listOfNotNull(note?.let { n -> card { row { comment(StringUtil.escapeXmlEntities(n), MAX_LINE_LENGTH_WORD_WRAP) } } }) +
+        return listOfNotNull(note, cannotRun).map { n -> card { row { comment(StringUtil.escapeXmlEntities(n), MAX_LINE_LENGTH_WORD_WRAP) } } } +
             startErrors.map { (name, message) ->
                 card { row { label(name); comment(StringUtil.escapeXmlEntities("did not start: $message"), MAX_LINE_LENGTH_WORD_WRAP).applyToComponent { foreground = UIUtil.getErrorForeground() } } }
             } +

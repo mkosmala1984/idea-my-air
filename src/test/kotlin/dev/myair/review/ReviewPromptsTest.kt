@@ -1,5 +1,7 @@
 package dev.myair.review
 
+import dev.myair.actions.GitState
+import dev.myair.actions.RangeSize
 import dev.myair.store.BranchReview
 import dev.myair.store.Reviewer
 import dev.myair.store.Run
@@ -27,8 +29,11 @@ class ReviewPromptsTest {
 
     @Test
     fun `the reviewer prompt names folder, run, range and the report tool on one line`() {
-        val p = reviewerPrompt("4f1c-id", "W3", review(), "abc..def")
-        listOf("folder '4f1c-id'", "W3", "feat", "main", "abc..def", "commit 'def'", "my_air_review_report").forEach { assertTrue(it in p, it) }
+        val p = reviewerPrompt("4f1c-id", "W3", review(), "mb", "def", "abc..def", RangeSize(3, 2))
+        listOf(
+            "folder '4f1c-id'", "W3", "feat", "against main (merge base mb, head def)", "abc..def (3 commits, 2 files;", "commit 'def'",
+            "my_air_review_report", "If git diff abc..def is empty",
+        ).forEach { assertTrue(it in p, it) }
         assertFalse('\n' in p)
     }
 
@@ -38,7 +43,10 @@ class ReviewPromptsTest {
         assertTrue("work tree ." in p && "no PR" in p)
         assertTrue("folder '4f1c-id'" in p, "the manager passes the folder id to the tools, which a rename keeps")
         assertTrue("PR #42" in reviewManagerPrompt("4f1c-id", review().copy(pr = 42)))
-        listOf("my_air_review_get", "my_air_review_apply", "Start no reviewer", "only when the user asks", "only on the user's word").forEach { assertTrue(it in p, it) }
+        listOf(
+            "my_air_review_get", "my_air_review_apply", "Start no reviewer", "only when the user asks", "only on the user's word",
+            "it wins over branch.feat.myAirBase", "merge base..HEAD", "my_air_review_get gives the current merge_base, range, commits and files",
+        ).forEach { assertTrue(it in p, it) }
         assertFalse('\n' in p)
     }
 
@@ -48,6 +56,27 @@ class ReviewPromptsTest {
         assertEquals("old..h", rangeFor(reviewed, "mb", "h", newOnly = true))
         assertEquals("mb..h", rangeFor(reviewed, "mb", "h", newOnly = false))
         assertEquals("mb..h", rangeFor(review(), "mb", "h", newOnly = true))
+    }
+
+    @Test
+    fun `a range that starts at HEAD is refused`() {
+        assertThrows(IllegalArgumentException::class.java) { rangeFor(review(), "h1", "h1", newOnly = false) }
+        val reviewed = review(listOf(run("W1", "2026-01-02", "abc1234")))
+        assertThrows(IllegalArgumentException::class.java) { rangeFor(reviewed, "mb", "abc1234ff00", newOnly = true) }
+        assertEquals("abc1234..def", rangeFor(reviewed, "mb", "def", newOnly = true))
+    }
+
+    @Test
+    fun `run problem names why a run cannot start`() {
+        val state = GitState("feat", false, Path.of("."), "main", false, "mb", emptyList(), null)
+        fun git(state: GitState?, since: Int? = null, error: String? = null) = ReviewGit(state, "h", since, emptyMap(), null, null, null, null, error)
+        assertEquals("Git not read yet", runProblem(null, null, newOnly = false))
+        assertEquals("boom", runProblem(git(null, error = "boom"), null, newOnly = false))
+        val stacked = state.copy(mergeBase = null, changes = null, problem = "Base x already contains feat: nothing to review")
+        assertEquals("Base x already contains feat: nothing to review", runProblem(git(stacked), null, newOnly = false))
+        assertEquals("No commits since abc1234", runProblem(git(state, since = 0), "abc1234ff00", newOnly = true))
+        assertEquals(null, runProblem(git(state, since = 0), "abc1234ff00", newOnly = false))
+        assertEquals(null, runProblem(git(state, since = 2), "abc1234ff00", newOnly = true))
     }
 
     @Test

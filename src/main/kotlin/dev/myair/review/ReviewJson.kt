@@ -13,7 +13,8 @@ private val GSON = GsonBuilder().setPrettyPrinting().serializeNulls().create()
  * What `my_air_review_get` returns: the review of folder [folderId] as `review.json` holds it, without `format`, `next`
  * and `blockers`, plus the folder's path in [structure], the linked plan as its folder's path (null without one or once
  * that folder is gone or holds no plan, as for [linkedPlan]), each finding's `line`, `severity` and derived `maybe_fixed`,
- * each run's derived `status`, and the git facts.
+ * each run's derived `status`, and the git facts: `merge_base`, `range` (what a Whole branch run reviews) with its
+ * `commits` and `files`, and `stored_base` (`branch.<branch>.myAirBase`).
  */
 fun reviewJson(structure: SessionFolders, folderId: String, review: BranchReview, git: ReviewGit?, liveJobs: Map<String, SessionStatus>): String {
     val json = JsonParser.parseString(review.toJson()).asJsonObject
@@ -31,6 +32,11 @@ fun reviewJson(structure: SessionFolders, folderId: String, review: BranchReview
     json.addProperty("reviewed", reviewedCommit(review))
     json.addProperty("head", git?.head)
     json.addProperty("since_reviewed", git?.sinceReviewed)
+    json.addProperty("merge_base", git?.state?.mergeBase)
+    json.addProperty("range", git?.range)
+    json.addProperty("commits", git?.size?.commits)
+    json.addProperty("files", git?.size?.files)
+    json.addProperty("stored_base", git?.storedBase)
     json.addProperty("git_error", git?.error)
     return GSON.toJson(json)
 }

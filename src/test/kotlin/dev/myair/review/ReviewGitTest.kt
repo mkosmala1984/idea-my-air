@@ -1,6 +1,7 @@
 package dev.myair.review
 
 import dev.myair.actions.Git
+import dev.myair.actions.RangeSize
 import dev.myair.store.BranchReview
 import dev.myair.store.Finding
 import dev.myair.store.Report
@@ -67,6 +68,55 @@ class ReviewGitTest {
         assertEquals("IllegalStateException: $repo has main checked out, not feature", baseProblem(review(repo, base = "other")))
     }
 
+    @Test fun `a base holding every commit of HEAD leaves nothing to review`() {
+        val repo = repo()
+        git(repo, "branch", "same")
+        git(repo, "checkout", "-b", "stacked")
+        git(repo, "commit", "--allow-empty", "-m", "on top of feature")
+        git(repo, "checkout", "feature")
+        listOf("stacked", "same", git(repo, "rev-parse", "--short", "feature")).forEach { base ->
+            assertEquals("Base $base already contains feature: nothing to review", baseProblem(review(repo, base = base)))
+            val state = readGit(review(repo, base = base)).state!!
+            assertNull(state.mergeBase)
+            assertNull(state.changes)
+        }
+        assertNull(Git.state(repo, "same")!!.problem, "Git.state without a review keeps an empty range as it was")
+    }
+
+    @Test fun `the git facts carry the whole branch range, its size and the stored base`() {
+        val repo = repo()
+        val facts = readGit(review(repo))
+        assertEquals("${git(repo, "rev-parse", "main")}..${git(repo, "rev-parse", "HEAD")}", facts.range)
+        assertEquals(RangeSize(1, 1), facts.size)
+        assertNull(facts.storedBase)
+        Git.setBase(repo, "feature", "other")
+        assertEquals("other", readGit(review(repo)).storedBase)
+        git(repo, "branch", "same")
+        val empty = readGit(review(repo, base = "same"))
+        assertNull(empty.range)
+        assertNull(empty.size)
+        assertEquals("other", empty.storedBase, "the stored base is read also when the review's base is refused")
+    }
+
+    @Test fun `storing an accepted base writes myAirBase, a refused one writes nothing`() {
+        val repo = repo()
+        assertNull(storeBase(review(repo), "other"))
+        assertEquals("other", Git.storedBase(repo, "feature"))
+        git(repo, "branch", "same")
+        assertEquals("Base same already contains feature: nothing to review", storeBase(review(repo), "same"))
+        assertEquals("Base gone no longer exists", storeBase(review(repo), "gone"))
+        assertEquals("other", Git.storedBase(repo, "feature"))
+    }
+
+    @Test fun `the stamp changes when the repository config changes`() {
+        val repo = repo()
+        val file = dir.resolve("review.json").also { it.writeText("{}") }
+        val before = gitStamp(review(repo), file)
+        Thread.sleep(20)
+        Git.setBase(repo, "feature", "other")
+        assertNotEquals(before.config, gitStamp(review(repo), file).config)
+    }
+
     @Test fun `the stamp changes with a commit, which leaves HEAD's file as it was, and with review json`() {
         val repo = repo()
         val file = dir.resolve("review.json").also { it.writeText("{}") }
@@ -76,12 +126,12 @@ class ReviewGitTest {
         val after = gitStamp(review(repo), file)
         assertEquals(before.head, after.head)
         assertNotEquals(before, after)
-        val kept = ReviewGit(null, null, null, emptyMap(), null, "kept")
+        val kept = ReviewGit(null, null, null, emptyMap(), null, null, null, null, "kept")
         fun reread(last: Map<String, GitStamp>) = readGits(mapOf("r" to review(repo)), { file }, last, mapOf("r" to kept)).second.getValue("r")
         assertNotEquals(kept, reread(mapOf("r" to before)), "a changed stamp is due")
         assertEquals(kept, reread(mapOf("r" to after)), "the same stamp is not")
         assertNotEquals(kept, reread(emptyMap()), "a review never read is due")
-        assertEquals(GitStamp(null, null, null, null, after.review, emptyMap()), gitStamp(review(dir.resolve("gone")), file))
+        assertEquals(GitStamp(null, null, null, null, null, after.review, emptyMap()), gitStamp(review(dir.resolve("gone")), file))
     }
 
     @Test fun `editing a file a finding names makes the review due, editing another file does not`() {
@@ -92,7 +142,7 @@ class ReviewGitTest {
         val reviewed = review(repo).copy(findings = listOf(finding, finding.copy(id = "F2", file = "gone.txt")))
         val read = gitStamp(reviewed, file)
         assertEquals(null, read.files.getValue("gone.txt"), "a missing file stamps as absent")
-        val kept = ReviewGit(null, null, null, emptyMap(), null, "kept")
+        val kept = ReviewGit(null, null, null, emptyMap(), null, null, null, null, "kept")
         fun reread() = readGits(mapOf("r" to reviewed), { file }, mapOf("r" to read), mapOf("r" to kept)).second.getValue("r")
         Thread.sleep(20)
         repo.resolve("b.txt").writeText("two")

@@ -8,9 +8,10 @@ import com.intellij.openapi.application.EDT
 import dev.myair.review.ReviewChanges
 import dev.myair.review.ReviewGit
 import dev.myair.review.ReviewService
-import dev.myair.review.baseProblem
 import dev.myair.review.readGit
 import dev.myair.review.reviewJson
+import dev.myair.review.storeBase
+import dev.myair.service.ActiveSession
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.BranchReview
 import kotlinx.coroutines.Dispatchers
@@ -39,8 +40,10 @@ class ReviewMcpToolset : McpToolset {
             "fixCommit (the commit that fixed it), comment (the pull request comment id it was posted as), maybe_fixed (true when the " +
             "work tree changed a line of its file within 3 lines of it since its newest report's commit; the state is not changed)), " +
             "questions (for the author: id Q<n>, text, reviewer, resolved, run), reviewed (the commit of the newest reported run or null), " +
-            "head (HEAD of dir), since_reviewed (commits HEAD is past reviewed, null when unknown) and git_error (why git could not be " +
-            "read, else null; head, since_reviewed and maybe_fixed are then empty).",
+            "head (HEAD of dir), since_reviewed (commits HEAD is past reviewed, null when unknown), merge_base (of base and HEAD), " +
+            "range (merge_base..head, what a Whole branch run reviews) with its commits and files, stored_base (branch.<branch>.myAirBase " +
+            "or null; the review's base wins over it) and git_error (why git could not be read, else null; head, since_reviewed and " +
+            "maybe_fixed are then empty; merge_base, range, commits and files are also null while the base leaves nothing to review).",
     )
     suspend fun my_air_review_get(
         @McpDescription("The review folder's id, or its path, names joined by /, such as rtm/Review: feature-x; an id is looked up first.") folder: String,
@@ -57,7 +60,8 @@ class ReviewMcpToolset : McpToolset {
             "{\"op\":\"set_pr\",\"pr\":123} (the pull request number; null clears it), " +
             "{\"op\":\"set_base\",\"base\":\"origin/main\"} (the branch or commit the branch is reviewed against: changes, the " +
             "explanation's diff and new reviewer runs count from its merge base with HEAD; refused when git in the review's work " +
-            "tree cannot count from it; runs already started keep their range), " +
+            "tree cannot count from it or it already holds every commit of HEAD; an accepted base is also stored as the branch's " +
+            "branch.<branch>.myAirBase; runs already started keep their range), " +
             "{\"op\":\"set_state\",\"id\":\"F3\",\"state\":\"rejected\",\"reason\":\"...\",\"commit\":\"abc1234\",\"comment\":\"...\"} " +
             "(state open, accepted, rejected, fixed or posted; rejected needs reason, fixed needs commit (the fixing commit), posted " +
             "needs comment (the pull request comment id); reason, commit and comment are optional otherwise, and one left out or null " +
@@ -69,10 +73,12 @@ class ReviewMcpToolset : McpToolset {
         @McpDescription("The review folder's id or path, as for my_air_review_get.") folder: String,
         @McpDescription("The JSON array of changes.") changes: String,
     ): String {
-        // A new base is checked against git off the EDT first, so a review is never stored against a base git cannot count from.
+        // A new base is checked against git off the EDT first and stored as the branch's myAirBase (storeBase), so a
+        // review is never stored against a base git cannot count from.
         val (before, after) = withReview(folder) { service, id -> service.review(id).let { it to ReviewChanges.apply(it, changes) } }
-        if (after.base != before.base) withContext(Dispatchers.IO) { baseProblem(after) }?.let { throw McpExpectedError("base ${after.base} refused: $it") }
-        return reviewJsonOf(folder) { service, id -> service.update(id) { ReviewChanges.apply(it, changes) } }
+        val newBase = after.base != before.base
+        if (newBase) withContext(Dispatchers.IO) { storeBase(before, after.base) }?.let { throw McpExpectedError("base ${after.base} refused: $it") }
+        return reviewJsonOf(folder) { service, id -> service.update(id) { ReviewChanges.apply(it, changes) }.also { if (newBase) ActiveSession.baseStored() } }
     }
 
     @McpTool

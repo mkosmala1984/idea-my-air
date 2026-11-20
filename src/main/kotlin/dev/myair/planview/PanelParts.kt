@@ -9,6 +9,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.actionSystem.ex.TooltipDescriptionProvider
 import com.intellij.openapi.actionSystem.impl.ActionButton
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.DumbAwareAction
@@ -163,6 +164,20 @@ internal fun action(text: String, icon: Icon? = null, run: () -> Unit) = DumbAwa
 internal fun action(text: String, enabled: () -> Boolean, run: () -> Unit): AnAction = object : DumbAwareAction(text) {
     override fun getActionUpdateThread() = ActionUpdateThread.EDT
     override fun update(e: AnActionEvent) { e.presentation.isEnabled = enabled() }
+    override fun actionPerformed(e: AnActionEvent) = run()
+}
+
+/**
+ * An action disabled while [problem] gives a reason, which is then its description: [TooltipDescriptionProvider] makes
+ * an `ActionButton` show it in its tooltip.
+ */
+internal fun actionUnless(text: String, problem: () -> String?, run: () -> Unit): AnAction = object : DumbAwareAction(text), TooltipDescriptionProvider {
+    override fun getActionUpdateThread() = ActionUpdateThread.EDT
+    override fun update(e: AnActionEvent) {
+        val reason = problem()
+        e.presentation.isEnabled = reason == null
+        e.presentation.description = reason
+    }
     override fun actionPerformed(e: AnActionEvent) = run()
 }
 

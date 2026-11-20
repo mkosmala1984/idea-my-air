@@ -406,6 +406,22 @@ class GitTest {
     }
 
     @Test
+    fun `rangeSize counts the commits and files of a range, names with a space or non-ASCII letters once each`() {
+        val repo = init("repo")
+        val start = git(repo, "rev-parse", "HEAD")
+        repo.resolve("a b.txt").writeText("1\n")
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "one")
+        repo.resolve("zażółć.txt").writeText("2\n")
+        repo.resolve("a b.txt").writeText("3\n")
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "two")
+        val head = git(repo, "rev-parse", "HEAD")
+        assertEquals(RangeSize(2, 2), Git.rangeSize(repo, "$start..$head"))
+        assertEquals(RangeSize(0, 0), Git.rangeSize(repo, "$head..$head"))
+    }
+
+    @Test
     fun `the nearest bases of a branch put first the one it forked from last, even after that one moved on`() {
         val repo = init("repo")
         git(repo, "branch", "old")
@@ -417,7 +433,11 @@ class GitTest {
         git(repo, "checkout", "-b", "side", "old")
         git(repo, "commit", "--allow-empty", "-m", "side")
         git(repo, "checkout", "feature")
-        assertEquals(listOf("main", "old", "side"), Git.nearestBases(repo, "feature"))
+        assertEquals(listOf("main", "old", "side"), Git.nearestBases(repo, "feature", keepContaining = true))
+        git(repo, "checkout", "-b", "stacked")
+        git(repo, "commit", "--allow-empty", "-m", "on top of feature")
+        git(repo, "checkout", "feature")
+        assertEquals(listOf("main", "old", "side"), Git.nearestBases(repo, "feature", keepContaining = false))
     }
 
     @Test

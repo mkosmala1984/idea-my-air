@@ -91,18 +91,25 @@ class WorktreesTest {
     @Test
     fun `nearest bases leave out the branch, its remote copies and HEAD pointers`() {
         val refs = "refs/heads/x 0 0\nrefs/remotes/origin/x 0 0\nrefs/heads/main 0 2\nrefs/remotes/origin/HEAD 0 2\nrefs/remotes/origin/main 0 2\nrefs/heads/feature/x 0 2\n"
-        assertEquals(listOf("main", "origin/main", "feature/x"), nearestBases(refs, "x"))
+        assertEquals(listOf("main", "origin/main", "feature/x"), nearestBases(refs, "x", keepContaining = true))
     }
 
     @Test
     fun `nearest bases sort by the commits of HEAD they lack, then by their own, then keep the order given`() {
         val refs = "refs/heads/sibling 5 3\nrefs/heads/old 0 9\nrefs/heads/release 64 3\nrefs/heads/twin 0 3\nrefs/heads/copy 5 3"
-        assertEquals(listOf("twin", "sibling", "copy", "release", "old"), nearestBases(refs, "x"))
+        assertEquals(listOf("twin", "sibling", "copy", "release", "old"), nearestBases(refs, "x", keepContaining = true))
+    }
+
+    @Test
+    fun `nearest bases for a review leave out refs that hold every commit of HEAD`() {
+        val refs = "refs/heads/TR-11852 2 0\nrefs/heads/TR-11850 1 0\nrefs/heads/TR-11851 0 1\nrefs/heads/same 0 0\nrefs/remotes/origin/main 0 5"
+        assertEquals(listOf("TR-11851", "origin/main"), nearestBases(refs, "x", keepContaining = false))
+        assertEquals(listOf("same", "TR-11850", "TR-11852", "TR-11851", "origin/main"), nearestBases(refs, "x", keepContaining = true))
     }
 
     @Test
     fun `a nearest bases line without ahead and behind counts throws`() {
-        assertThrows<IllegalStateException> { nearestBases("refs/heads/main", "x") }
+        assertThrows<IllegalStateException> { nearestBases("refs/heads/main", "x", keepContaining = true) }
     }
 
     @Test

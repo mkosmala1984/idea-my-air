@@ -22,4 +22,5 @@ The review tab and New Review. A review folder opens as an editor tab, the revie
 - `startReview` writes `review.json` before the folder, so a failed structure write leaves an ignored file rather than an empty folder, and checks that the place did not change meanwhile.
 - A review is never started inside a review (`reviewParent`); `ClaudeSessionsService.updateFolders` refuses any structure write that puts a review folder in a review or plan folder.
 - An open `ReviewEditor` watches its review's git (`ReviewService.watchGit`): only watched reviews have git facts.
+- A base changes only through `changeBase` (Change Base..., whose list leaves out refs holding HEAD, and Use it on the header's `myAirBase` line): `storeBase` off the EDT, then the review, then `ActiveSession.baseStored`. Run and its items are disabled with `runProblem`'s reason, also shown in the Reviewers card; the reviewer prompt's range size is read off the EDT before the job starts.
 - A run's status shows as `RunStatus.text` (needs input, stopped without report); Fix with Claude accepts a finding only when open (`acceptIfOpen`); the reviewer's prompt names the folder by id.

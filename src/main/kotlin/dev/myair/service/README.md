@@ -14,7 +14,7 @@ other files are pure functions the service and the UI call, kept here so plain J
     `unread`, `loaded`, `structureFile`, `history`; `branchOf(session)`.
   - `subscribe(parent, listener)`, `refresh()`, `lookedAt()`, `updateFolders(source, op)`, `updatePins(op)`.
 - `ActiveSession` (`ActiveSession.kt`, `@Service(PROJECT)`, `getInstance(project)`): `tab` (the active
-  `ClaudeSessionVirtualFile`), `baseGeneration`, `subscribe(parent, listener)`, `baseChanged()`, `tabFileChanged()`;
+  `ClaudeSessionVirtualFile`), `baseGeneration`, `subscribe(parent, listener)`, `baseChanged()`, `baseStored()` (companion: `baseChanged` in every open project), `tabFileChanged()`;
   pure `activeTab(selected, last, isOpen)`.
 - `BoardWriter(myAir)` (`BoardWriter.kt`): `seenStore`, `update(sessions, live, settled): Set<String>` (the unread ids).
 - `TaskbarBoard.kt`: `BoardSession`, `RecentSession`, `RECENT = 5`, `boardSessions(sessions, live, seen)`,
