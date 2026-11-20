@@ -10,8 +10,10 @@ import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.wm.IdeFocusManager
+import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.panels.VerticalLayout
 import com.intellij.ui.dsl.builder.AlignX
@@ -20,8 +22,11 @@ import com.intellij.ui.dsl.builder.Panel
 import com.intellij.util.ui.JBFont
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
+import dev.myair.actions.BaseChoices
 import dev.myair.actions.FileChange
 import dev.myair.actions.Git
+import dev.myair.actions.background
+import dev.myair.actions.basePopup
 import dev.myair.actions.showBaseDiff
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.SessionPane
@@ -59,6 +64,7 @@ import dev.myair.review.removeRun
 import dev.myair.review.resolveQuestion
 import dev.myair.review.reviewerArgs
 import dev.myair.review.reviewerPrompt
+import dev.myair.review.setBase
 import dev.myair.review.setJob
 import dev.myair.review.setState
 import dev.myair.review.toDecide
@@ -76,6 +82,7 @@ import dev.myair.toolwindow.durationText
 import dev.myair.toolwindow.shortAge
 import java.awt.BorderLayout
 import java.awt.Font
+import java.awt.Point
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -203,6 +210,7 @@ class ReviewPanel(
     private fun header(h: Header) = card {
         row {
             label("${h.branch} → ${h.base}").applyToComponent { font = JBFont.h3().asBold() }
+            link("Change Base...") { pickBase(it.source as JComponent) }
             h.pr?.let { pr -> if (h.prUrl != null) link("PR #$pr") { BrowserUtil.browse(h.prUrl) } else label("PR #$pr") }
         }
         row {
@@ -215,6 +223,21 @@ class ReviewPanel(
             h.sinceReviewed?.let { comment(if (it == 0) "HEAD is the reviewed commit" else "$it commits past it") }
         }
         reviews.facts[folderId]?.error?.let { row { comment(StringUtil.escapeXmlEntities("Git: $it"), MAX_LINE_LENGTH_WORD_WRAP) } }
+    }
+
+    /**
+     * Asks under [anchor] for a new base of the review among the other branches, nearest first ([Git.nearestBases]), and
+     * stores it; the point is taken at the click, as the panel may be rebuilt while the branches are read.
+     */
+    private fun pickBase(anchor: JComponent) {
+        val under = RelativePoint.fromScreen(Point(anchor.locationOnScreen).apply { y += anchor.height })
+        val review = reviews.review(folderId)
+        background(project, "Reading branches", { Git.nearestBases(review.dir, review.branch) }) { bases ->
+            if (bases.isEmpty()) return@background Messages.showInfoMessage(project, "The repository has no branch other than ${review.branch}.", "Review Base")
+            basePopup("Review Base of ${review.branch}", BaseChoices(bases, bases.size, bases.size, bases.indexOf(review.base).coerceAtLeast(0))) { base ->
+                reviews.update(folderId) { it.setBase(base) }
+            }.show(under)
+        }
     }
 
     private fun explanation(view: ReviewView): List<JComponent> {

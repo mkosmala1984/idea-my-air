@@ -8,6 +8,7 @@ import com.intellij.openapi.application.EDT
 import dev.myair.review.ReviewChanges
 import dev.myair.review.ReviewGit
 import dev.myair.review.ReviewService
+import dev.myair.review.baseProblem
 import dev.myair.review.readGit
 import dev.myair.review.reviewJson
 import dev.myair.service.ClaudeSessionsService
@@ -54,6 +55,9 @@ class ReviewMcpToolset : McpToolset {
             "{\"op\":\"set_chapters\",\"chapters\":[{\"title\":\"...\",\"text\":\"...\",\"files\":[\"src/a.kt\"]}]} (replaces the " +
             "explanation: chapters in reading order, text Markdown, files repository-relative paths the chapter explains), " +
             "{\"op\":\"set_pr\",\"pr\":123} (the pull request number; null clears it), " +
+            "{\"op\":\"set_base\",\"base\":\"origin/main\"} (the branch or commit the branch is reviewed against: changes, the " +
+            "explanation's diff and new reviewer runs count from its merge base with HEAD; refused when git in the review's work " +
+            "tree cannot count from it; runs already started keep their range), " +
             "{\"op\":\"set_state\",\"id\":\"F3\",\"state\":\"rejected\",\"reason\":\"...\",\"commit\":\"abc1234\",\"comment\":\"...\"} " +
             "(state open, accepted, rejected, fixed or posted; rejected needs reason, fixed needs commit (the fixing commit), posted " +
             "needs comment (the pull request comment id); reason, commit and comment are optional otherwise, and one left out or null " +
@@ -64,7 +68,12 @@ class ReviewMcpToolset : McpToolset {
     suspend fun my_air_review_apply(
         @McpDescription("The review folder's id or path, as for my_air_review_get.") folder: String,
         @McpDescription("The JSON array of changes.") changes: String,
-    ): String = reviewJsonOf(folder) { service, id -> service.update(id) { ReviewChanges.apply(it, changes) } }
+    ): String {
+        // A new base is checked against git off the EDT first, so a review is never stored against a base git cannot count from.
+        val (before, after) = withReview(folder) { service, id -> service.review(id).let { it to ReviewChanges.apply(it, changes) } }
+        if (after.base != before.base) withContext(Dispatchers.IO) { baseProblem(after) }?.let { throw McpExpectedError("base ${after.base} refused: $it") }
+        return reviewJsonOf(folder) { service, id -> service.update(id) { ReviewChanges.apply(it, changes) } }
+    }
 
     @McpTool
     @McpDescription(

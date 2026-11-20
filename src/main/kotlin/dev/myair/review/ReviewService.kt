@@ -118,6 +118,9 @@ fun readGit(review: BranchReview): ReviewGit = try {
     failed(e)
 }
 
+/** Why [review]'s work tree cannot be counted against its base, as [readGit] tells it; null when it can. */
+fun baseProblem(review: BranchReview): String? = readGit(review).let { it.error ?: it.state?.problem }
+
 private fun failed(e: Exception) = ReviewGit(null, null, null, emptyMap(), null, "${e.javaClass.simpleName}: ${e.message}")
 
 /**

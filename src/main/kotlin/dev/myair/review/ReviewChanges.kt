@@ -32,6 +32,12 @@ fun BranchReview.setChapters(chapters: List<Chapter>) = copy(chapters = chapters
 
 fun BranchReview.setPr(pr: Int?) = copy(pr = pr)
 
+/** Replaces the base the branch is reviewed against; whether git knows it is [baseProblem]'s to tell. */
+fun BranchReview.setBase(base: String): BranchReview {
+    require(base.isNotEmpty() && base.none { it.isWhitespace() }) { "base must be a branch or commit without spaces, got '$base'" }
+    return copy(base = base)
+}
+
 fun BranchReview.addQuestion(text: String, reviewer: String?, run: String? = null): BranchReview =
     nextId("Q").let { (id, next) -> next.copy(questions = next.questions + Question(id, text, reviewer, run = run)) }
 
@@ -64,6 +70,7 @@ object ReviewChanges {
         "set_summary" to setOf("text"),
         "set_chapters" to setOf("chapters"),
         "set_pr" to setOf("pr"),
+        "set_base" to setOf("base"),
         "add_question" to setOf("text"),
         "resolve_question" to setOf("id"),
     )
@@ -111,6 +118,7 @@ object ReviewChanges {
             "set_summary" -> review.setSummary(k.stringOrNull("text"))
             "set_chapters" -> review.setChapters(k.array("chapters").map { Keys(it, "chapter", SOURCE, setOf("title", "text", "files")).run { Chapter(string("title"), string("text"), strings("files")) } })
             "set_pr" -> review.setPr(k.intOrNull("pr"))
+            "set_base" -> review.setBase(k.string("base"))
             "add_question" -> review.addQuestion(k.string("text"), k.optionalString("reviewer"))
             "resolve_question" -> review.resolveQuestion(k.string("id"))
             else -> error("unreachable op $op")

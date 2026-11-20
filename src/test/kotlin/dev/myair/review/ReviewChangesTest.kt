@@ -30,6 +30,13 @@ class ReviewChangesTest {
         assertNull(reported.summary)
     }
 
+    @Test fun `set_base replaces the base, a blank or spaced one throws`() {
+        assertEquals("TR-11851", apply("""[{"op":"set_base","base":"TR-11851"}]""").base)
+        listOf("", " ", "a b", "a\nb").forEach { bad -> assertThrows<IllegalArgumentException> { apply("""[{"op":"set_base","base":"${bad.replace("\n", "\\n")}"}]""") } }
+        assertThrows<IllegalArgumentException> { apply("""[{"op":"set_base","base":null}]""") }
+        assertEquals("main", reported.base)
+    }
+
     @Test fun `an unknown op or field throws naming the change`() {
         assertTrue(assertThrows<IllegalArgumentException> { apply("""[{"op":"nope"}]""") }.message!!.startsWith("change 1 "))
         assertTrue(assertThrows<IllegalArgumentException> { apply("""[{"op":"set_pr","pr":1},{"op":"set_pr","pr":1,"x":2}]""") }.message!!.startsWith("change 2 "))

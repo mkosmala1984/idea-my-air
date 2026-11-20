@@ -54,6 +54,19 @@ class ReviewGitTest {
         assertEquals("other", againstOther.base)
     }
 
+    @Test fun `a base naming no commit, sharing no history or unreadable is a problem, an existing one none`() {
+        val repo = repo()
+        assertNull(baseProblem(review(repo, base = "other")))
+        assertNull(baseProblem(review(repo, base = git(repo, "rev-parse", "--short", "main"))))
+        assertEquals("Base gone no longer exists", baseProblem(review(repo, base = "gone")))
+        git(repo, "checkout", "--orphan", "lonely")
+        git(repo, "commit", "--allow-empty", "-m", "alone")
+        git(repo, "checkout", "feature")
+        assertEquals("Base lonely shares no history with feature", baseProblem(review(repo, base = "lonely")))
+        git(repo, "checkout", "main")
+        assertEquals("IllegalStateException: $repo has main checked out, not feature", baseProblem(review(repo, base = "other")))
+    }
+
     @Test fun `the stamp changes with a commit, which leaves HEAD's file as it was, and with review json`() {
         val repo = repo()
         val file = dir.resolve("review.json").also { it.writeText("{}") }
