@@ -13,6 +13,7 @@ import com.intellij.ui.DoubleClickListener
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBList
+import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.bind
 import com.intellij.ui.dsl.builder.bindItem
@@ -22,6 +23,7 @@ import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.dsl.builder.rows
 import com.intellij.ui.dsl.builder.selected
 import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
+import com.intellij.ui.layout.enteredTextSatisfies
 import com.intellij.util.ui.AvatarIcon
 import com.intellij.util.ui.AvatarPalette
 import com.intellij.util.ui.UIUtil
@@ -30,6 +32,8 @@ import dev.myair.service.LatestRead
 import com.intellij.util.concurrency.AppExecutorUtil
 import dev.myair.store.EFFORTS
 import dev.myair.store.Preset
+import dev.myair.store.parseVariants
+import dev.myair.store.variantsText
 import java.awt.event.MouseEvent
 import java.nio.file.Path
 import javax.swing.JLabel
@@ -115,6 +119,8 @@ class PresetDialog(
     private var pinned = preset?.pinned ?: false
     private var prompt = preset?.prompt.orEmpty()
     private var askMore = preset?.askMore ?: false
+    private var variants = variantsText(preset?.variants.orEmpty())
+    private val variantsArea = JBTextArea()
 
     init {
         title = dialogTitle
@@ -136,9 +142,14 @@ class PresetDialog(
                 .applyToComponent { isEditable = true }
                 .bindItem(::model)
                 .comment("An alias, or a model's full name typed in.")
-        }
+        }.enabledIf(noPairs)
         row("Effort:") {
             comboBox(listOf("") + EFFORTS, textListCellRenderer { it?.ifEmpty { OWN_SETTING } }).bindItem(::effort)
+        }.enabledIf(noPairs)
+        row("Or pick from:") {
+            cell(variantsArea).bindText(::variants).rows(3).align(AlignX.FILL)
+                .comment("Model and effort pairs, one per line, e.g. \"opus high\" or \"- low\"; at least two, listed at the click.")
+                .validationOnApply { area -> runCatching { Preset("check", variants = parseVariants(area.text)) }.exceptionOrNull()?.let { error(it.message!!) } }
         }
         row("Project:") {
             textFieldWithBrowseButton(FileChooserDescriptorFactory.createSingleFolderDescriptor().withTitle("Project Directory"))
@@ -170,6 +181,8 @@ class PresetDialog(
         row { checkBox("Own button on the toolbar").bindSelected(::pinned) }
     }.also { loadBranches(project) }
 
+    private val noPairs get() = variantsArea.enteredTextSatisfies { it.isBlank() }
+
     /** Fills the branch list from the repository of [projectText], or of [ideBase] when it is empty, off the EDT. */
     private fun loadBranches(projectText: String) {
         val dir = projectText.trim().takeIf { it.isNotEmpty() }?.let(Path::of) ?: ideBase
@@ -192,10 +205,11 @@ class PresetDialog(
     /** The edited preset, or null when cancelled. */
     fun preset(): Preset? {
         if (!showAndGet()) return null
+        val pairs = parseVariants(variants)
         return Preset(
             name.trim(),
-            model?.trim()?.takeIf { it.isNotEmpty() },
-            effort?.takeIf { it.isNotEmpty() },
+            model?.trim()?.takeIf { it.isNotEmpty() && pairs.isEmpty() },
+            effort?.takeIf { it.isNotEmpty() && pairs.isEmpty() },
             project.trim().takeIf { it.isNotEmpty() },
             worktree != WorktreeMode.NONE,
             base.takeIf { worktree == WorktreeMode.FIXED },
@@ -203,6 +217,7 @@ class PresetDialog(
             pinned,
             prompt.trim().ifEmpty { null },
             askMore,
+            pairs,
         )
     }
 }
