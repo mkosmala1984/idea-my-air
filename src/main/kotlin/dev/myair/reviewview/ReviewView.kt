@@ -21,12 +21,11 @@ enum class FindingFilter {
     all, blockers, open;
 
     /** Open: open or accepted; blockers: blocker-severity findings open or accepted. */
-    fun matches(f: Finding) = this == all || f.state in STANDING && (this == open || f.severity == Severity.blocker)
-
-    private companion object {
-        val STANDING = setOf(FindingState.open, FindingState.accepted)
-    }
+    fun matches(f: Finding) = this == all || f.standing && (this == open || f.severity == Severity.blocker)
 }
+
+/** Open or accepted: not decided away yet. */
+val Finding.standing get() = state == FindingState.open || state == FindingState.accepted
 
 /**
  * [reviewed]: the commit of the newest reported run; [sinceReviewed]: how many commits [head] is past it, null without
