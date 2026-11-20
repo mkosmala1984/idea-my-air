@@ -11,13 +11,22 @@ import com.intellij.util.ui.UIUtil
 import dev.myair.MyAirSettings
 import dev.myair.claude.LiveSessionRegistry
 import dev.myair.store.Homes
+import dev.myair.store.PromptFiles
 import dev.myair.tabs.SessionHosts
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.GridBagLayout
+import java.nio.file.Path
 import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlin.io.path.isDirectory
+
+/** The longest message [SessionPane.send] types itself. */
+internal const val MESSAGE_CHARS = 400
+
+/** What [SessionPane.send] types for [text]: itself when one short line, else a line naming the file [write] puts it in. */
+internal fun messageToType(text: String, write: (String) -> Path): String =
+    if ('\n' in text || text.length > MESSAGE_CHARS) "My message is in the file ${write(text)}: read it whole and do what it says." else text
 
 /** What embeds a [SessionPane]: a session tab, or a plan tab showing its manager session (none while loading or once its plan is gone). */
 interface SessionPaneHost {
@@ -79,10 +88,15 @@ class SessionPane(private val project: Project, val file: ClaudeSessionVirtualFi
         return true
     }
 
-    /** Sends [text] to the process as a message, pasted whole (so its lines stay one message) and submitted; false when the pane shows no process. */
+    /**
+     * Sends [text] to the process as a message and submits it; false when the pane shows no process. The terminal hands
+     * `claude` a long paste in pieces, and it takes only the first as the paste and the rest, Enter included, as typed
+     * text, leaving the message cut and unsent; so a text of several lines or a long one goes into a file of
+     * `~/.my-air/messages` ([PromptFiles], kept while this IDE runs) and the message sent names it.
+     */
     fun send(text: String): Boolean {
         val view = view ?: return false
-        view.createSendTextBuilder().useBracketedPasteMode().shouldExecute().send(text)
+        view.createSendTextBuilder().useBracketedPasteMode().shouldExecute().send(messageToType(text) { PromptFiles.write(Homes.myAir.resolve("messages"), it) })
         return true
     }
 
