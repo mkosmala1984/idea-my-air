@@ -34,13 +34,14 @@ data class Choice(
     fun toPreset(base: String?, existingDir: Path? = null): Preset {
         require(existing == (existingDir != null)) { "existing worktree $existingDir for a choice with existing=$existing" }
         return preset.copy(
-            model = model, effort = effort, worktree = worktree, base = base.takeIf { worktree },
+            model = model, effort = effort, variants = emptyList(), worktree = worktree, base = base.takeIf { worktree },
             project = existingDir?.toString() ?: project ?: preset.project,
         )
     }
 }
 
-fun choiceOf(preset: Preset) = Choice(preset, preset.model ?: DEFAULT_MODEL, preset.effort ?: DEFAULT_EFFORT, preset.worktree)
+/** The choices [preset] makes; a preset with model and effort pairs makes its first. */
+fun choiceOf(preset: Preset) = preset.firstVariant().let { Choice(preset, it.model ?: DEFAULT_MODEL, it.effort ?: DEFAULT_EFFORT, preset.worktree) }
 
 /** The choices of the last start, each null when never made; the configuration is kept by name. */
 data class LastChoice(

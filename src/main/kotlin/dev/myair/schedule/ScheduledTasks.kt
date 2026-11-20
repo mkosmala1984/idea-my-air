@@ -42,7 +42,7 @@ data class ScheduledTask(
     init {
         require(id.isNotBlank()) { "task ${preset.name} has a blank id" }
         require(preset.prompt != null) { "task ${preset.name} has no prompt" }
-        require(!preset.worktree && !preset.pinned && !preset.askMore) { "task ${preset.name} has a worktree, a button or askMore" }
+        require(!preset.worktree && !preset.pinned && !preset.askMore && preset.variants.isEmpty()) { "task ${preset.name} has a worktree, a button, askMore or model and effort pairs" }
         require(allowedTools.none { it.isBlank() } && folder?.isBlank() != true) { "task ${preset.name} has a blank value" }
     }
 
