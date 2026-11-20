@@ -1,6 +1,7 @@
 package dev.myair.reviewview
 
 import dev.myair.planview.parseFolderTabPath
+import dev.myair.review.REVIEW_MANAGER_FIRST_MESSAGE
 import dev.myair.review.managedReviewFolder
 import dev.myair.store.BranchReview
 import dev.myair.store.PlanManager
@@ -22,12 +23,17 @@ class ReviewFilesTest {
     private val main = Path.of("E:/dev/r")
     private val mainOf = { d: Path -> assertEquals(dir, d); main }
 
-    @Test fun `a review without a manager starts a new session in its work tree, its project the main checkout`() =
-        assertEquals(PlanManager("n", dir, main) to listOf("--session-id", "n"), reviewManagerStart(review(null), "n", mainOf) { true })
+    @Test fun `a review without a manager starts a new session in its work tree, its project the main checkout, with the first message`() =
+        assertEquals(PlanManager("n", dir, main) to listOf("--session-id", "n", "--", REVIEW_MANAGER_FIRST_MESSAGE), reviewManagerStart(review(null), "n", mainOf) { true })
 
-    @Test fun `a manager entry resumes in its stored directory`() {
+    @Test fun `a manager entry resumes in its stored directory without a message`() {
         val m = PlanManager("s", Path.of("E:/dev/elsewhere"), Path.of("E:/dev/elsewhere"))
         assertEquals(m to listOf("--resume", "s"), reviewManagerStart(review(m), "n", { error("a stored manager keeps its project") }) { true })
+    }
+
+    @Test fun `a manager closed before its first message gets the message again`() {
+        val m = PlanManager("s", dir, main)
+        assertEquals(m to listOf("--session-id", "s", "--", REVIEW_MANAGER_FIRST_MESSAGE), reviewManagerStart(review(m), "n", { error("unused") }) { false })
     }
 
     @Test fun `a review's manager opens its review and a review that cannot be read names none`() {

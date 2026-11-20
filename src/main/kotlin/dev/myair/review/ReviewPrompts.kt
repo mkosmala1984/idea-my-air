@@ -19,6 +19,11 @@ fun reviewManagerPrompt(folderId: String, review: BranchReview) =
         "Publish findings to the pull request only when the user asks. " +
         "Change the state of a finding only on the user's word."
 
+/** The first message of a review's manager, sent once, when its session starts with no transcript. */
+const val REVIEW_MANAGER_FIRST_MESSAGE =
+    "Read the review with my_air_review_get and the branch's changes against its base, then fill the review's summary and " +
+        "its chapters, every changed file in one of them, with my_air_review_apply. Then tell me in a few lines what the branch does and where to look first."
+
 /** `claude --bg` ignores `--session-id`, so none is passed; the prompt follows `--`. */
 fun reviewerArgs(reviewer: Reviewer, prompt: String): List<String> = buildList {
     add("--bg")

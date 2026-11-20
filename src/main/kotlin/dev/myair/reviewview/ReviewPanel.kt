@@ -4,6 +4,7 @@ import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.actionSystem.ex.ActionUtil
@@ -25,9 +26,10 @@ import dev.myair.actions.showBaseDiff
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.SessionPane
 import dev.myair.planview.CardPage
-import dev.myair.planview.HEAD_GAP
 import dev.myair.planview.ID_COLUMN
 import dev.myair.planview.OpenEdit
+import dev.myair.planview.PAGE
+import dev.myair.planview.SelectableTitle
 import dev.myair.planview.action
 import dev.myair.planview.buttons
 import dev.myair.planview.card
@@ -43,6 +45,7 @@ import dev.myair.planview.markdownOrArea
 import dev.myair.planview.more
 import dev.myair.planview.selectable
 import dev.myair.prompt.Chip
+import dev.myair.prompt.Rounded
 import dev.myair.prompt.choose
 import dev.myair.review.ReviewService
 import dev.myair.review.Reviewers
@@ -72,10 +75,12 @@ import dev.myair.toolwindow.commentLabel
 import dev.myair.toolwindow.durationText
 import dev.myair.toolwindow.shortAge
 import java.awt.BorderLayout
+import java.awt.Font
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import javax.swing.Icon
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -128,7 +133,8 @@ class ReviewPanel(
             Card.EXPLANATION to listOf(view.chapters, view.unexplained, git?.state?.problem),
             // Not whole sessions: a working reviewer's transcript changes them on every refresh.
             Card.REVIEWERS to listOf(view.runs.map { listOf(it.run, it.status, it.findings, it.precision, it.session?.id, it.session?.title, runTime(it.run, it.status, now)) }, profiles, profileName, startErrors, git?.head, git?.state?.mergeBase, git?.sinceReviewed),
-            Card.FINDINGS to listOf(view.findings, filter, review.findings.map { it.state to it.severity }, open?.edit?.takeIf { it != ReviewEdit.Summary }),
+            Card.FINDINGS to listOf(view.findings, filter, review.findings.map { it.state to it.severity }, open?.edit?.takeIf { it != ReviewEdit.Summary },
+                toggled.filter { it.startsWith(FINDING) || it.startsWith(SEVERITY) }.toSet(), reviews.facts[folderId]?.state?.changes?.map { it.path }),
             Card.QUESTIONS to listOf(view.questions, review.questions.filter { it.resolved }),
         ).mapValues { (card, v) -> listOf(v, card.name in toggled, if (card == Card.QUESTIONS) RESOLVED in toggled else null) }
         val changed = if (force || cards.isEmpty()) Card.entries else Card.entries.filter { shown[it] != built[it] }
@@ -336,41 +342,83 @@ class ReviewPanel(
                 selected = f == filter
             }
         })
-        return listOf(chips) + view.findings.flatMap(::findingRows)
+        return listOf(chips) + view.findings.groupBy { it.finding.severity }.flatMap { (severity, findings) ->
+            val key = SEVERITY + severity.name
+            val unfolded = key !in toggled
+            val name = JBLabel(severity.name).apply {
+                font = JBFont.label().asBold()
+                if (severity == Severity.blocker) foreground = UIUtil.getErrorForeground()
+            }
+            // Each in a holder: the section's indent goes on it, not on a head's inset or over a card's white.
+            (listOf(head(chevron(unfolded), name, listOf(commentLabel("${findings.size}")), null) { toggle(key) }) +
+                if (unfolded) findings.map(::finding) else emptyList()).map(::holder)
+        }
     }
 
-    /** A finding's line, and under it the field of its reason or commit while that edit is open. */
-    private fun findingRows(v: FindingView): List<JComponent> {
+    /** A finding as a plan task: its head alone while folded (the default), a white card with its details while unfolded or edited. */
+    private fun finding(v: FindingView): JComponent {
         val f = v.finding
-        val dim = v.maybeFixed
-        val text = JBLabel("${f.file}:${f.line}  ${f.reports.last().summary}").apply {
-            if (dim) foreground = UIUtil.getContextHelpForeground()
-            toolTipText = tooltip(f)
+        val edit = open?.takeIf { it.edit == ReviewEdit.Reason(f.id) || it.edit == ReviewEdit.Commit(f.id) }
+        val unfolded = FINDING + f.id in toggled || edit != null
+        val head = findingHead(v, unfolded)
+        if (!unfolded) return head
+        val report = f.reports.last()
+        val body = card {
+            row {
+                if (changed(f.file)) link("${f.file}:${f.line}") { openDiff(f.file) } else label("${f.file}:${f.line}")
+                comment(f.category)
+            }
+            row { text(StringUtil.escapeXmlEntities(report.failureScenario), MAX_LINE_LENGTH_WORD_WRAP).selectable() }
+            when (f.state) {
+                FindingState.rejected -> row { comment(StringUtil.escapeXmlEntities("Rejected: ${f.reason}"), MAX_LINE_LENGTH_WORD_WRAP) }
+                FindingState.fixed -> row { comment("Fixed in ${checkNotNull(f.fixCommit).take(SHA)}") }
+                FindingState.posted -> f.comment?.let { row { comment(StringUtil.escapeXmlEntities("Posted: $it")) } }
+                FindingState.open, FindingState.accepted -> {}
+            }
+            for (r in f.reports) row { comment(StringUtil.escapeXmlEntities("${r.reviewer} · ${r.run} · ${r.commit.take(SHA)} · line ${r.line} · ${r.severity}: ${r.summary}"), MAX_LINE_LENGTH_WORD_WRAP) }
+            edit?.let { row(if (it.edit is ReviewEdit.Reason) "Reason:" else "Fix commit:") { cell(it.component).resizableColumn().align(AlignX.FILL) } }
         }
-        val line = JPanel(BorderLayout(JBUI.scale(HEAD_GAP), 0)).apply {
-            isOpaque = false
-            add(group(listOf(JBLabel(f.severity.name).apply { foreground = if (f.severity == Severity.blocker) UIUtil.getErrorForeground() else foreground }, commentLabel(f.id))), BorderLayout.WEST)
-            add(text)
-            add(group(listOfNotNull(
-                if (dim) commentLabel("maybe fixed") else null,
-                commentLabel("${v.agreeing}/${v.ran}"),
-                JBLabel(f.state.name),
-                buttons(findingMenu(f)),
-            )), BorderLayout.EAST)
+        return Rounded(PAGE, JBUI.scale(FINDING_ARC), squareTop = false).apply {
+            layout = BorderLayout()
+            add(head, BorderLayout.NORTH)
+            add(JPanel(BorderLayout()).apply { isOpaque = false; border = JBUI.Borders.empty(0, ID_COLUMN, 6, 4); add(body) }, BorderLayout.CENTER)
         }
-        val edit = open?.takeIf { it.edit == ReviewEdit.Reason(f.id) || it.edit == ReviewEdit.Commit(f.id) } ?: return listOf(line)
-        val label = if (edit.edit is ReviewEdit.Reason) "Reason:" else "Fix commit:"
-        return listOf(line, card { row(label) { cell(edit.component).resizableColumn().align(AlignX.FILL) } })
     }
 
-    private fun tooltip(f: Finding) = "<html>" + StringUtil.escapeXmlEntities(f.reports.last().failureScenario) + "<br><br>" +
-        f.reports.joinToString("<br>") { r -> StringUtil.escapeXmlEntities("${r.reviewer} (${r.run}, ${r.commit.take(SHA)}) line ${r.line}, ${r.severity}: ${r.summary}") } + "</html>"
+    /**
+     * A finding's head, as a plan task's: its state as a button that changes it, id and summary (grey once decided or maybe
+     * fixed), then its file and line, agreement and the menu of its actions; a click folds it.
+     */
+    private fun findingHead(v: FindingView, unfolded: Boolean): JComponent {
+        val f = v.finding
+        val state = stateGroup(f)
+        val title = SelectableTitle(f.reports.last().summary).apply {
+            if (unfolded) font = font.deriveFont(Font.BOLD)
+            else if (v.maybeFixed || !f.standing) foreground = UIUtil.getContextHelpForeground()
+        }
+        val trail = listOfNotNull(
+            commentLabel("${f.file.substringAfterLast('/')}:${f.line}").takeIf { !unfolded },
+            commentLabel("maybe fixed").takeIf { v.maybeFixed },
+            commentLabel("${v.agreeing}/${v.ran}").apply { toolTipText = "${v.agreeing} of ${v.ran} reviewers reported it" },
+            buttons(findingMenu(f, state)),
+        )
+        return head(buttons(state), title, trail, f.id) { toggle(FINDING + f.id) }
+    }
 
-    private fun findingMenu(f: Finding) = more(
+    /** What deciding a finding offers, under the icon of its state: its state button and the first item of its menu. */
+    private fun stateGroup(f: Finding) = DefaultActionGroup("State: ${f.state}", listOf(
         action("Accept") { stateTo(f, FindingState.accepted) },
         action("Reject...") { openEdit(ReviewEdit.Reason(f.id)) },
         action("Mark Fixed...") { openEdit(ReviewEdit.Commit(f.id)) },
         action("Reopen", { f.state != FindingState.open }) { stateTo(f, FindingState.open) },
+    )).apply {
+        isPopup = true
+        templatePresentation.icon = f.state.icon
+        templatePresentation.putClientProperty(ActionUtil.HIDE_DROPDOWN_ICON, true)
+    }
+
+    private fun findingMenu(f: Finding, state: AnAction) = more(
+        state,
         Separator.getInstance(),
         action("Fix with Claude") {
             val dir = reviews.review(folderId).dir
@@ -442,7 +490,20 @@ class ReviewPanel(
         const val GAP = 6
         const val SHA = 8
         const val RESOLVED = "resolved"
+        /** Prefixes of [toggled]: a finding unfolded, a severity group folded. */
+        const val FINDING = "finding:"
+        const val SEVERITY = "severity:"
+        const val FINDING_ARC = 12
         const val PROFILE_KEY = "dev.myair.reviewView.profile"
         val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
     }
+}
+
+/** A finding's state as a plan task's status shows it: open to decide, accepted to fix, then fixed, rejected or posted. */
+private val FindingState.icon: Icon get() = when (this) {
+    FindingState.open -> AllIcons.RunConfigurations.TestNotRan
+    FindingState.accepted -> AllIcons.Actions.Execute
+    FindingState.fixed -> AllIcons.RunConfigurations.TestPassed
+    FindingState.rejected -> AllIcons.RunConfigurations.TestIgnored
+    FindingState.posted -> AllIcons.Vcs.Push
 }

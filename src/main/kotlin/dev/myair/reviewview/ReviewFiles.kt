@@ -11,6 +11,7 @@ import dev.myair.planview.FolderTabFile
 import dev.myair.planview.FolderTabFileSystem
 import dev.myair.planview.FolderTabs
 import dev.myair.planview.managerStart
+import dev.myair.review.REVIEW_MANAGER_FIRST_MESSAGE
 import dev.myair.review.ReviewService
 import dev.myair.review.reviewManagerPrompt
 import dev.myair.store.BranchReview
@@ -34,10 +35,13 @@ class ReviewFileSystem : FolderTabFileSystem(PROTOCOL, { ReviewTabs.getInstance(
 
 /**
  * How [review]'s manager starts ([managerStart]): a new one in the review's work tree, its project the main checkout
- * ([mainCheckout] of the work tree, asked only then); a stored one where it was stored.
+ * ([mainCheckout] of the work tree, asked only then); a stored one where it was stored. A session with no transcript yet
+ * gets [REVIEW_MANAGER_FIRST_MESSAGE] after `--`; a resumed one nothing.
  */
-fun reviewManagerStart(review: BranchReview, newId: String, mainCheckout: (Path) -> Path, hasTranscript: (String) -> Boolean): Pair<PlanManager, List<String>> =
-    managerStart(review.manager, newId, review.dir, review.manager?.project ?: mainCheckout(review.dir), hasTranscript)
+fun reviewManagerStart(review: BranchReview, newId: String, mainCheckout: (Path) -> Path, hasTranscript: (String) -> Boolean): Pair<PlanManager, List<String>> {
+    val (manager, args) = managerStart(review.manager, newId, review.dir, review.manager?.project ?: mainCheckout(review.dir), hasTranscript)
+    return manager to if (args.first() == "--session-id") args + listOf("--", REVIEW_MANAGER_FIRST_MESSAGE) else args
+}
 
 /** The tab file of each review folder and the file of its manager session ([FolderTabs]); the manager is stored in `review.json`. */
 @Service(Service.Level.APP)
