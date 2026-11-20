@@ -1,6 +1,7 @@
 package dev.myair.prompt
 
 import dev.myair.store.Preset
+import dev.myair.store.Variant
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.nio.file.Path
@@ -14,6 +15,13 @@ class PromptChoicesTest {
     fun `a configuration without a model or effort starts with opus and medium`() {
         assertEquals(Choice(DEFAULT_PRESET, "opus", "medium", false), choiceOf(DEFAULT_PRESET))
         assertEquals(Choice(review, "sonnet", "high", true), choiceOf(review))
+    }
+
+    @Test
+    fun `a configuration with model and effort pairs starts with its first, and the started preset has no pairs`() {
+        val pick = Preset("Pick", variants = listOf(Variant(effort = "low"), Variant("fable", "max")))
+        assertEquals(Choice(pick, "opus", "low", false), choiceOf(pick))
+        assertEquals(Preset("Pick", "fable", "high"), choiceOf(pick).copy(model = "fable", effort = "high").toPreset(null))
     }
 
     @Test

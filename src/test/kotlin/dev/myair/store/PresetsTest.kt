@@ -72,6 +72,49 @@ class PresetsTest {
         ).forEach { text -> assertThrows<Exception>(text) { parsePresets(text) } }
     }
 
+    private val pick = Preset("Pick", variants = listOf(Variant("opus", "high"), Variant("sonnet")))
+
+    @Test
+    fun `model and effort pairs survive a round trip, and a preset without them writes no variants key`() {
+        assertEquals(listOf(pick), parsePresets(presetsJson(listOf(pick))))
+        assertTrue("variants" !in presetsJson(listOf(Preset("Plain"))))
+    }
+
+    @Test
+    fun `reads pairs written by hand`() {
+        val text = """{"presets": [{"name": "P", "variants": [{"model": "opus", "effort": "high"}, {"effort": "low"}]}]}"""
+        assertEquals(listOf(Preset("P", variants = listOf(Variant("opus", "high"), Variant(effort = "low")))), parsePresets(text))
+    }
+
+    @Test
+    fun `rejects a single pair, a repeated pair, pairs beside a model, unknown keys, an empty pair and an unknown effort`() {
+        listOf(
+            """{"presets": [{"name": "a", "variants": [{"model": "opus"}]}]}""",
+            """{"presets": [{"name": "a", "variants": [{"model": "opus"}, {"model": "opus"}]}]}""",
+            """{"presets": [{"name": "a", "model": "opus", "variants": [{"model": "opus"}, {"model": "sonnet"}]}]}""",
+            """{"presets": [{"name": "a", "variants": [{"model": "opus", "x": 1}, {"model": "sonnet"}]}]}""",
+            """{"presets": [{"name": "a", "variants": [{}, {"model": "sonnet"}]}]}""",
+            """{"presets": [{"name": "a", "variants": [{"effort": "huge"}, {"model": "sonnet"}]}]}""",
+        ).forEach { text -> assertThrows<Exception>(text) { parsePresets(text) } }
+    }
+
+    @Test
+    fun `a picked pair gives a preset with its model and effort and no pairs, the first one where nothing is picked`() {
+        assertEquals(Preset("Pick", model = "sonnet"), pick.withVariant(Variant("sonnet")))
+        assertEquals(Preset("Pick", "opus", "high"), pick.firstVariant())
+        assertEquals(full, full.firstVariant())
+        assertThrows<IllegalArgumentException> { pick.withVariant(Variant("fable")) }
+    }
+
+    @Test
+    fun `pairs typed one per line read back as written`() {
+        assertEquals(listOf(Variant("opus", "high"), Variant("sonnet"), Variant(effort = "low")), parseVariants(" opus high\n\nsonnet\n- low\n"))
+        assertEquals(listOf(Variant("opus", "high")), parseVariants("high opus"))
+        val variants = listOf(Variant("opus", "high"), Variant("sonnet"), Variant(effort = "low"))
+        assertEquals(variants, parseVariants(variantsText(variants)))
+        listOf("opus sonnet", "low high", "-", "opus huge high").forEach { assertThrows<IllegalArgumentException>(it) { parseVariants(it) } }
+    }
+
     @Test
     fun `a session's preset has its settings, and a worktree with the base picked at start when it runs in one`() {
         val project = Path.of("E:/dev/rtm")

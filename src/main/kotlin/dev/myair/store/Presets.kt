@@ -17,11 +17,21 @@ import kotlin.io.path.readText
 /** The levels `claude --effort` takes. */
 val EFFORTS = listOf("low", "medium", "high", "xhigh", "max")
 
+/** A model and effort a configuration with several of them offers at the click; a null part leaves its flag out. */
+data class Variant(val model: String? = null, val effort: String? = null) {
+    init {
+        require(model != null || effort != null) { "a model and effort pair sets neither" }
+        require(model?.isBlank() != true) { "a model and effort pair has a blank model" }
+        require(effort == null || effort in EFFORTS) { "effort of a pair is $effort, not one of $EFFORTS" }
+    }
+}
+
 /**
  * A way to start a new session. A null [model] or [effort] leaves its flag out, so `claude` takes its own setting; a
  * null [project] is the directory of the IDE project. [worktree]: start in a new worktree off [base], or off a branch
  * picked at start when [base] is null. [addDirs] go to `--add-dir`. [pinned] gives the preset its own toolbar button.
  * [prompt] is the first message of its sessions; [askMore] opens the composer with it typed in, to add to it before the start.
+ * [variants], none or at least two, are the model and effort pairs picked from at the click, in place of [model] and [effort].
  */
 data class Preset(
     val name: String,
@@ -34,13 +44,26 @@ data class Preset(
     val pinned: Boolean = false,
     val prompt: String? = null,
     val askMore: Boolean = false,
+    val variants: List<Variant> = emptyList(),
 ) {
     init {
         require(name.isNotBlank()) { "preset name is blank" }
         require(listOfNotNull(model, project, base, prompt).plus(addDirs).none { it.isBlank() }) { "preset $name has a blank value" }
         require(effort == null || effort in EFFORTS) { "effort of preset $name is $effort, not one of $EFFORTS" }
         require(worktree || base == null) { "preset $name has a base branch without a worktree" }
+        require(variants.size != 1) { "preset $name has a single model and effort pair; set its model and effort instead" }
+        require(variants.toSet().size == variants.size) { "preset $name repeats a model and effort pair" }
+        require(variants.isEmpty() || model == null && effort == null) { "preset $name has both a model or effort and pairs" }
     }
+
+    /** This preset with [variant]'s model and effort and no pairs left to pick from. */
+    fun withVariant(variant: Variant): Preset {
+        require(variant in variants) { "$variant is not a pair of preset $name" }
+        return copy(model = variant.model, effort = variant.effort, variants = emptyList())
+    }
+
+    /** This preset where no pair is picked: with its first pair, or as it is without pairs. */
+    fun firstVariant(): Preset = variants.firstOrNull()?.let(::withVariant) ?: this
 
     /** [prompt]'s first line for a tooltip, cut to 40 characters with an ellipsis. */
     fun promptHead(): String? = prompt?.lineSequence()?.first()?.let { if (it.length > 40) it.take(40) + "…" else it }
@@ -91,7 +114,11 @@ fun checkPresets(presets: List<Preset>) {
 
 fun presetsJson(presets: List<Preset>): String {
     checkPresets(presets)
-    return GsonBuilder().setPrettyPrinting().create().toJson(mapOf("presets" to presets))
+    val gson = GsonBuilder().setPrettyPrinting().create()
+    val tree = gson.toJsonTree(mapOf("presets" to presets))
+    // Without pairs the key is left out, so a build before them still reads the file.
+    tree.asJsonObject["presets"].asJsonArray.map { it.asJsonObject }.filter { it["variants"].asJsonArray.isEmpty }.forEach { it.remove("variants") }
+    return gson.toJson(tree)
 }
 
 fun parsePresets(text: String): List<Preset> {
@@ -111,11 +138,32 @@ fun parsePresets(text: String): List<Preset> {
             preset.boolean("pinned"),
             preset.string("prompt"),
             preset.boolean("askMore"),
+            preset["variants"]?.asJsonArray?.map { it.variant() }.orEmpty(),
         )
     }.also(::checkPresets)
 }
 
-private val PRESET_KEYS = setOf("name", "model", "effort", "project", "worktree", "base", "addDirs", "pinned", "prompt", "askMore")
+private val PRESET_KEYS = setOf("name", "model", "effort", "project", "worktree", "base", "addDirs", "pinned", "prompt", "askMore", "variants")
+
+private fun JsonElement.variant(): Variant {
+    val pair = asJsonObject
+    check(setOf("model", "effort").containsAll(pair.keySet())) { "unexpected keys in a model and effort pair: ${pair.keySet()}" }
+    return Variant(pair.string("model"), pair.string("effort"))
+}
+
+/**
+ * The pairs typed in the configuration dialog, one per non-blank line: a word among [EFFORTS] is the effort, any other the
+ * model, `-` nothing (`- low`).
+ */
+fun parseVariants(text: String): List<Variant> = text.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { line ->
+    val words = line.split(Regex("\\s+")).filter { it != "-" }
+    val (efforts, models) = words.partition { it in EFFORTS }
+    require(efforts.size <= 1 && models.size <= 1 && words.isNotEmpty()) { "not a model and effort pair: $line" }
+    Variant(models.singleOrNull(), efforts.singleOrNull())
+}
+
+/** [variants] as [parseVariants] reads them. */
+fun variantsText(variants: List<Variant>) = variants.joinToString("\n") { "${it.model ?: "-"} ${it.effort ?: ""}".trim() }
 
 private fun JsonObject.string(key: String) = get(key)?.string()
 

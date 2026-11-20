@@ -9,7 +9,7 @@ import dev.myair.store.Preset
 
 /**
  * How `my_air_session_start` starts a session: [saved]'s configuration named [preset] (none: claude's own settings in the IDE
- * project), each argument given replacing its field; [addDirs] is a JSON array. A worktree needs a base, since an agent
+ * project; with model and effort pairs, its first), each argument given replacing its field; [addDirs] is a JSON array. A worktree needs a base, since an agent
  * cannot pick one from a popup.
  */
 /**
@@ -28,6 +28,7 @@ fun sessionStartPreset(
 ): Preset {
     val from = if (preset == null) Preset("my_air_session_start")
     else requireNotNull(saved.firstOrNull { it.name == preset }) { "no configuration '$preset'; configurations: ${saved.joinToString { it.name }.ifEmpty { "none" }}" }
+        .firstVariant()
     val start = from.copy(
         model = model ?: from.model, effort = effort ?: from.effort, project = dir ?: from.project,
         // A configuration's worktree turned off takes its base along.

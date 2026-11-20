@@ -1,6 +1,7 @@
 package dev.myair.schedule
 
 import dev.myair.store.Preset
+import dev.myair.store.Variant
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
@@ -41,6 +42,8 @@ class ScheduledTasksTest {
         val schedule = Schedule(setOf(MONDAY), LocalTime.NOON)
         assertThrows<IllegalArgumentException> { ScheduledTask("a", Preset("A"), schedule, true, emptyList(), null, since) }
         assertThrows<IllegalArgumentException> { ScheduledTask("a", Preset("A", worktree = true, prompt = "p"), schedule, true, emptyList(), null, since) }
+        val pairs = listOf(Variant("opus"), Variant("sonnet"))
+        assertThrows<IllegalArgumentException> { ScheduledTask("a", Preset("A", prompt = "p", variants = pairs), schedule, true, emptyList(), null, since) }
         assertThrows<IllegalArgumentException> { Schedule(emptySet(), LocalTime.NOON) }
     }
 

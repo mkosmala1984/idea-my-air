@@ -1,6 +1,7 @@
 package dev.myair.mcp
 
 import dev.myair.store.Preset
+import dev.myair.store.Variant
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
@@ -20,6 +21,13 @@ class SessionStartTest {
         assertEquals(listOf("--model", "haiku", "--add-dir", "E:/a", "--add-dir", "E:/b"), start.claudeArgs())
         assertEquals("E:/dev/x", start.project)
         assertEquals(false, start.worktree)
+    }
+
+    @Test
+    fun `a configuration with model and effort pairs starts with its first, a given model or effort replacing its part`() {
+        val pick = Preset("Pick", variants = listOf(Variant("opus", "high"), Variant("sonnet")))
+        assertEquals(Preset("Pick", "opus", "max"), sessionStartPreset(listOf(pick), "Pick", null, null, "max", null, null, null))
+        assertEquals(Preset("Pick", "opus", "high"), sessionStartPreset(listOf(pick), "Pick", null, null, null, null, null, null))
     }
 
     @Test
