@@ -2,20 +2,28 @@ package dev.myair.actions
 
 import com.intellij.ide.DataManager
 import com.intellij.ide.actions.RevealFileAction
+import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.CollectionListModel
+import com.intellij.ui.DocumentAdapter
+import com.intellij.ui.dsl.builder.COLUMNS_MEDIUM
+import com.intellij.ui.dsl.builder.columns
+import javax.swing.event.DocumentEvent
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
-import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.SessionTerminals
@@ -47,16 +55,17 @@ class ProfilesEditor {
 
     val component = ToolbarDecorator.createDecorator(list)
         .setAddAction { add() }
+        .setAddActionUpdater { project() != null }
         .setRemoveAction { remove() }
         .setRemoveActionUpdater { list.selectedValue?.isDefault == false }
-        .addExtraAction(object : com.intellij.openapi.actionSystem.AnAction("Open Folder", null, com.intellij.icons.AllIcons.Nodes.Folder) {
-            override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+        .addExtraAction(object : AnAction("Open Folder", null, AllIcons.Nodes.Folder) {
+            override fun actionPerformed(e: AnActionEvent) {
                 RevealFileAction.openDirectory(checkNotNull(list.selectedValue) { "no profile selected" }.dir)
             }
-            override fun update(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+            override fun update(e: AnActionEvent) {
                 e.presentation.isEnabled = list.selectedValue != null
             }
-            override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+            override fun getActionUpdateThread() = ActionUpdateThread.EDT
         })
         .createPanel()
 
@@ -65,9 +74,11 @@ class ProfilesEditor {
 
     private val Profile.isDefault get() = this == store.default
 
+    private fun project() = CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext(list))
+
     private fun add() {
-        val project = requireNotNull(CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext(list))) { "Settings opened without a project" }
-        val profile = NewProfileDialog(store.all().drop(1), store.defaultDir).profile() ?: return
+        val project = checkNotNull(project()) { "Settings opened without a project" }
+        val profile = NewProfileDialog(store.all().drop(1), store.defaultDir).profile(true) ?: return
         createProfileDirs(profile)
         store.write(store.all().drop(1) + profile)
         reload()
@@ -91,9 +102,10 @@ class ProfilesEditor {
 }
 
 private class NewProfileDialog(private val taken: List<Profile>, private val defaultDir: Path) : DialogWrapper(true) {
-    private var name = ""
-    private var dir = ""
-    private val dirField = JBTextField()
+    private val nameField = JBTextField()
+    private lateinit var dirField: TextFieldWithBrowseButton
+    private var dirEdited = false
+    private var prefilling = false
 
     init {
         title = "New Claude Profile"
@@ -102,25 +114,35 @@ private class NewProfileDialog(private val taken: List<Profile>, private val def
 
     override fun createCenterPanel() = panel {
         row("Name:") {
-            textField().bindText(::name).focused().applyToComponent {
-                document.addDocumentListener(object : com.intellij.ui.DocumentAdapter() {
-                    override fun textChanged(e: javax.swing.event.DocumentEvent) {
-                        dirField.text = Path.of(System.getProperty("user.home"), ".my-air", "claude-profiles", text.trim()).toString()
-                    }
-                })
-            }
+            cell(nameField).focused().columns(COLUMNS_MEDIUM).validationOnApply { if (it.text.isBlank()) error("Enter a name") else null }
         }
         row("Directory:") {
-            textFieldWithBrowseButton(FileChooserDescriptorFactory.createSingleFolderDescriptor().withTitle("Profile Directory"))
-                .bindText(::dir).align(AlignX.FILL).applyToComponent { dirField.document = textField.document }
+            dirField = textFieldWithBrowseButton(FileChooserDescriptorFactory.createSingleFolderDescriptor().withTitle("Profile Directory"))
+                .align(AlignX.FILL)
                 .validationOnApply {
-                    runCatching { parseProfiles(profilesJson(taken + Profile(name.trim(), Path.of(it.text.trim()))), defaultDir) }
-                        .exceptionOrNull()?.let { e -> error(e.message!!) }
-                }
+                    runCatching { parseProfiles(profilesJson(taken + profile()), defaultDir) }.exceptionOrNull()?.let { e -> error(e.message!!) }
+                }.component
         }
+    }.also {
+        nameField.document.addDocumentListener(object : DocumentAdapter() {
+            override fun textChanged(e: DocumentEvent) {
+                val name = nameField.text.trim()
+                if (dirEdited || name.isEmpty() || runCatching { Path.of(name) }.isFailure) return
+                prefilling = true
+                dirField.text = Path.of(System.getProperty("user.home"), ".my-air", "claude-profiles", name).toString()
+                prefilling = false
+            }
+        })
+        dirField.textField.document.addDocumentListener(object : DocumentAdapter() {
+            override fun textChanged(e: DocumentEvent) {
+                if (!prefilling) dirEdited = true
+            }
+        })
     }
 
-    fun profile(): Profile? = if (showAndGet()) Profile(name.trim(), Path.of(dir.trim())) else null
+    private fun profile() = Profile(nameField.text.trim(), Path.of(dirField.text.trim()))
+
+    fun profile(show: Boolean): Profile? = if (showAndGet()) profile() else null
 }
 
 private class McpCommandDialog(private val command: String) : DialogWrapper(true) {

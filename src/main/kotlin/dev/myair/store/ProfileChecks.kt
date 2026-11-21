@@ -4,18 +4,22 @@ import com.google.gson.JsonParser
 import dev.myair.claude.LiveSession
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
+import kotlin.io.path.exists
 import kotlin.io.path.readText
 
 /** The `idea` entry of `mcpServers` in a `.claude.json` when it is an http server: name and url; an unreadable file throws. */
 fun ideServer(claudeJson: Path): Pair<String, String>? {
+    if (!claudeJson.exists()) return null
     val entry = JsonParser.parseString(claudeJson.readText()).asJsonObject["mcpServers"]?.asJsonObject?.get("idea")?.asJsonObject ?: return null
     if (entry["type"]?.asString != "http") return null
     return "idea" to entry["url"].asString
 }
 
 /** The PowerShell command that gives [profile] the same MCP server as [server]. */
-fun mcpAddCommand(profile: Profile, server: Pair<String, String>) =
-    "\$env:CLAUDE_CONFIG_DIR='${profile.dir}'; claude mcp add --scope user --transport http ${server.first} ${server.second}"
+fun mcpAddCommand(profile: Profile, server: Pair<String, String>): String {
+    require("'" !in profile.dir.toString()) { "directory of profile ${profile.name} contains a quote: ${profile.dir}" }
+    return "\$env:CLAUDE_CONFIG_DIR='${profile.dir}'; claude mcp add --scope user --transport http ${server.first} ${server.second}"
+}
 
 /** Why [profile] cannot be removed from the list, else null; each argument holds the profile names in use. */
 fun removeRefusal(
