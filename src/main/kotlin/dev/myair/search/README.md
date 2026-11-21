@@ -4,7 +4,8 @@
 
 A full-text index of what the human and the agent said in every session, so the sessions search finds a session by its
 conversation and not only by title, directory and branch. One SQLite FTS5 table in `~/.my-air/search.db`, shared by every
-IDE running the plugin; SQLite is the IDE's own sqlite-jdbc (`intellij.libraries.sqlite`, FTS5 included).
+IDE running the plugin; SQLite is `org.xerial:sqlite-jdbc` bundled with the plugin (FTS5 included), since the IDE's own
+copy is a library module no plugin can depend on.
 
 ## Interface
 
@@ -12,7 +13,8 @@ IDE running the plugin; SQLite is the IDE's own sqlite-jdbc (`intellij.libraries
   - `update(files): Boolean`: reads the complete lines after the stored offset of each transcript, forgets the files not
     listed, returns whether anything changed;
   - `search(query): Map<Path, String>`: the transcripts with one message holding every word of the query, each with the
-    text around the match, best first.
+    text around the match, best first; an empty query throws;
+  - internal `texts(line)`: the messages one transcript line holds, as indexed.
 - `ClaudeSessionsService.searchContent(query)` (off the EDT) and `indexGeneration` (counts index changes); the service
   indexes after every refresh on its own thread (`indexConversations`, the latest list of transcripts only).
 - Used by the Claude Sessions search field (`SessionsPanel.searchContent`: a session stays in the tree when it matches by
@@ -32,6 +34,8 @@ IDE running the plugin; SQLite is the IDE's own sqlite-jdbc (`intellij.libraries
   again; a file not among those listed is forgotten (the copy of a session the scanner does not pick, a session `/bg`
   continued elsewhere). Each file is one write transaction taking the lock at its start; the offset is read again inside it,
   since another IDE may have indexed the file meanwhile.
+- Connections come from `JDBC.createConnection` (not `DriverManager`, whose system class loader does not see the plugin's
+  jar), in WAL journal mode with IMMEDIATE transactions and a 60 s busy timeout.
 - `PRAGMA user_version` holds `FORMAT`; another value drops both tables and starts over, as the scanner's cache does for a
   rebuilt reader. Bump it whenever `texts` or the schema changes.
 - Anything else wrong (a corrupt file, a line that does not parse) throws.

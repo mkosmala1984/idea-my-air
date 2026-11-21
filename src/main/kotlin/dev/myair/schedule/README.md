@@ -8,10 +8,10 @@ Scheduled tasks: Claude sessions started at fixed weekday times while an IDE run
 
 - `ScheduledTasks.kt`: `Schedule`, `ScheduledTask` (`claudeArgs(sessionId)`), `edited`, `parseScheduledTasks`/`scheduledTasksJson`, `ScheduledTaskStore` (`~/.my-air/scheduled-tasks.json`).
 - `Slots.kt`: `CATCH_UP`, `latestSlot`, `nextSlot`, `dueSlot` (pure).
-- `RunRecords.kt`: `RunState`, `RunRecord`, `RunRecords` (`claim`, `exists`, `update`, `of`, `all`, `prune`, `~/.my-air/scheduled-runs`; `broken`), `Verdict`, `verdict`, `ideAlive`, `blocksNext`.
+- `RunRecords.kt`: `RunState`, `RunRecord`, `RunRecords` (`claim`, `exists`, `update`, `of`, `all`, `prune`, `~/.my-air/scheduled-runs`; `broken`), `START_DEADLINE` (5 minutes), `Verdict`, `verdict`, `ideAlive`, `blocksNext`.
 - `RunProject.kt`: `pickProject`, `preStartError` (pure).
-- `ScheduledRuns.kt`: the application service: the 30 s tick, `runNow(taskId)`, `held(unread)`.
+- `ScheduledRuns.kt`: the application service: the 30 s tick, `runNow(taskId)`, `held(unread)`, `PREVIOUS_RUNNING` (the reason of a skipped run).
 - `ui/TaskRows.kt`: `scheduleText`, `TaskRow`, `taskRow`, `runText` (pure).
-- `ui/ScheduledTasksFiles.kt`: `ScheduledTasksVirtualFile`, `ScheduledTasksFileSystem` (`myair-scheduled://tasks`), `ScheduledTasksFiles`, `openScheduledTasks`, `OpenScheduledTasksAction` (a `SingleTabFile`).
+- `ui/ScheduledTasksFiles.kt`: `ScheduledTasksVirtualFile` (a `SingleTabFile`), `ScheduledTasksFileSystem` (`myair-scheduled://tasks`), `ScheduledTasksFiles`, `openScheduledTasks`, `OpenScheduledTasksAction`.
 - `ui/ScheduledTasksEditor.kt`: `ScheduledTasksEditorProvider` (type id `myair-scheduled`), `ScheduledTasksEditor`.
 - `ui/ScheduledTaskDialog.kt`: `ScheduledTaskDialog` (`task(): ScheduledTask?`).

@@ -21,23 +21,26 @@ another IDE or the taskbar app asks.
 
 ## Invariants
 
-- A session tab is a file for which `sessionFileOf` gives a session file (a session tab, or a plan tab with a manager),
+- A session tab is a file for which `sessionFileOf` gives a session file (a session tab, or a plan or review tab with a manager),
   or an Air tab (`com.intellij.air.thread.view.AgentThreadViewVirtualFile`) whose `getThreadId`/`getSessionId` give ids.
-- `findTab` prefers an open tab; else a detached session's tab file (`tabFileOf`), so focusing it reopens that file.
+- `findTab` prefers an open tab; else a detached session's tab file (`tabFileOf`: a manager's plan or review tab), so focusing it reopens that file.
 - `allIdes()` lists this IDE first; `focusElsewhere` returns false when no other IDE has a tab on the session.
 - `focusIn` for this IDE throws when no tab here shows the session; `allowForeground` and `bringToFront` throw when
   Windows refuses.
 - A focus request whose session has neither a tab nor a transcript is logged as a warning and dropped; otherwise it
   opens in the first open project whose base contains the session's cwd, else the first open project.
-- `hostWindow` walks the `claude` process's ancestors to the first with a visible titled window, preferring one whose
+- `hostWindow` walks the `claude` process's ancestors, starting at its parent, to the first with a visible titled window, preferring one whose
   title contains the session directory's name.
 
 ## Side Effects
 
-- Writes `~/.my-air/ides/<pid>.json` on tab open/close, project startup and re-targeting; removes it on `dispose`.
+- Writes `~/.my-air/ides/<pid>.json` on tab open/close, project startup and re-targeting, and from `SessionTerminals`
+  when a process is detached (`detach`), started detached (`startDetached`) or ended by `retireIdle`; removes it on
+  `dispose`.
 - Watches `~/.my-air/requests/<pid>/` on a daemon thread; requests are handled on the EDT.
-- Win32 calls through JNA: `AllowSetForegroundWindow`, `EnumWindows`, `GetWindowText`, `ShowWindow(SW_RESTORE)` (only a
-  minimized window), `SetForegroundWindow`.
+- Win32 calls through JNA: `AllowSetForegroundWindow`, `EnumWindows`, `GetWindowThreadProcessId`, `IsWindowVisible`,
+  `GetWindowText`, `GetWindowLong(GWL_STYLE)` and `ShowWindow(SW_RESTORE)` (only a minimized window),
+  `SetForegroundWindow`.
 - Focuses project windows and opens editor tabs; on tab selection and IDE activation calls
   `ClaudeSessionsService.lookedAt()`, which marks sessions seen.
 

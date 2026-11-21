@@ -23,6 +23,9 @@ a click pins it, and a bubble announces sessions that newly need the user. It re
 - `Popup` (`Popup.cs`): `Items(board, groups, resources, projectInTitle)`, `PlaceOver(window, widget)`,
   `HideFromAltTab(window)`; records `FlyoutHeader`, `FlyoutRow`.
 - `Theme` (`Theme.cs`): `TaskbarIsLight()`, `Apply(resources)`, `DotKey(group)`.
+- Shared resources (`App.xaml`): styles `Window` and `Card` (used by `Flyout` and `Bubble`) and `Row`, data templates for
+  `FlyoutHeader` and `FlyoutRow`.
+- `app.manifest`: per-monitor-v2 DPI awareness, without which the hosted window keeps detaching from the taskbar.
 - `build.ps1`: stops `MyAirTaskbar`, runs `dotnet test tests`, builds Release, starts the new exe.
 
 ## Invariants
@@ -50,7 +53,7 @@ a click pins it, and a bubble announces sessions that newly need the user. It re
   directories (`FileSystemWatcher`) and reloads every 5 s.
 - Creates `~/.my-air/ides`, `seen` and `taskbar` directories.
 - `Focus` writes `~/.my-air/requests/<pid>/<guid>.json` (temp `.tmp`, then moved) and `~/.my-air/seen/<id>` (epoch ms).
-- Win32: `AllowSetForegroundWindow`, `SetWindowLongPtr` (`WS_EX_TOOLWINDOW`); reads the registry value
+- Win32: `AllowSetForegroundWindow`, `GetWindowLongPtr` and `SetWindowLongPtr` (adding `WS_EX_TOOLWINDOW`); reads the registry value
   `HKCU\...\Themes\Personalize\SystemUsesLightTheme`.
 
 ## Verification

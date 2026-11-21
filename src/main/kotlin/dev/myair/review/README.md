@@ -15,8 +15,8 @@ Review folders: the application service that reads and writes `~/.my-air/reviews
 - `Findings.kt`: `data class IncomingFinding`, `mergeFindings(review, run, commit, incoming)`.
 - `ReviewJson.kt`: `reviewJson(structure, folderId, review, git, liveJobs)`, the text `my_air_review_get` returns: the folder and the linked plan as paths.
 - `ReviewMirror.kt`: `data class Mirror(changes, blockers)`, `mirrorToPlan(review, plan, liveJobs)`.
-- `ReviewPrompts.kt`: `reviewerPrompt` (base, merge base, head, range with its `RangeSize`), `reviewManagerPrompt`, `reviewerArgs`, `parseJobId`, `rangeFor` (throws on an empty range), `runProblem` (why Run is disabled).
-- `Reviewers.kt`: `object Reviewers` with `start(dir, args)`, which runs `claude --bg` and returns the job id.
+- `ReviewPrompts.kt`: `reviewerPrompt` (base, merge base, head, range with its `RangeSize`), `reviewManagerPrompt`, `REVIEW_MANAGER_FIRST_MESSAGE` (a new manager's first message), `reviewerArgs`, `parseJobId`, `rangeFor` (throws on an empty range), `runProblem` (why Run is disabled).
+- `Reviewers.kt`: `object Reviewers` with `start(dir, args, profile)`, which runs `claude --bg` with the Claude profile's environment (`profileEnv`) and returns the job id.
 
 ## Invariants
 

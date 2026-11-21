@@ -6,5 +6,5 @@ Namespace directory. It holds only the `dev.myair` package tree of the My Air pl
 
 ## Subdirectories & Boundaries
 
-- myair: [./myair/README.md](./myair/README.md) - the root package (`MyAirSettings`, `MyAirConfigurable`) and its twelve
+- myair: [./myair/README.md](./myair/README.md) - the root package (`MyAirSettings`, `MyAirConfigurable`) and its seventeen
   feature packages.

@@ -6,15 +6,16 @@ This package reads the files that `claude` and Claude Desktop write. It covers s
 
 ## Interface
 
-- `ClaudeSession` (`ClaudeSession.kt`): one session as read from its transcript. Fields: id, cwd, title, `lastMessage`, changed files, the first prompts, `brief`, `project`, `desktop`, `addedDirs`, `model`, `effort`, `artifacts`, `background`, `skills`, `mcpServers`, `workDir`, `startBranch`, `continuedIn`.
-  - `matches(query, branch)`: every word of the query must match, case-insensitively, the title, the cwd, `startBranch` or `branch`.
+- `ClaudeSession` (`ClaudeSession.kt`): one session as read from its transcript. Fields: id, cwd, title, `lastMessage`, changed files, the first prompts, `brief`, `project`, `desktop`, `addedDirs`, `model`, `effort`, `artifacts`, `background`, `skills`, `mcpServers`, `workDir`, `startBranch`, `continuedIn`, `lastBranch` (the branch at the latest message), `asks` (the agent's latest text ends with `?` and no human prompt followed), `transcript` (the file read) and `profile` (the profile whose directory holds it; set by `service/ProfileReads.kt`, `default` from the scanner).
+  - `matches(query, branch)`: every word of the query must match, case-insensitively, the title, the cwd, `startBranch`, `branch` or the `profile` unless it is `default`.
   - `isWithin(days, now)`: whether the last message falls within the given number of days.
   - `toString()` returns the id.
+- `queryWords(query)` (`ClaudeSession.kt`): the words of a search query, split on spaces, as `matches` and `search/SessionIndex` take them.
 - `Artifact`, `BackgroundTask` (with `Kind`, `End`, `Status`, `Usage`, `Agents`) (`ClaudeSession.kt`): artifacts and background tasks found in a transcript.
 - `mcpServers(tools)` (`ClaudeSession.kt`): the sorted server names taken from `mcp__<server>__<tool>` names. A server whose only tools are `authenticate`/`complete_authentication` is left out.
 - `Path.isAtOrUnder(dir)` (`ClaudeSession.kt`): a text comparison, equal to `dir` or below `dir` plus the separator.
 - `Brief`, `BriefTask`, `TaskStatus` (`Brief.kt`): what a session is for, set by `my_air_set_brief` (`SET_BRIEF`) or by a Desktop `mcp__ccd_turn__update_plan` (`UPDATE_PLAN`).
-  - `Brief.next(previous, tool, input, result)`: returns the brief after an accepted call. `planTask`, `title` and `folder` keep their previous values when a call leaves them out.
+  - `Brief.next(previous, tool, input, result)`: returns the brief after an accepted call. `planTask`, `title` and `folder` keep their previous values when a call leaves them out. A Desktop `update_plan` either replaces goal and tasks (`items`) or moves the previous plan on: `advance` completes the task in progress and starts the next pending one, `done`/`start` complete and start tasks by 1-based number.
   - `Brief.input(...)`: validates the tool's arguments.
   - `Brief.folderResult(id, path, created)`: formats the tool's result, `ok, folder <id> at '<path>'`.
   - `Brief.tasks(items)`: parses the task list.
@@ -22,16 +23,16 @@ This package reads the files that `claude` and Claude Desktop write. It covers s
 - `ClaudeSessionScanner(projectsDir, saved)` (`ClaudeSessionScanner.kt`): reads `<projectsDir>/<encoded-cwd>/<sessionId>.jsonl`.
   - `scan(desktopProjects): List<ClaudeSession>`: the sessions, newest first.
   - `save()`: writes the scan cache.
-  - `Saved(file, build)` with `Saved.forJar(dir, jar)`: names the cache file `scan-cache-<hash of jar path>.json` and tags it with a hash of the jar's `dev/myair/claude/*.class` entries.
+  - `Saved(file, build)` with `Saved.forJar(dir, jar, profile)`: names the cache file `scan-cache-<hash of jar path>.json`, a profile other than `default` adding `-<hash of its dir>` before `.json`, and tags it with a hash of the jar's `dev/myair/claude/*.class` entries.
   - `Transcript` and its parts `Conversation`, `Messages`, `Environment` and `Call`: the incremental parse state. `Transcript.toSession(file, desktopProject)` turns it into a session.
-  - `parse(file)` and `read(file, from)` on the companion object.
+  - `parse(file)` and `read(file, from)` on the companion object; internal `promptText(o)`, the human's prompt text of a `user` line (a skill run as `/name args`), shared with `search/SessionIndex`.
   - `PROMPTS = 3`.
-- `LiveSessionRegistry(dir, isSameProcess)` (`LiveSessionRegistry.kt`): reads `<dir>/<pid>.json` (`~/.claude/sessions`, or a profile's `sessions/`; one instance per profile, merged by `service/ProfileReads.kt`) with `read(): Map<String, LiveSession>`. `isSameProcess(pid, procStart)` compares the process start time with `procStart`, a Windows FILETIME.
-- `LiveSession`, `SessionStatus` (`WORKING`, `NEEDS_INPUT`, `IDLE`; `waitRank`) (`LiveSessionRegistry.kt`). `Map<String, LiveSession>.shownBy(pid, job)` returns the entry a tab shows: the entry with that job, else the entry with that pid or whose `parkedBy` contains it.
-- `DesktopSessionReader(dataDir)` (`DesktopSessions.kt`): `read()` maps `cliSessionId` to `originCwd` from `<dataDir>/*/claude-code-sessions/*/*/local_*.json`. Each file is cached by its modification time.
-- `ClaudeHomeWatcher(dirs, projectsDir, quiet = 500 ms, maxWait = 700 ms, onChange)` (`ClaudeHomeWatcher.kt`), `Closeable`: calls `onChange` once a burst of file events settles.
+- `LiveSessionRegistry(dir, isSameProcess)` (`LiveSessionRegistry.kt`): reads `<dir>/<pid>.json` (`~/.claude/sessions`, or a profile's `sessions/`; one instance per profile, merged by `service/ProfileReads.kt`) with `read(): Map<String, LiveSession>`; internal `entry(file): Record?` reads one file. `isSameProcess(pid, procStart)` (companion, the default) compares the process start time with `procStart`, a Windows FILETIME.
+- `LiveSession` (its `profile`: the profile whose `sessions/` lists the process, set by `service/ProfileReads.kt`), `SessionStatus` (`WORKING`, `NEEDS_INPUT`, `IDLE`; `waitRank`) (`LiveSessionRegistry.kt`). `Map<String, LiveSession>.shownBy(pid, job)` returns the entry a tab shows: the entry with that job, else the entry with that pid or whose `parkedBy` contains it.
+- `DesktopSessionReader(dataDir)` (`DesktopSessions.kt`): `read()` maps `cliSessionId` to `originCwd` from `<dataDir>/*/claude-code-sessions/*/*/local_*.json`. Each file is cached by its modification time. `DesktopSessionReader.parse(file)` reads one file's `cliSessionId` and `originCwd`.
+- `ClaudeHomeWatcher(dirs, projectsDirs, quiet = 500 ms, maxWait = 700 ms, onChange)` (`ClaudeHomeWatcher.kt`), `Closeable`: calls `onChange` once a burst of file events settles.
 - `skillFiles(name, home, cwd, agents): SkillFiles?` and `SkillFiles` (`SkillFiles.kt`): find the definition of a skill or command, plain or `plugin:skill`. The result holds its frontmatter `description` (as a `Result`), the files of the skill folder and its `SkillOrigin` (a linked skill's lock read from `agents`, `~/.agents` of the user whatever the profile). The function returns `null` for a skill built into `claude`.
-- `SkillOrigin` (`SkillOrigin.kt`): where a skill came from, with the installed and latest versions as read from local files. `installs(home)` and `skillOrigin(...)` are internal.
+- `SkillOrigin` (`SkillOrigin.kt`): where a skill came from, with the installed and latest versions as read from local files. `installs(home)`, `Install` and `skillOrigin(...)` are internal. `USER_AGENTS`: `~/.agents`, whatever the profile.
 
 ## Invariants
 
@@ -46,19 +47,21 @@ This package reads the files that `claude` and Claude Desktop write. It covers s
 - The parser requires these fields and throws when one is missing (`Line.check`):
   - in attachments: `additionalWorkingDirectories`, `workingDirectory`, skill-listing `names`/`isInitial`, and `addedNames`/`removedNames` in a deferred-tools delta;
   - in background launches: a shell's or monitor's `command`, an agent's `prompt`, a workflow's `scriptPath`;
-  - in task notifications: `task-id` and `summary`;
-  - in artifact results: `artifact_id`, `title`, `url`, `path`;
+  - in task notifications with a `<status>`: `task-id` and `summary` (one with neither is ignored), and in an agent's or workflow's `<usage>`: `subagent_tokens`, `tool_uses`, and for a workflow `agents_done`/`agents_error`;
+  - in a skill command (`<command-message>`): `<command-name>`;
+  - in a brief tool's result: a string or exactly one text block;
+  - in artifact publish results: `artifact_id`, `title`, `url`, `path` (an `open` result, `opened: true`, is skipped);
   - on every message: its `timestamp`;
   - on every edit: its file path.
   An unknown task-notification status throws (`BackgroundTask.Status.valueOf`).
 - Sidechain and `isMeta` lines are not messages. The model of a `<synthetic>` reply is ignored.
-- The brief changes only on a result of the brief tool that is not an error.
+- The brief changes only on a result of the brief tool that is not an error. A Desktop plan update that moves on before any plan was set, or carries none of `items`, `advance` and `done`, throws.
 - `Brief.input` uses `require` to enforce these limits:
   - the goal is non-blank and at most 200 characters;
   - there are at most 15 tasks, each non-blank and at most 120 characters;
   - at most one task is `in_progress`;
   - `planTask` matches `T[1-9][0-9]*`;
-  - the title is non-blank and at most 60 characters.
+  - a title, when given, is non-blank and at most 60 characters.
   An unknown task status, or a `my_air_set_brief` result in an unknown format, throws.
 - `mcpServers` asserts that every name has the form `mcp__<server>__<tool>`.
 - `LiveSessionRegistry` rules:
@@ -71,7 +74,7 @@ This package reads the files that `claude` and Claude Desktop write. It covers s
 
 ## Side Effects
 
-- `ClaudeHomeWatcher` creates a `WatchService` on the given directories, on `projectsDir` and on each of its subdirectories. It registers every new project directory as it appears.
+- `ClaudeHomeWatcher` creates a `WatchService` on the given directories, on each of `projectsDirs` and on each of their subdirectories. It registers every new project directory as it appears.
   - It runs a daemon thread named "Claude home watcher" that calls `onChange` on that thread.
   - `close()` closes the service and joins the thread.
 - `ClaudeSessionScanner` reads:

@@ -2,13 +2,13 @@
 
 ## Overview
 
-The My Air tools offered to agents through the IDE's MCP server. They cover finding sessions, starting a session, and reading and changing folders, plans, undo snapshots and session briefs. Three toolsets are registered in `src/main/resources/META-INF/my-air-mcp.xml`, which `plugin.xml` loads through an optional `<depends>` on `com.intellij.mcpServer`. Without the MCP server the rest of the plugin still works. The pure parts (paging and time bounds, preset merging, JSON output) are kept apart from the toolsets so they can be tested.
+The My Air tools offered to agents through the IDE's MCP server. They cover finding sessions, starting a session, reading and changing folders, plans, plan managers, undo snapshots, session briefs and reviews. Three toolsets are registered in `src/main/resources/META-INF/my-air-mcp.xml`, which `plugin.xml` loads through an optional `<depends>` on `com.intellij.mcpServer`. Without the MCP server the rest of the plugin still works. The pure parts (paging and time bounds, preset merging, JSON output) are kept apart from the toolsets so they can be tested.
 
 ## Interface
 
 - `FoldersMcpToolset.kt`, `class FoldersMcpToolset : McpToolset`:
   - `my_air_sessions_find(since, until, query, folder, unfiled, offset, limit)`
-  - `my_air_session_start(prompt, dir, model, effort, add_dirs, worktree, base, branch, plan_task, preset, folder)`
+  - `my_air_session_start(prompt, dir, model, effort, add_dirs, worktree, base, branch, plan_task, preset, folder, profile)`
   - `my_air_folders_get()`
   - `my_air_folders_apply(changes)`
   - `my_air_plan_get(dir)`
@@ -28,12 +28,12 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - `fun timeBound(text, now, end)`
   - Constants `DEFAULT_LIMIT = 50`, `MAX_LIMIT = 100` and `PROMPT_CHARS = 300`.
 - `SessionStart.kt`:
-  - `fun sessionStartPreset(saved, preset, dir, model, effort, addDirs, worktree, base): Preset`
+  - `fun sessionStartPreset(saved, preset, dir, model, effort, addDirs, worktree, base, profile): Preset`
   - `fun firstMessage(start, prompt): String`: the configuration's prompt, then the agent's after a space, or either alone; neither throws
   - `fun SessionFolders.requireTask(id): Pair<Folder, PlanTask>`
 - `McpJson.kt`, the shapes of the tool results:
   - `startedJson`
-  - `SessionPage.toJson`
+  - `SessionPage.toJson`, adding `profile` for a session of another profile than `default`
   - `SessionFolders.treeJson`
   - `StructureHistory.toJson`
   - `managerSetJson`
@@ -43,9 +43,9 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
 ## Invariants
 
 - Class names in `my-air-mcp.xml` are resolved only at runtime. Renaming or moving a toolset requires updating that file.
-- Both toolsets set `isExperimental() = false`, since an experimental toolset may be hidden.
+- All three toolsets set `isExperimental() = false`, since an experimental toolset may be hidden.
 - `BriefMcpToolset.isEnabled()` follows `MyAirSettings.briefs`. `folder` and `title` are refused unless `MyAirSettings.fileSessions` is set.
-- `FoldersMcpToolset` runs every tool body on the EDT (`onEdt`, `withFolders`), where the state of `ClaudeSessionsService` lives.
+- `FoldersMcpToolset` reads and changes the state of `ClaudeSessionsService` on the EDT (`onEdt`, `withFolders`), where it lives. `my_air_sessions_find` searches the conversation index on `Dispatchers.IO` first; `my_air_session_start` checks directories and builds the arguments outside the EDT and runs git on `Dispatchers.IO`.
   - `withFolders` reports `foldersError` instead of working on an unreadable `structure.json`.
 - The tools never ask the user anything. Agent input errors reach the agent as `McpExpectedError`:
   - an `IllegalArgumentException`;
@@ -56,12 +56,13 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - `limit` must be in `1..MAX_LIMIT`, and `offset` must be `>= 0`;
   - `since` and `until` are inclusive, and an `until` date covers the whole day (`timeBound`).
 - `sessionStartPreset`:
-  - throws on a `preset` name that is unknown;
+  - throws on a `preset` name that is unknown, and takes a configuration's first model and effort pair (`firstVariant`);
+  - takes `profile` when given, else the configuration's;
   - requires `base` whenever the result has a worktree;
   - drops the preset's base when `worktree=false`.
-- `my_air_session_start` refuses a `branch` without a worktree and a `folder` with no working or bound directory at or above it.
+- `my_air_session_start` refuses a `branch` without a worktree, a `folder` with no working or bound directory at or above it, directories that do not exist, an unreadable `presets.json` when a `preset` is named, and a profile not listed (`ProfileStore.byName`; none given: `default`), which it passes to `startNew`.
 - `requireTask` lists the open tasks when an id is unknown.
-- `planJson` and `plansJson` require a plan folder (`checkNotNull(folder.plan)`). Tasks are listed with their sessions, newest first. `manager` is the plan's entry in `plan-managers.json`, null without one. The plan JSON also gives `constraints`, `decisions`, `requirements` (each with its derived `status`) and `review` with its blockers; `my_air_plan_apply` takes the ops of `PlanChanges`, among them `add_requirement` and `add_evidence`. `my_air_plan_get(dir)` also lists plan folders whose `workdir` holds `dir` (`SessionFolders.planFoldersOf`).
+- `planJson` and `plansJson` require a plan folder (`checkNotNull(folder.plan)`). Milestones carry `progress`; tasks are listed with their sessions, newest first, each with its live `status` (null without a process). `manager` is the plan's entry in `plan-managers.json`, null without one. The plan JSON also gives `constraints`, `decisions`, `requirements` (each with its derived `status`) and `review` with its blockers; `my_air_plan_apply` takes the ops of `PlanChanges`, among them `add_requirement` and `add_evidence`. `my_air_plan_get(dir)` also lists plan folders whose `workdir` holds `dir` (`SessionFolders.planFoldersOf`).
 - `managerSetJson` adds a `hint` (set the plan's `workdir`) only when the manager's cwd lies outside the plan's `dirs` and `workdir`.
 - `my_air_plan_set_manager` refuses, before changing anything, what `managerRefusal` (`planview/PlanFiles.kt`) names: a session managing a plan already, or a review, unknown (neither scanned nor running here), run by a background job, running outside this IDE, or still starting here.
 
@@ -73,10 +74,12 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - reads `~/.my-air/presets.json` (`PresetStore.INSTANCE`) when a `preset` is named;
   - for a worktree, runs `git` on `Dispatchers.IO` (`Git.repo`, `createWorktree`), which creates a worktree and possibly a branch, then records the base (`rememberBase`);
   - opens a new session tab in the calling project (`ClaudeSessionOpener.startNew`), and so starts a `claude` process.
+- `my_air_review_apply` stores a changed base as `branch.<branch>.myAirBase` on `Dispatchers.IO` (`storeBase`, refused with its reason), then writes `review.json` (`ReviewService.update`), then calls `ActiveSession.baseStored()`.
+- `my_air_review_report` refuses a `commit` that is not 7 to 40 lowercase hex characters, then writes `review.json` (`ReviewService.update`).
 - `my_air_plan_set_manager`:
   - files the session in the plan folder (`updateFolders(ChangeSource.MCP)`) and stores it in `~/.my-air/plan-managers.json` (`PlanFiles.adopt`), which the folder history does not cover;
-  - detaches the previous manager's process (`SessionTerminals.detach`), rebinds every open plan tab of the plan in this IDE (`PlanEditor.showManager`), opens the plan tab in the calling project, sends a running session `planPrompt(manager = true)` and closes its own tab.
-- The read tools have no side effects: `my_air_sessions_find`, `my_air_folders_get`, `my_air_plan_get` and `my_air_history_list`. `my_air_history_list` parses each snapshot file.
+  - detaches the previous manager's process (`SessionTerminals.detach`), rebinds every open plan tab of the plan in this IDE (`PlanEditor.showManager`), opens the plan tab in the calling project, sends a running session `planPrompt(manager = true)` (without a process, it goes after `--` as the first prompt of the manager's next start) and closes its own tab.
+- The read tools have no side effects: `my_air_sessions_find`, `my_air_folders_get`, `my_air_plan_get`, `my_air_history_list` and `my_air_review_get`. `my_air_history_list` parses each snapshot file; `my_air_review_get` runs git.
 
 ## Verification
 

@@ -8,5 +8,6 @@ the package of what they test.
 ## Subdirectories & Boundaries
 
 - main: [./main/README.md](./main/README.md) - production Kotlin sources and plugin resources.
-- test (no contract, test code only): JUnit 5 tests for `actions`, `claude`, `editor`, `folders`, `mcp`, `planview`,
-  `prompt`, `service`, `store`, `toolwindow`; run with `./gradlew test`.
+- test (no contract, test code only): JUnit 5 tests for `actions`, `claude`, `dashboard`, `editor`, `folders`, `mcp`,
+  `planview`, `prompt`, `review`, `reviewview`, `schedule` (and `schedule.ui`), `search`, `service`, `store`,
+  `toolwindow`; run with `./gradlew test`.

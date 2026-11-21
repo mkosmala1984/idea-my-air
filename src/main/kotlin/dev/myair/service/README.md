@@ -11,8 +11,12 @@ other files are pure functions the service and the UI call, kept here so plain J
 
 - `ClaudeSessionsService` (`ClaudeSessionsService.kt`, `@Service(APP)`, `getInstance()`):
   - state: `sessions`, `listed` (with unscanned running sessions), `live`, `folders`, `foldersError`, `heads`, `pins`,
-    `unread`, `loaded`, `structureFile`, `history`; `branchOf(session)`.
-  - `subscribe(parent, listener)`, `refresh()`, `lookedAt()`, `updateFolders(source, op)`, `updatePins(op)`.
+    `unread`, `loaded`, `structureFile`, `history`, `seenStore`, `indexGeneration`; `branchOf(session)`.
+  - `subscribe(parent, listener)`, `refresh()`, `lookedAt()`, `updateFolders(source, op)`, `updatePins(op)`,
+    `searchContent(query)` (off the EDT, over the conversation index), `profileHome(name)` (the listed profile's directory).
+- `ProfileReads.kt`: `mergeSessions(byProfile)` and `mergeLive(byProfile)` (each entry stamped with its profile),
+  `requireProfileDirs(profile)`, `ProfileReaders(profiles, cacheDir, jar, watched, onChange)` (`Closeable`: a scanner and
+  a registry per profile, one `ClaudeHomeWatcher` over them all).
 - `ActiveSession` (`ActiveSession.kt`, `@Service(PROJECT)`, `getInstance(project)`): `tab` (the active
   `ClaudeSessionVirtualFile`), `baseGeneration`, `subscribe(parent, listener)`, `baseChanged()`, `baseStored()` (companion: `baseChanged` in every open project), `tabFileChanged()`;
   pure `activeTab(selected, last, isOpen)`.
@@ -35,13 +39,21 @@ other files are pure functions the service and the UI call, kept here so plain J
   `updatePins` write, so a read from before a change cannot undo it.
 - A refresh exception is logged as an IDE error (`thisLogger().error`) and drops that refresh; a broken `structure.json`
   sets `foldersError` instead of hiding the sessions, and `updateFolders` throws (`check`) while it is set.
-- Listeners are notified only when the read `State` or `unread` changed, except the first refresh (`loaded`).
+- `updateFolders` also throws when its result places a plan or review folder where a review folder forbids it
+  (`refuseReviewPlacement` over `ReviewService.onDiskIds`).
+- `mergeSessions` and `mergeLive` throw on one id in two profiles, naming both directories; `requireProfileDirs` throws
+  when a profile lacks `projects/` or `sessions/`. `profileHome` throws for an unlisted name.
+- The readers are rebuilt on the refresh thread when `ProfileStore.all()` changed, the old ones closed first.
+- Listeners are notified only when the read `State` or `unread` changed, except the first refresh (`loaded`), and when
+  the conversation index wrote (`indexGeneration` incremented).
 - With `MyAirSettings.briefs` off, every session's `brief` is dropped at scan time.
 - `ActiveSession` notifies only when the tuple (tab, its session id, the session, its work tree head, its live entry,
   `baseGeneration`) changed; `baseChanged()` asserts the EDT.
 - `retarget` follows a tab by pid or job (`shownBy`), never by session id; an unregistered process keeps its session
-  with a null status. A session absent from `titles` gets `NEW_SESSION_TITLE`.
-- `retargetOpenTabs` publishes to other IDEs (`TabsSync.publish`) only when a session or title changed, not a status alone.
+  with a null status. A tab keeps its own title while its session is absent from `titles`; a session switched to that
+  is absent gets `NEW_SESSION_TITLE`.
+- `retargetOpenTabs` covers session tabs, plan tabs' manager files (`shownSessionFiles`) and detached processes, and
+  repaints only the open ones (`tabFileOf`). It publishes to other IDEs (`TabsSync.publish`) only when a session or title changed, not a status alone.
 - `boardSessions` orders by `SessionStatus.waitRank`; `unread` means idle with a last message after `seen[id]`.
   `recentSessions` leaves out settled sessions and those in another flyout group, at most `RECENT`.
 - `gitWorktrees` skips an admin directory without `gitdir`, and `worktreeOf` throws on an empty `gitdir`.
@@ -55,10 +67,15 @@ other files are pure functions the service and the UI call, kept here so plain J
 - Reads transcripts, the registry, `%LOCALAPPDATA%/Claude-Data` (Desktop sessions), HEAD files of every session's and
   open project's directories (`Git.head`) and `.git/worktrees/*`.
 - Writes `~/.my-air/taskbar/board.json` (only when its content changed) and `~/.my-air/seen/<id>` via `BoardWriter`;
-  `pins.json`, `structure.json` and `plan-managers.json` through the stores; the scan cache on `dispose` (`scanner.save()`).
-- Ends idle detached terminals on every refresh (`SessionTerminals.retireIdle`).
+  `pins.json`, `structure.json` and `plan-managers.json` through the stores; the scan caches through
+  `ProfileReaders.close()`, on `dispose` and whenever the profile list changed.
+- Fills the conversation index `~/.my-air/search.db` (`SessionIndex`) after every refresh on a second single-thread
+  executor (`indexer`).
+- Starts `ScheduledRuns` in `init`.
+- Ends idle detached terminals on every refresh (`SessionTerminals.retireIdle`), holding `ScheduledRuns.held(unread)`.
 - Mutates open tab files (`sessionId`, `title`, `status`, `unread`, `mark`) and repaints their tabs
-  (`updateFilePresentation`); carries folder filing and plan managers over to a switched session id.
+  (`updateFilePresentation`); carries folder filing, plan managers and review managers (`ReviewService.moveManagers`, after `carryOver`) over to a
+  switched session id.
 
 ## Verification
 
