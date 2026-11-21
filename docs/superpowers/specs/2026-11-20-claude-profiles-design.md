@@ -7,9 +7,10 @@
 - **Setup:** a new profile is an empty directory; the user logs in once per profile through Claude Code's own first-run flow (`/login`), which My Air opens for them.
 - **Chosen by:** a Profile chip in the composer, a `profile` field of configurations (and so scheduled tasks), `my_air_session_start`'s `profile`; follow-on starts keep the session's profile.
 - **My Air tools in a profile:** the user adds the IDE's MCP server to each profile by hand (`claude mcp add`); My Air shows the command after Add and changes nothing in the profile. Sessions start with the same system prompt, brief hook and plan prompt as in `default`.
+- **Managers and reviewers:** a plan's or review's manager and each reviewer may run in any profile; it is stored with them. Since they are useless without My Air's tools, their start is refused in a profile whose `.claude.json` lacks the IDE's MCP server.
 - **Decisions needing input:** none open.
 - **Risks:** first start in each profile shows Claude Code's onboarding and each project's trust question once (not skippable by a documented key); scan cost grows with the number of profiles.
-- **Out of scope:** reviewer runs and plan/review managers in a non-default profile, sharing a login between profiles, copying parts of `~/.claude` into a profile, Claude Desktop sessions outside `default`.
+- **Out of scope:** sharing a login between profiles, copying parts of `~/.claude` into a profile, Claude Desktop sessions outside `default`.
 
 ## Requirements
 
@@ -33,11 +34,16 @@
 - **R18** A session of a non-default profile shows its profile name in the tree row's tooltip, the tab tooltip, the session header and a chip beside model and effort in Session Context; `default` shows nothing.
 - **R19** Search (`ClaudeSession.matches`, `my_air_sessions_find`'s `query`) also matches the profile name.
 - **R20** `continuationPrompt` names the transcript's real path (`ClaudeSession.transcript`), not `~/.claude/projects/*`.
-- **R22** `managerRefusal` (`my_air_plan_set_manager`), Turn into Plan and a review's manager adoption refuse a session whose profile is not `default`, naming the profile. *(builder's call, from the builder check)*
+- **R22** `PlanManager` (`plan-managers.json`, so also a review's `manager` in `review.json`) has a `profile` (name, left out of the file for `default`, so older files read as `default`); a manager starts and resumes with that profile's `CLAUDE_CONFIG_DIR`, and `hasTranscript` looks in it.
+- **R26** A new plan's manager takes its profile from where it is started: the composer's Profile chip (`startAsPlan`), the adopted session's profile (Turn into Plan, `my_air_plan_set_manager`); an Open Plan with no manager yet starts it in `default`.
+- **R27** New Review... has a Profile choice (default `default`) for the review's manager; a review's manager stored before this change is `default`.
+- **R28** `Reviewer` (`review-profiles.json`) has an optional `profile` (name); its `claude --bg` runs with that profile's `CLAUDE_CONFIG_DIR`; a name not listed fails the run's start with that name. `learnSessions` finds the run's session by job id in the merged registry of all profiles.
+- **R29** Before starting or resuming a manager or starting a reviewer in a profile other than `default`, My Air reads (never writes) that profile's `.claude.json` and refuses the start, naming the profile and showing R24's command, unless its `mcpServers` holds an `http` entry whose `url` equals that of `default`'s `idea` entry. In `default` nothing is checked.
+- **R30** Removing a profile is also refused while a plan manager, a review manager or a reviewer profile names it.
 - **R23** Remove refuses while any session of the profile has a live registry entry or a tab (open or detached) in this IDE, naming one of them. *(builder's call, from the builder check)*
 - **R24** After Add, Settings shows, ready to copy, the command that adds the IDE's MCP server to the new profile at user scope: `claude mcp add --scope user --transport http <name> <url>` run with that profile's `CLAUDE_CONFIG_DIR`, `<name>` and `<url>` read from the `http` entry of `default`'s `~/.claude.json` `mcpServers` whose name is `idea`; without such an entry it says so. My Air never writes a profile's `.claude.json`.
 - **R25** A session started in a profile gets the same `--append-system-prompt`, brief hook (`--settings`) and plan prompt as one in `default`; whether its tools are there is the profile's business.
-- **R21** `claude -p` helpers (branch names, dashboard analysis) and reviewer runs run in `default`, with any inherited `CLAUDE_CONFIG_DIR` removed.
+- **R21** `claude -p` helpers (branch names, dashboard analysis) run in `default`, with any inherited `CLAUDE_CONFIG_DIR` removed.
 
 ## Why
 
@@ -83,7 +89,15 @@ Desktop sessions (`DesktopSessionReader`) apply to `default` only.
 
 `ClaudeSessionVirtualFile` gets `val profile: Profile`. `SessionTerminals.start` sets or removes `CLAUDE_CONFIG_DIR` (R8). `SessionTabUrl` adds the optional `profile` key (R9); `parseSessionTabPath` accepts 2 or 3 keys, nothing else. `restartArgs`/`hasTranscript` take the profile's directory (R10). `CloseAndSettleAction`, `SessionPane`'s and `SessionTerminals`' registry reads and `claude stop`/`claude attach` use the file's profile (R11).
 
-Plan and review managers stay in `default` (R22): they start and resume there as today (`hasTranscript(it, Homes.claude)`), and `managerRefusal`, Turn into Plan and the review's manager adoption refuse a session of another profile.
+### Managers and reviewers
+
+`PlanManager` gains `profile: String?` (null is `default`), which `PlanManagerStore` writes only when set (R22); `review.json` reuses `PlanManager`, so the review's manager gets it too, and format 1 stays readable. `PlanFiles.startManager` and `ReviewFiles` resolve it against `Profiles.all()` (a name no longer listed: the plan tab shows "Profile <name> is gone", as a session tab does), build the manager's `ClaudeSessionVirtualFile` with it and call `hasTranscript` with its directory. `PlanFiles.adopt` stores the adopted session's profile (R26); `startAsPlan` passes the chip's. New Review... gets the same Profile chip as the composer (R27).
+
+`Reviewer.profile` (R28) goes into `reviewerArgs`' environment through `runClaude`, which now takes an environment map (empty: `CLAUDE_CONFIG_DIR` removed). Since `claude --bg` hands the run to the profile's own supervisor, `learnSessions` already finds it once the registry is merged (R4).
+
+The tools check (R29) is one function, `myAirServerIn(profile): Boolean`, reading both `.claude.json` files with Gson; any unreadable file throws. It runs on every manager start or resume and every reviewer start, off the EDT where those already read git. A refused manager start shows its reason in the plan or review tab where the terminal would be; a refused reviewer leaves the run unstarted with the reason, as `runProblem` does.
+
+Remove (R23, R30) checks the registry, this IDE's tabs, `plan-managers.json`, every `review.json` and `review-profiles.json`.
 
 ### Choosing
 
@@ -95,7 +109,7 @@ R17–R20 as stated. `matches` adds the profile name to its fields when not `def
 
 ### Helpers
 
-`runClaude` (`ClaudePrint.kt`) and the reviewer start remove `CLAUDE_CONFIG_DIR` from their environment (R21).
+`runClaude` (`ClaudePrint.kt`) removes `CLAUDE_CONFIG_DIR` from the environment of the branch-name and analysis calls (R21).
 
 ## Left to the builder
 
