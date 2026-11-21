@@ -271,7 +271,7 @@ class FoldersMcpToolset : McpToolset {
                 running != null, running != null && terminals.starting(running), managedReviewFolder(ReviewService.getInstance().reviews, session)?.let(folders::pathOf), folders::pathOf,
             )
             require(refusal == null) { refusal!! }
-            val manager = PlanManager(session, running?.cwd ?: scanned!!.cwd, running?.project ?: scanned!!.project)
+            val manager = PlanManager(session, running?.cwd ?: scanned!!.cwd, running?.project ?: scanned!!.project, running?.profile?.name ?: scanned!!.profile)
             service.updateFolders(ChangeSource.MCP) { it.assign(session, folder.id) }
             val filed = service.folders
             val message = planPrompt(filed, checkNotNull(filed.find(folder.id)), null, MyAirSettings.getInstance().briefs, manager = true)

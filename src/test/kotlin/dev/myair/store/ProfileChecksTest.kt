@@ -76,6 +76,37 @@ class ProfileChecksTest {
         assertNull(removeRefusal("test", listOf(live("default")), listOf("default"), emptyList(), emptyList()))
     }
 
+    private val url = "http://127.0.0.1:64342/stream"
+    private fun defaultJson() = claudeJson("""{"mcpServers":{"idea":{"type":"http","url":"$url"}}}""")
+    private fun profile(json: String?) = Profile("test", tmp.resolve("p")).also { p ->
+        p.dir.createDirectories()
+        json?.let { p.dir.resolve(".claude.json").writeText(it) }
+    }
+
+    @Test
+    fun `managerToolsRefusal is null for default`() {
+        assertNull(managerToolsRefusal(Profile(DEFAULT_PROFILE, tmp), tmp.resolve("missing.json")))
+    }
+
+    @Test
+    fun `refuses a profile without the server`() {
+        val p = profile(null)
+        val expected = "Profile test has no My Air MCP server. Run:\n" + mcpAddCommand(p, "idea" to url)
+        assertEquals(expected, managerToolsRefusal(p, defaultJson()))
+        profile("""{"mcpServers":{"other":{"type":"http","url":"http://x"}}}""")
+        assertEquals(expected, managerToolsRefusal(p, defaultJson()))
+    }
+
+    @Test
+    fun `accepts a profile with the same url under another name`() {
+        assertNull(managerToolsRefusal(profile("""{"mcpServers":{"ide":{"type":"http","url":"$url"}}}"""), defaultJson()))
+    }
+
+    @Test
+    fun `remove is refused while a plan manager names it`() {
+        assertEquals("A plan's or review's manager uses profile test.", removeRefusal("test", emptyList(), emptyList(), listOf("test"), emptyList()))
+    }
+
     @Test
     fun `createProfileDirs makes projects and sessions`() {
         val dir = tmp.resolve("p")

@@ -24,16 +24,16 @@ class ReviewFilesTest {
     private val mainOf = { d: Path -> assertEquals(dir, d); main }
 
     @Test fun `a review without a manager starts a new session in its work tree, its project the main checkout, with the first message`() =
-        assertEquals(PlanManager("n", dir, main) to listOf("--session-id", "n", "--", REVIEW_MANAGER_FIRST_MESSAGE), reviewManagerStart(review(null), "n", mainOf) { true })
+        assertEquals(PlanManager("n", dir, main) to listOf("--session-id", "n", "--", REVIEW_MANAGER_FIRST_MESSAGE), reviewManagerStart(review(null), "n", mainOf) { _, _ -> true })
 
     @Test fun `a manager entry resumes in its stored directory without a message`() {
         val m = PlanManager("s", Path.of("E:/dev/elsewhere"), Path.of("E:/dev/elsewhere"))
-        assertEquals(m to listOf("--resume", "s"), reviewManagerStart(review(m), "n", { error("a stored manager keeps its project") }) { true })
+        assertEquals(m to listOf("--resume", "s"), reviewManagerStart(review(m), "n", { error("a stored manager keeps its project") }) { _, _ -> true })
     }
 
     @Test fun `a manager closed before its first message gets the message again`() {
         val m = PlanManager("s", dir, main)
-        assertEquals(m to listOf("--session-id", "s", "--", REVIEW_MANAGER_FIRST_MESSAGE), reviewManagerStart(review(m), "n", { error("unused") }) { false })
+        assertEquals(m to listOf("--session-id", "s", "--", REVIEW_MANAGER_FIRST_MESSAGE), reviewManagerStart(review(m), "n", { error("unused") }) { _, _ -> false })
     }
 
     @Test fun `a review's manager opens its review and a review that cannot be read names none`() {

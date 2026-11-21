@@ -7,8 +7,12 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.readText
 
-/** The session that manages a plan folder, with the directories it was started in. */
-data class PlanManager(val session: String, val cwd: Path, val project: Path)
+/** The session that manages a plan folder, with the directories it was started in and the name of its profile. */
+data class PlanManager(val session: String, val cwd: Path, val project: Path, val profile: String = DEFAULT_PROFILE)
+
+/** A manager's JSON fields; `profile` only when not `default`, so an older file reads the same. */
+internal fun PlanManager.fields(): Map<String, String> =
+    mapOf("session" to session, "cwd" to cwd.toString(), "project" to project.toString()) + listOfNotNull(profile.takeIf { it != DEFAULT_PROFILE }?.let { "profile" to it })
 
 /** The manager session of each plan folder, by folder id. */
 data class PlanManagers(val byFolder: Map<String, PlanManager> = emptyMap()) {
@@ -22,7 +26,7 @@ data class PlanManagers(val byFolder: Map<String, PlanManager> = emptyMap()) {
     fun folderOf(sessionId: String): String? = byFolder.entries.firstOrNull { it.value.session == sessionId }?.key
 
     fun toJson(): String = GsonBuilder().setPrettyPrinting().create().toJson(
-        byFolder.mapValues { (_, m) -> mapOf("session" to m.session, "cwd" to m.cwd.toString(), "project" to m.project.toString()) },
+        byFolder.mapValues { (_, m) -> m.fields() },
     )
 
     companion object {
@@ -31,12 +35,12 @@ data class PlanManagers(val byFolder: Map<String, PlanManager> = emptyMap()) {
         fun parse(text: String) = PlanManagers(
             JsonParser.parseString(text).asJsonObject.entrySet().associate { (folder, entry) ->
                 val o = entry.asJsonObject
-                check(o.keySet() == KEYS) { "unexpected keys in plan manager of $folder: ${o.keySet()}" }
+                check(o.keySet() == KEYS || o.keySet() == KEYS + "profile") { "unexpected keys in plan manager of $folder: ${o.keySet()}" }
                 fun string(key: String): String {
                     check(o[key].isJsonPrimitive && o[key].asJsonPrimitive.isString) { "$key of plan manager $folder is not a string: ${o[key]}" }
                     return o[key].asString
                 }
-                folder to PlanManager(string("session"), Path.of(string("cwd")), Path.of(string("project")))
+                folder to PlanManager(string("session"), Path.of(string("cwd")), Path.of(string("project")), if (o.has("profile")) string("profile") else DEFAULT_PROFILE)
             },
         )
     }

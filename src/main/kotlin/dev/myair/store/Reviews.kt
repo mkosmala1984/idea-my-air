@@ -121,7 +121,7 @@ fun BranchReview.toJson(): String = GSON.toJson(
         "dir" to dir.toString(),
         "pr" to pr,
         "plan" to plan,
-        "manager" to manager?.let { obj("session" to it.session, "cwd" to it.cwd.toString(), "project" to it.project.toString()) },
+        "manager" to manager?.let { obj(it.fields()) },
         "summary" to summary,
         "chapters" to chapters.array { c -> obj("title" to c.title, "text" to c.text, "files" to c.files.array(::JsonPrimitive)) },
         "runs" to runs.array { r ->
@@ -209,8 +209,8 @@ fun parseReview(text: String, source: Path): BranchReview {
         dir = Path.of(root.string("dir")),
         pr = root.intOrNull("pr"),
         plan = root.stringOrNull("plan"),
-        manager = if (!root.element("manager").isJsonNull) Keys(root.element("manager"), "manager", source, setOf("session", "cwd", "project")).run {
-            PlanManager(string("session"), Path.of(string("cwd")), Path.of(string("project")))
+        manager = if (!root.element("manager").isJsonNull) Keys(root.element("manager"), "manager", source, setOf("session", "cwd", "project"), setOf("profile")).run {
+            PlanManager(string("session"), Path.of(string("cwd")), Path.of(string("project")), if (has("profile")) string("profile") else DEFAULT_PROFILE)
         } else null,
         summary = root.stringOrNull("summary"),
         chapters = root.array("chapters").map {

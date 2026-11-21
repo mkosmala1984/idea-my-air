@@ -12,6 +12,16 @@ class PlanManagersTest {
     @Test fun `managers read back as written`() =
         assertEquals(PlanManagers(mapOf("f1" to m)), PlanManagers.parse(PlanManagers(mapOf("f1" to m)).toJson()))
 
+    @Test fun `profile round-trips and default is left out`() {
+        val work = m.copy(profile = "work")
+        val json = PlanManagers(mapOf("f1" to work, "f2" to m)).toJson()
+        assertEquals(PlanManagers(mapOf("f1" to work, "f2" to m)), PlanManagers.parse(json))
+        assertEquals(1, Regex("\"profile\"").findAll(json).count(), json)
+    }
+
+    @Test fun `a file without profile reads as default`() =
+        assertEquals(DEFAULT_PROFILE, PlanManagers.parse("""{"f1":{"session":"s","cwd":"E:/a","project":"E:/a"}}""").byFolder.getValue("f1").profile)
+
     @Test fun `a clear moves the manager to its new session`() =
         assertEquals("s2", PlanManagers(mapOf("f1" to m)).moveSession("s1", "s2").byFolder.getValue("f1").session)
 

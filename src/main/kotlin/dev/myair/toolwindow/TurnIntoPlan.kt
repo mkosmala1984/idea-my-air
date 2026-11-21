@@ -68,7 +68,7 @@ class TurnIntoPlanAction(private val selected: () -> List<ClaudeSession>) :
         val folder = checkNotNull(folders.find(folderId))
         val message = turnIntoPlanMessage(folder, planPrompt(folders, folder, null, MyAirSettings.getInstance().briefs, manager = true))
         val files = PlanFiles.getInstance()
-        files.adopt(folderId, PlanManager(session.id, running?.cwd ?: session.cwd, running?.project ?: session.project), running, listOf("--", message))
+        files.adopt(folderId, PlanManager(session.id, running?.cwd ?: session.cwd, running?.project ?: session.project, running?.profile?.name ?: session.profile), running, listOf("--", message))
         PlanOpener.open(project, folderId)
         if (running != null) {
             val pane = FileEditorManager.getInstance(project).getAllEditors(files.file(folderId)).filterIsInstance<PlanEditor>().single().pane

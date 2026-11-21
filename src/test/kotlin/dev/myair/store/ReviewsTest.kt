@@ -37,6 +37,12 @@ class ReviewsTest {
         assertEquals(bare, parseReview(bare.toJson(), src))
     }
 
+    @Test fun `a review manager's profile round-trips`() {
+        val r = review().let { it.copy(manager = it.manager!!.copy(profile = "work")) }
+        assertEquals(r, parseReview(r.toJson(), src))
+        assertFalse("profile" in review().toJson())
+    }
+
     @Test fun `a review with every nullable field null round-trips and writes the keys`() {
         val r = BranchReview(
             "b", "main", Path.of("E:/d"), null, null, null, null, emptyList(),

@@ -18,6 +18,7 @@ import dev.myair.folders.ChangeSource
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
 import dev.myair.store.PlanManager
+import dev.myair.store.managerToolsRefusal
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -58,6 +59,19 @@ abstract class FolderTabFileSystem(private val protocol: String, private val fil
 }
 
 /**
+ * Why a manager cannot start in the profile named [name]: [profiles] does not list it ([ProfileStore.byName]'s message,
+ * a broken `profiles.json`'s too), or it lacks My Air's MCP server ([managerToolsRefusal]); null when it can.
+ */
+fun managerProfileRefusal(name: String, profiles: ProfileStore): String? {
+    val profile = try {
+        profiles.byName(name)
+    } catch (e: IllegalArgumentException) {
+        return e.message
+    }
+    return managerToolsRefusal(profile, profiles.defaultDir.resolveSibling(".claude.json"))
+}
+
+/**
  * The tab file of each folder of one kind and the file of its manager session, one of each per folder per IDE. The manager's
  * file is never opened as a tab: the folder's tab shows its terminal, and `SessionTerminals` keys processes by file identity,
  * so a reopened tab finds the same file and binds a detached process again.
@@ -73,6 +87,10 @@ class FolderTabs<F : FolderTabFile>(private val create: (String) -> F) {
     /** The manager's file while `SessionTerminals` has its process: identity matters only then. */
     fun running(folderId: String): ClaudeSessionVirtualFile? = managers[folderId]?.takeIf(SessionTerminals.getInstance()::runs)
 
+    /** Why the manager of [folderId], of profile [profile] as stored, cannot start now; null when it can or its process runs. */
+    fun startRefusal(folderId: String, profile: String): String? =
+        if (running(folderId) != null) null else managerProfileRefusal(profile, ProfileStore.getInstance())
+
     fun setManager(folderId: String, file: ClaudeSessionVirtualFile) {
         managers[folderId] = file
     }
@@ -83,7 +101,7 @@ class FolderTabs<F : FolderTabFile>(private val create: (String) -> F) {
      */
     fun managerFile(folderId: String, manager: PlanManager, newId: String, args: List<String>, planStart: PlanStart? = null): ClaudeSessionVirtualFile {
         if (manager.session == newId) ClaudeSessionsService.getInstance().updateFolders(ChangeSource.AUTO) { it.assign(newId, folderId) }
-        return ClaudeSessionVirtualFile(manager.session, manager.cwd, manager.project, ProfileStore.getInstance().default, NEW_SESSION_TITLE, args, planStart = planStart).also { setManager(folderId, it) }
+        return ClaudeSessionVirtualFile(manager.session, manager.cwd, manager.project, ProfileStore.getInstance().byName(manager.profile), NEW_SESSION_TITLE, args, planStart = planStart).also { setManager(folderId, it) }
     }
 
     /**

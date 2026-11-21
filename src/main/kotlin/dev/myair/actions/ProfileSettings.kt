@@ -26,7 +26,9 @@ import com.intellij.ui.dsl.builder.columns
 import com.intellij.ui.dsl.builder.panel
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.SessionTerminals
+import dev.myair.planview.PlanFiles
 import dev.myair.planview.shownSessionFiles
+import dev.myair.review.ReviewService
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.Profile
 import dev.myair.store.ProfileStore
@@ -93,7 +95,8 @@ class ProfilesEditor {
         val profile = list.selectedValue ?: return
         val tabs = ProjectManager.getInstance().openProjects.flatMap { shownSessionFiles(FileEditorManager.getInstance(it)) } +
             SessionTerminals.getInstance().detached().map { it.second }
-        val refusal = removeRefusal(profile.name, ClaudeSessionsService.getInstance().live.values, tabs.map { it.profile.name }, emptyList(), emptyList())
+        val managers = PlanFiles.getInstance().store.read().byFolder.values + ReviewService.getInstance().reviews.values.mapNotNull { it.getOrNull()?.manager }
+        val refusal = removeRefusal(profile.name, ClaudeSessionsService.getInstance().live.values, tabs.map { it.profile.name }, managers.map { it.profile }, emptyList())
         if (refusal != null) return Messages.showErrorDialog(refusal, "Cannot Remove Profile")
         store.write(store.all().drop(1) - profile)
         reload()

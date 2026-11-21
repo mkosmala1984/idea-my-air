@@ -24,7 +24,6 @@ import dev.myair.editor.projectBase
 import dev.myair.planview.startAsPlan
 import dev.myair.prompt.modelLabel
 import dev.myair.prompt.showPromptPopup
-import dev.myair.store.isDefault
 import dev.myair.store.ProfileStore
 import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.Preset
@@ -44,12 +43,11 @@ fun startPreset(project: Project, preset: Preset, where: RelativePoint, prompt: 
     require(branch == null || preset.worktree) { "new branch $branch without a worktree" }
     val profile = ProfileStore.getInstance().all().find { it.name == (preset.profile ?: DEFAULT_PROFILE) }
     if (profile == null) return Messages.showErrorDialog(project, "Profile ${preset.profile} of \"${preset.name}\" is no longer listed in My Air's settings.", "Cannot Start Session")
-    require(planName == null || profile.isDefault) { "a plan's manager runs in the default profile for now, not ${profile.name}" }
     val dir = preset.dir(projectBase(project))
     if (!allExist(project, preset, dir)) return
     val open: (Path, String, List<String>) -> Unit =
         if (planName == null) { cwd, id, args -> ClaudeSessionOpener.startNew(project, dir, cwd, id, args, profile = profile) }
-        else { cwd, id, args -> startAsPlan(project, planName, dir, cwd, id, args) }
+        else { cwd, id, args -> startAsPlan(project, planName, dir, cwd, id, args, profile) }
     if (preset.worktree) startInWorktree(project, dir, preset.base, preset.claudeArgs(prompt), where, branch = branch, open = open)
     else open(dir, UUID.randomUUID().toString(), preset.claudeArgs(prompt))
 }

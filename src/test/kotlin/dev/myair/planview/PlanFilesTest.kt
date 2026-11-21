@@ -4,6 +4,9 @@ import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import dev.myair.store.PlanManager
 import dev.myair.store.PlanManagers
+import dev.myair.store.DEFAULT_PROFILE
+import dev.myair.store.ProfileStore
+import org.junit.jupiter.api.io.TempDir
 import java.time.Instant
 import org.junit.jupiter.api.Assertions.assertNull
 import java.nio.file.Path
@@ -15,16 +18,30 @@ class PlanFilesTest {
     private val cwd = Path.of("E:/dev/a")
 
     @Test fun `a plan without a manager gets a new session`() =
-        assertEquals(PlanManager("n", cwd, cwd) to listOf("--session-id", "n"), managerStart(null, "n", cwd, cwd) { true })
+        assertEquals(PlanManager("n", cwd, cwd) to listOf("--session-id", "n"), managerStart(null, "n", cwd, cwd, DEFAULT_PROFILE) { _, _ -> true })
 
     @Test fun `a manager with a transcript resumes in its stored directory`() {
         val m = PlanManager("s", Path.of("E:/dev/b"), Path.of("E:/dev/b"))
-        assertEquals(m to listOf("--resume", "s"), managerStart(m, "n", cwd, cwd) { true })
+        assertEquals(m to listOf("--resume", "s"), managerStart(m, "n", cwd, cwd, DEFAULT_PROFILE) { _, _ -> true })
     }
 
     @Test fun `a manager closed before its first message starts again under its id`() {
         val m = PlanManager("s", cwd, cwd)
-        assertEquals(m to listOf("--session-id", "s"), managerStart(m, "n", cwd, cwd) { false })
+        assertEquals(m to listOf("--session-id", "s"), managerStart(m, "n", cwd, cwd, DEFAULT_PROFILE) { _, _ -> false })
+    }
+
+    @Test fun `a new manager takes the given profile`() =
+        assertEquals(PlanManager("n", cwd, cwd, "work") to listOf("--session-id", "n"), managerStart(null, "n", cwd, cwd, "work") { _, _ -> error("a new manager has no transcript") })
+
+    @Test fun `an existing manager keeps its profile and checks its transcript there`() {
+        val m = PlanManager("s", cwd, cwd, "work")
+        assertEquals(m to listOf("--resume", "s"), managerStart(m, "n", cwd, cwd, DEFAULT_PROFILE) { id, profile -> id == "s" && profile == "work" })
+    }
+
+    @Test fun `a manager of an unlisted profile is refused`(@TempDir dir: Path) {
+        val store = ProfileStore(dir.resolve("profiles.json"), dir.resolve(".claude"))
+        assertEquals("no profile 'gone'; profiles: [default]", managerProfileRefusal("gone", store))
+        assertNull(managerProfileRefusal(DEFAULT_PROFILE, store))
     }
 
     @Test fun `a plan tab path is the folder id`() {

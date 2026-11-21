@@ -9,6 +9,8 @@ import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.OnePixelSplitter
 import com.intellij.ui.components.JBLabel
+import com.intellij.ui.components.JBTextArea
+import com.intellij.ui.dsl.builder.panel
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.editor.SessionPane
 import dev.myair.editor.SessionPaneHost
@@ -66,6 +68,9 @@ abstract class ManagerTabEditor(protected val project: Project, private val file
     /** The manager's file, kept while its process runs, else built again from its stored entry ([FolderTabs.running]). */
     protected abstract fun startManager(): ClaudeSessionVirtualFile
 
+    /** Why the manager cannot start now (its profile), null when it can; asked before every [startManager]. */
+    protected abstract fun startRefusal(): String?
+
     protected abstract fun forgetManager()
 
     protected fun update() {
@@ -91,12 +96,20 @@ abstract class ManagerTabEditor(protected val project: Project, private val file
      * Nothing before the content first showed, which binds the new one then, or once the folder is gone.
      */
     fun showManager() {
-        if (gone || pane == null) return
+        if (gone || !shown) return
         pane?.let(Disposer::dispose)
         bindManager()
     }
 
     private fun bindManager() {
+        // A refused start shows its reason where the terminal would be and starts nothing; Try Again asks again.
+        startRefusal()?.let { reason ->
+            manager = null
+            pane = null
+            splitter.secondComponent = refused(reason)
+            render()
+            return active.tabFileChanged()
+        }
         // Filing a new manager notifies the service's listeners, this editor among them, now: content shows already, so it renders.
         val manager = startManager().also { manager = it }
         // Checked whenever a process is about to start, not only for a restored tab; a detached one here is bound as it is.
@@ -129,6 +142,14 @@ abstract class ManagerTabEditor(protected val project: Project, private val file
     }
 
     private fun notice(text: String) = JPanel(GridBagLayout()).apply { add(JBLabel(text)) }
+
+    // A text area, so a command it names can be selected and copied.
+    private fun refused(reason: String) = JPanel(GridBagLayout()).apply {
+        add(panel {
+            row { cell(JBTextArea(reason).apply { isEditable = false; isOpaque = false }) }
+            row { button("Try Again") { bindManager() } }
+        })
+    }
 
     override fun getComponent(): JComponent = root
     override fun getPreferredFocusedComponent(): JComponent = pane?.preferredFocusedComponent ?: root

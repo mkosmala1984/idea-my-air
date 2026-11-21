@@ -6,16 +6,16 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.util.concurrency.ThreadingAssertions
 import dev.myair.actions.Git
 import dev.myair.editor.ClaudeSessionVirtualFile
-import dev.myair.editor.hasTranscript
 import dev.myair.planview.FolderTabFile
 import dev.myair.planview.FolderTabFileSystem
 import dev.myair.planview.FolderTabs
+import dev.myair.planview.hasManagerTranscript
 import dev.myair.planview.managerStart
 import dev.myair.review.REVIEW_MANAGER_FIRST_MESSAGE
 import dev.myair.review.ReviewService
 import dev.myair.review.reviewManagerPrompt
 import dev.myair.store.BranchReview
-import dev.myair.store.Homes
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.PlanManager
 import java.nio.file.Path
 import java.util.UUID
@@ -38,8 +38,8 @@ class ReviewFileSystem : FolderTabFileSystem(PROTOCOL, { ReviewTabs.getInstance(
  * ([mainCheckout] of the work tree, asked only then); a stored one where it was stored. A session with no transcript yet
  * gets [REVIEW_MANAGER_FIRST_MESSAGE] after `--`; a resumed one nothing.
  */
-fun reviewManagerStart(review: BranchReview, newId: String, mainCheckout: (Path) -> Path, hasTranscript: (String) -> Boolean): Pair<PlanManager, List<String>> {
-    val (manager, args) = managerStart(review.manager, newId, review.dir, review.manager?.project ?: mainCheckout(review.dir), hasTranscript)
+fun reviewManagerStart(review: BranchReview, newId: String, mainCheckout: (Path) -> Path, hasTranscript: (String, String) -> Boolean): Pair<PlanManager, List<String>> {
+    val (manager, args) = managerStart(review.manager, newId, review.dir, review.manager?.project ?: mainCheckout(review.dir), DEFAULT_PROFILE, hasTranscript)
     return manager to if (args.first() == "--session-id") args + listOf("--", REVIEW_MANAGER_FIRST_MESSAGE) else args
 }
 
@@ -59,12 +59,16 @@ class ReviewTabs {
         val newId = UUID.randomUUID().toString()
         lateinit var args: List<String>
         val manager = checkNotNull(ReviewService.getInstance().update(folderId) { review ->
-            val (manager, start) = reviewManagerStart(review, newId, Git::mainCheckout) { hasTranscript(it, Homes.claude) }
+            val (manager, start) = reviewManagerStart(review, newId, Git::mainCheckout, ::hasManagerTranscript)
             args = start
             review.copy(manager = manager)
         }.manager)
         return tabs.managerFile(folderId, manager, newId, args)
     }
+
+    /** Why the manager of the review of [folderId] cannot start now ([FolderTabs.startRefusal]); one not made yet is `default`'s. */
+    fun startRefusal(folderId: String): String? =
+        tabs.startRefusal(folderId, ReviewService.getInstance().review(folderId).manager?.profile ?: DEFAULT_PROFILE)
 
     /** The review whose manager [file] is; null for any other session's file. */
     fun reviewOf(file: ClaudeSessionVirtualFile): ReviewVirtualFile? = tabs.tabOf(file)

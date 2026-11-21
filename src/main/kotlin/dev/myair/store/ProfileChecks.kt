@@ -21,6 +21,20 @@ fun mcpAddCommand(profile: Profile, server: Pair<String, String>): String {
     return "\$env:CLAUDE_CONFIG_DIR='${profile.dir}'; claude mcp add --scope user --transport http ${server.first} ${server.second}"
 }
 
+/**
+ * Why a manager cannot run in [profile], null when it can: `default` always can; another profile only when its
+ * `.claude.json` has an `http` server with the url of `default`'s `idea` entry ([defaultClaudeJson]), under any name.
+ */
+fun managerToolsRefusal(profile: Profile, defaultClaudeJson: Path): String? {
+    if (profile.isDefault) return null
+    val server = ideServer(defaultClaudeJson) ?: return "No http MCP server named idea in $defaultClaudeJson, so profile ${profile.name} cannot get My Air's."
+    val own = profile.dir.resolve(".claude.json")
+    val urls = if (!own.exists()) emptyList() else
+        JsonParser.parseString(own.readText()).asJsonObject["mcpServers"]?.asJsonObject?.entrySet().orEmpty()
+            .map { it.value.asJsonObject }.filter { it["type"]?.asString == "http" }.map { it["url"].asString }
+    return if (server.second in urls) null else "Profile ${profile.name} has no My Air MCP server. Run:\n${mcpAddCommand(profile, server)}"
+}
+
 /** Why [profile] cannot be removed from the list, else null; each argument holds the profile names in use. */
 fun removeRefusal(
     profile: String,
@@ -31,7 +45,7 @@ fun removeRefusal(
 ): String? = when {
     live.any { it.profile == profile } -> "A session of profile $profile is running (pid ${live.first { it.profile == profile }.pid})."
     profile in tabProfiles -> "A tab shows a session of profile $profile."
-    profile in managerProfiles -> "A plan's manager uses profile $profile."
+    profile in managerProfiles -> "A plan's or review's manager uses profile $profile."
     profile in reviewerProfiles -> "A reviewer profile uses profile $profile."
     else -> null
 }

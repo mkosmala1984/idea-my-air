@@ -12,7 +12,9 @@ import dev.myair.editor.hasTranscript
 import dev.myair.editor.projectBase
 import dev.myair.folders.Folder
 import dev.myair.folders.SessionFolders
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.Homes
+import dev.myair.store.ProfileStore
 import dev.myair.store.PlanManager
 import dev.myair.store.PlanManagerStore
 import dev.myair.store.PlanManagers
@@ -36,13 +38,16 @@ class PlanFileSystem : FolderTabFileSystem(PROTOCOL, { PlanFiles.getInstance().f
 
 /**
  * How a plan's manager starts, from its stored entry [existing]: none yet gives a new session [newId] in [cwd] and
- * [project]; an entry resumes its session in the directories stored with it, or starts it again under its id when it was
- * closed before its first message left a transcript.
+ * [project], of [profile]; an entry resumes its session in the directories and profile stored with it, or starts it again
+ * under its id when it was closed before its first message left a transcript ([hasTranscript]: session id, profile name).
  */
-fun managerStart(existing: PlanManager?, newId: String, cwd: Path, project: Path, hasTranscript: (String) -> Boolean): Pair<PlanManager, List<String>> {
-    if (existing == null) return PlanManager(newId, cwd, project) to listOf("--session-id", newId)
-    return existing to listOf(if (hasTranscript(existing.session)) "--resume" else "--session-id", existing.session)
+fun managerStart(existing: PlanManager?, newId: String, cwd: Path, project: Path, profile: String, hasTranscript: (String, String) -> Boolean): Pair<PlanManager, List<String>> {
+    if (existing == null) return PlanManager(newId, cwd, project, profile) to listOf("--session-id", newId)
+    return existing to listOf(if (hasTranscript(existing.session, existing.profile)) "--resume" else "--session-id", existing.session)
 }
+
+/** [hasTranscript] in the directory of the listed profile [profile]. */
+fun hasManagerTranscript(sessionId: String, profile: String) = hasTranscript(sessionId, ProfileStore.getInstance().byName(profile).dir)
 
 /**
  * Why session [sessionId] cannot become the manager of the plan of folder [folderId], null when it can: it manages a plan
@@ -79,6 +84,9 @@ class PlanFiles {
 
     fun manager(folderId: String): ClaudeSessionVirtualFile? = tabs.manager(folderId)
 
+    /** Why the manager of the plan of [folderId] cannot start now ([FolderTabs.startRefusal]); a new one is `default`'s. */
+    fun startRefusal(folderId: String): String? = tabs.startRefusal(folderId, store.read().byFolder[folderId]?.profile ?: DEFAULT_PROFILE)
+
     /**
      * The manager session's file of plan [folder], kept while `SessionTerminals` has its process, else built again from its
      * entry in the store (a new session when there is none, filed in the plan folder so the tree shows it under `no task`).
@@ -94,7 +102,7 @@ class PlanFiles {
         val newId = UUID.randomUUID().toString()
         lateinit var args: List<String>
         val manager = store.update { stored ->
-            val (manager, start) = managerStart(stored.byFolder[folder.id], newId, cwd, cwd) { hasTranscript(it, Homes.claude) }
+            val (manager, start) = managerStart(stored.byFolder[folder.id], newId, cwd, cwd, DEFAULT_PROFILE, ::hasManagerTranscript)
             args = start + pendingArgs.remove(folder.id).orEmpty()
             stored.prune(structure.all().map { it.id }.toSet()).set(folder.id, manager)
         }.byFolder.getValue(folder.id)
@@ -120,6 +128,7 @@ class PlanFiles {
         if (running == null) pendingArgs[folderId] = firstArgs
         else {
             check(running.sessionId == manager.session && SessionTerminals.getInstance().runs(running)) { "no process of session ${manager.session} in ${running.sessionId}'s file" }
+            check(running.profile.name == manager.profile) { "session ${manager.session} runs in profile ${running.profile.name}, not ${manager.profile}" }
             pendingArgs.remove(folderId)
             tabs.setManager(folderId, running)
         }

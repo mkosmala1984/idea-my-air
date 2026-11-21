@@ -23,7 +23,12 @@ import dev.myair.folders.ChangeSource
 import dev.myair.folders.SessionFolders
 import dev.myair.review.ReviewService
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.prompt.profileLabel
 import dev.myair.store.BranchReview
+import dev.myair.store.DEFAULT_PROFILE
+import dev.myair.store.PlanManager
+import dev.myair.store.Profile
+import dev.myair.store.ProfileStore
 import java.nio.file.Path
 import java.util.UUID
 import kotlin.io.path.isDirectory
@@ -91,20 +96,23 @@ fun prNumber(input: String): Int? {
 /**
  * Makes the review of [branch] in the repository of [dirHint]: its work tree ([reviewWorkTree]) and base ([Git.baseOf])
  * read off the EDT, then `review.json` and the folder `Review: <branch>` where [reviewParent] puts a review started from
- * [place], in that order, so a failed structure write leaves an ignored file rather than an empty folder; then opens it. EDT.
+ * [place], in that order, so a failed structure write leaves an ignored file rather than an empty folder; then opens it.
+ * Its manager is stored at once, a new session of [profile] in the work tree, its project the main checkout, filed in the
+ * folder; the tab starts it. EDT.
  */
-fun startReview(project: Project, branch: String, dirHint: Path, place: String?, pr: Int?) {
+fun startReview(project: Project, branch: String, dirHint: Path, place: String?, pr: Int?, profile: Profile) {
     ThreadingAssertions.assertEventDispatchThread()
     val setting = MyAirSettings.getInstance().worktreesDir
-    background(project, "Preparing review of $branch", { reviewWorkTree(dirHint, branch, setting).let { it to Git.baseOf(it) } }) { (dir, base) ->
+    background(project, "Preparing review of $branch", { reviewWorkTree(dirHint, branch, setting).let { Triple(it, Git.baseOf(it), Git.mainCheckout(it)) } }) { (dir, base, main) ->
         val service = ClaudeSessionsService.getInstance()
         val reviews = ReviewService.getInstance().reviews.keys
         val target = reviewParent(service.folders, reviews, place)
         val id = UUID.randomUUID().toString()
-        ReviewService.getInstance().create(id, BranchReview(branch, base, dir, pr, target.plan, null, null, emptyList(), emptyList(), emptyList(), emptyList(), emptyMap()))
+        val manager = PlanManager(UUID.randomUUID().toString(), dir, main, profile.name)
+        ReviewService.getInstance().create(id, BranchReview(branch, base, dir, pr, target.plan, manager, null, emptyList(), emptyList(), emptyList(), emptyList(), emptyMap()))
         service.updateFolders(ChangeSource.UI) { structure ->
             check(reviewParent(structure, reviews, place) == target) { "the place of the review of $branch changed meanwhile" }
-            structure.createFolder(target.parent, id, reviewFolderName(structure, target.parent, branch))
+            structure.createFolder(target.parent, id, reviewFolderName(structure, target.parent, branch)).assign(manager.session, id)
         }
         ReviewOpener.open(project, id)
     }
@@ -129,7 +137,8 @@ class NewReviewAction(private val start: () -> ReviewStart?, private val enabled
         val start = checkNotNull(start()) { "the row the menu was opened on is gone" }
         fun picked(branch: String) {
             val pr = Messages.showInputDialog(project, "Pull request number of $branch, empty for none:", "New Review", null, "", PrValidator) ?: return
-            startReview(project, branch, start.dir, start.place, prNumber(pr))
+            val profile = chooseProfile(project) ?: return
+            startReview(project, branch, start.dir, start.place, prNumber(pr), profile)
         }
         if (start.branch != null) return picked(start.branch)
         val where = popupPoint(e)
@@ -141,6 +150,14 @@ class NewReviewAction(private val start: () -> ReviewStart?, private val enabled
             basePopup("Branch to Review", BaseChoices(local, local.size, local.size, local.indexOf(current).coerceAtLeast(0)), ::picked).show(where)
         }
     }
+}
+
+/** The profile a review's manager runs in, asked only when profiles besides `default` are listed; null when cancelled. */
+private fun chooseProfile(project: Project): Profile? {
+    val all = ProfileStore.getInstance().all()
+    if (all.size == 1) return all.single()
+    val labels = all.map { profileLabel(it.name) }.toTypedArray()
+    return all.getOrNull(Messages.showChooseDialog(project, "Profile the review's manager runs in:", "New Review", null, labels, profileLabel(DEFAULT_PROFILE)))
 }
 
 private object PrValidator : InputValidator {

@@ -36,5 +36,7 @@ class PlanEditor(project: Project, private val file: PlanVirtualFile) : ManagerT
 
     override fun startManager() = PlanFiles.getInstance().startManager(checkNotNull(service.folders.find(file.folderId)), service.folders, project)
 
+    override fun startRefusal() = PlanFiles.getInstance().startRefusal(file.folderId)
+
     override fun forgetManager() = PlanFiles.getInstance().forgetManager(file.folderId)
 }
