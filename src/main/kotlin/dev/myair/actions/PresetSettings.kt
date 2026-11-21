@@ -15,6 +15,7 @@ import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.builder.bind
 import com.intellij.ui.dsl.builder.bindItem
 import com.intellij.ui.dsl.builder.bindSelected
@@ -39,6 +40,7 @@ import dev.myair.store.parseVariants
 import dev.myair.store.variantsText
 import java.awt.event.MouseEvent
 import java.nio.file.Path
+import kotlin.reflect.KMutableProperty0
 import javax.swing.JLabel
 import javax.swing.JList
 import javax.swing.event.DocumentEvent
@@ -84,6 +86,20 @@ class PresetsEditor {
         val current = model.getElementAt(index)
         PresetDialog(current, names() - current.name, "Edit Session Configuration", ideBase()).preset()?.let { model.setElementAt(it, index) }
     }
+}
+
+/** The profile names a combo offers for [stored]: the listed ones, then [stored] when it is no longer listed. */
+internal fun profileChoices(listed: List<String>, stored: String) = if (stored in listed) listed else listed + stored
+
+/**
+ * A profile combo bound to [prop]: a stored name no longer listed stays chosen, shown as missing, and the dialog's OK is
+ * refused until a listed one is chosen, so it is never saved as `default` unasked.
+ */
+fun Row.profileComboBox(prop: KMutableProperty0<String>) {
+    val listed = ProfileStore.getInstance().all().map { it.name }
+    comboBox(profileChoices(listed, prop.get()), textListCellRenderer { it?.let { name -> if (name in listed) profileLabel(name) else "$name (missing)" } })
+        .bindItem({ prop.get() }, { prop.set(checkNotNull(it) { "no profile chosen" }) })
+        .validationOnApply { if (it.selectedItem in listed) null else error("Profile ${it.selectedItem} is no longer listed; choose another") }
 }
 
 private enum class WorktreeMode { NONE, ASK, FIXED }
@@ -151,8 +167,7 @@ class PresetDialog(
             comboBox(listOf("") + EFFORTS, textListCellRenderer { it?.ifEmpty { OWN_SETTING } }).bindItem(::effort)
         }.enabledIf(noPairs)
         row("Profile:") {
-            comboBox(ProfileStore.getInstance().all().map { it.name }, textListCellRenderer { it?.let(::profileLabel) })
-                .bindItem({ profile }, { profile = checkNotNull(it) { "no profile chosen" } })
+            profileComboBox(::profile)
         }
         row("Or pick from:") {
             cell(variantsArea).bindText(::variants).rows(3).align(AlignX.FILL)

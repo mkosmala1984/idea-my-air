@@ -1,5 +1,6 @@
 package dev.myair.planview
 
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
@@ -17,6 +18,9 @@ import dev.myair.editor.SessionPaneHost
 import dev.myair.editor.SessionTerminals
 import dev.myair.service.ActiveSession
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.service.LatestRead
+import dev.myair.store.ProfileStore
+import com.intellij.util.concurrency.AppExecutorUtil
 import java.awt.BorderLayout
 import java.awt.GridBagLayout
 import java.beans.PropertyChangeListener
@@ -68,8 +72,13 @@ abstract class ManagerTabEditor(protected val project: Project, private val file
     /** The manager's file, kept while its process runs, else built again from its stored entry ([FolderTabs.running]). */
     protected abstract fun startManager(): ClaudeSessionVirtualFile
 
-    /** Why the manager cannot start now (its profile), null when it can; asked before every [startManager]. */
-    protected abstract fun startRefusal(): String?
+    /** The profile to check before [startManager] ([FolderTabs.profileToCheck]); null when nothing is to be checked. */
+    protected abstract fun profileToCheck(): String?
+
+    // The profile check reads profiles.json and .claude.json (megabytes), so off the EDT; only the latest lands, none once disposed or gone.
+    private val profileChecks = LatestRead.onPool<String, String?>(
+        AppExecutorUtil.getAppExecutorService(), { ModalityState.stateForComponent(root) }, { managerProfileRefusal(it, ProfileStore.getInstance()) },
+    ) { _, refusal -> refusal.getOrThrow()?.let(::refuse) ?: bind() }
 
     protected abstract fun forgetManager()
 
@@ -102,14 +111,33 @@ abstract class ManagerTabEditor(protected val project: Project, private val file
     }
 
     private fun bindManager() {
-        // A refused start shows its reason where the terminal would be and starts nothing; Try Again asks again.
-        startRefusal()?.let { reason ->
-            manager = null
-            pane = null
-            splitter.secondComponent = refused(reason)
-            render()
-            return active.tabFileChanged()
-        }
+        // A stored entry that cannot be read is shown as a refusal too, never thrown into the service's listeners; it is read
+        // only while no process runs, so the file [refuse] drops is never a running manager's.
+        val profile = try {
+            profileToCheck()
+        } catch (e: Exception) {
+            return refuse(e.message ?: e.toString())
+        } ?: return bind()
+        manager = null
+        pane = null
+        splitter.secondComponent = notice("Checking profile $profile...")
+        profileChecks.request(profile)
+    }
+
+    /**
+     * A refused start shows its reason where the terminal would be and starts nothing; Try Again asks again. The manager's
+     * file is dropped, so the tab no longer counts as that session's.
+     */
+    private fun refuse(reason: String) {
+        manager = null
+        pane = null
+        forgetManager()
+        splitter.secondComponent = refused(reason)
+        render()
+        active.tabFileChanged()
+    }
+
+    private fun bind() {
         // Filing a new manager notifies the service's listeners, this editor among them, now: content shows already, so it renders.
         val manager = startManager().also { manager = it }
         // Checked whenever a process is about to start, not only for a restored tab; a detached one here is bound as it is.
@@ -122,6 +150,7 @@ abstract class ManagerTabEditor(protected val project: Project, private val file
 
     private fun folderGone() {
         gone = true
+        profileChecks.forget()
         show(notice(goneNotice))
         manager?.let(SessionTerminals.getInstance()::close)
         forgetManager()
@@ -160,5 +189,5 @@ abstract class ManagerTabEditor(protected val project: Project, private val file
     override fun isValid() = true
     override fun addPropertyChangeListener(listener: PropertyChangeListener) {}
     override fun removePropertyChangeListener(listener: PropertyChangeListener) {}
-    override fun dispose() {}
+    override fun dispose() = profileChecks.forget()
 }

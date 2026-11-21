@@ -30,7 +30,7 @@ This package reads the files that `claude` and Claude Desktop write. It covers s
 - `LiveSession`, `SessionStatus` (`WORKING`, `NEEDS_INPUT`, `IDLE`; `waitRank`) (`LiveSessionRegistry.kt`). `Map<String, LiveSession>.shownBy(pid, job)` returns the entry a tab shows: the entry with that job, else the entry with that pid or whose `parkedBy` contains it.
 - `DesktopSessionReader(dataDir)` (`DesktopSessions.kt`): `read()` maps `cliSessionId` to `originCwd` from `<dataDir>/*/claude-code-sessions/*/*/local_*.json`. Each file is cached by its modification time.
 - `ClaudeHomeWatcher(dirs, projectsDir, quiet = 500 ms, maxWait = 700 ms, onChange)` (`ClaudeHomeWatcher.kt`), `Closeable`: calls `onChange` once a burst of file events settles.
-- `skillFiles(name, home, cwd): SkillFiles?` and `SkillFiles` (`SkillFiles.kt`): find the definition of a skill or command, plain or `plugin:skill`. The result holds its frontmatter `description` (as a `Result`), the files of the skill folder and its `SkillOrigin`. The function returns `null` for a skill built into `claude`.
+- `skillFiles(name, home, cwd, agents): SkillFiles?` and `SkillFiles` (`SkillFiles.kt`): find the definition of a skill or command, plain or `plugin:skill`. The result holds its frontmatter `description` (as a `Result`), the files of the skill folder and its `SkillOrigin` (a linked skill's lock read from `agents`, `~/.agents` of the user whatever the profile). The function returns `null` for a skill built into `claude`.
 - `SkillOrigin` (`SkillOrigin.kt`): where a skill came from, with the installed and latest versions as read from local files. `installs(home)` and `skillOrigin(...)` are internal.
 
 ## Invariants

@@ -30,7 +30,7 @@ private val FRONTMATTER = Regex("\\A---\\r?\\n(.*?)\\r?\\n---", RegexOption.DOT_
  * the user's commands; a name without a plugin from the user's or the project's skills or commands. Null for a skill
  * built into `claude`, which has no files; two places defining it throw.
  */
-fun skillFiles(name: String, home: Path, cwd: Path): SkillFiles? {
+fun skillFiles(name: String, home: Path, cwd: Path, agents: Path = USER_AGENTS): SkillFiles? {
     val plugin = name.substringBeforeLast(':', "")
     val skill = name.substringAfterLast(':')
     val candidates = if (plugin.isEmpty()) {
@@ -52,7 +52,7 @@ fun skillFiles(name: String, home: Path, cwd: Path): SkillFiles? {
     }
     val definition = if (file.name == SKILL_FILE) file.parent else file
     val files = if (file.name == SKILL_FILE) Files.walk(definition).use { paths -> paths.filter { it != definition }.sorted().toList() } else emptyList()
-    return SkillFiles(definition, description, files, skillOrigin(home, plugin, skill, definition))
+    return SkillFiles(definition, description, files, skillOrigin(home, plugin, skill, definition, agents))
 }
 
 /** The `SKILL.md` of each directory named [skill] under [root]: a plugin may sort its skills into folders. */

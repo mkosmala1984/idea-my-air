@@ -112,9 +112,20 @@ class SkillFilesTest {
         write(home.resolve("skills/mine/SKILL.md"))
         assertEquals(
             SkillOrigin("mattpocock/skills", "https://github.com/mattpocock/skills/tree/HEAD/skills/productivity/teach", "2026-06-10", null, null),
-            skillFiles("teach", home, cwd)!!.origin,
+            skillFiles("teach", home, cwd, agents = dir.resolve(".agents"))!!.origin,
         )
         assertNull(skillFiles("mine", home, cwd)!!.origin)
+    }
+
+    @Test
+    fun `a profile's linked skill takes its lock from the user's agents folder, not one beside the profile`() {
+        val profileHome = dir.resolve("profiles/work")
+        val linked = write(dir.resolve(".agents/skills/teach/SKILL.md")).parent
+        profileHome.resolve("skills").createDirectories()
+        Files.createSymbolicLink(profileHome.resolve("skills/teach"), linked)
+        write(dir.resolve(".agents/.skill-lock.json"), """{"version":3,"skills":{"teach":{"source":"mattpocock/skills","sourceType":"github",""" +
+            """"skillPath":"skills/productivity/teach/SKILL.md","updatedAt":"2026-06-10T11:52:01.872Z"}}}""")
+        assertEquals("mattpocock/skills", skillFiles("teach", profileHome, cwd, agents = dir.resolve(".agents"))!!.origin!!.source)
     }
 
     @Test

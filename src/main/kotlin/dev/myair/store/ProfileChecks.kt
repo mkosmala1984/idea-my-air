@@ -1,5 +1,6 @@
 package dev.myair.store
 
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import dev.myair.claude.LiveSession
 import java.nio.file.Path
@@ -12,13 +13,17 @@ fun ideServer(claudeJson: Path): Pair<String, String>? {
     if (!claudeJson.exists()) return null
     val entry = JsonParser.parseString(claudeJson.readText()).asJsonObject["mcpServers"]?.asJsonObject?.get("idea")?.asJsonObject ?: return null
     if (entry["type"]?.asString != "http") return null
-    return "idea" to entry["url"].asString
+    return "idea" to httpUrl("idea", entry, claudeJson)
 }
 
-/** The PowerShell command that gives [profile] the same MCP server as [server]. */
+/** The `url` of the http MCP server [name] of [file]; an entry without one fails naming both. */
+private fun httpUrl(name: String, entry: JsonObject, file: Path): String =
+    checkNotNull(entry["url"]) { "http MCP server $name in $file has no url" }.asString
+
+/** The PowerShell command that gives [profile] the same MCP server as [server], leaving no `CLAUDE_CONFIG_DIR` in the shell. */
 fun mcpAddCommand(profile: Profile, server: Pair<String, String>): String {
     require("'" !in profile.dir.toString()) { "directory of profile ${profile.name} contains a quote: ${profile.dir}" }
-    return "\$env:CLAUDE_CONFIG_DIR='${profile.dir}'; claude mcp add --scope user --transport http ${server.first} ${server.second}"
+    return "& { \$env:CLAUDE_CONFIG_DIR='${profile.dir}'; claude mcp add --scope user --transport http ${server.first} ${server.second}; Remove-Item Env:CLAUDE_CONFIG_DIR }"
 }
 
 /**
@@ -31,7 +36,7 @@ fun managerToolsRefusal(profile: Profile, defaultClaudeJson: Path): String? {
     val own = profile.dir.resolve(".claude.json")
     val urls = if (!own.exists()) emptyList() else
         JsonParser.parseString(own.readText()).asJsonObject["mcpServers"]?.asJsonObject?.entrySet().orEmpty()
-            .map { it.value.asJsonObject }.filter { it["type"]?.asString == "http" }.map { it["url"].asString }
+            .filter { it.value.asJsonObject["type"]?.asString == "http" }.map { httpUrl(it.key, it.value.asJsonObject, own) }
     return if (server.second in urls) null else "Profile ${profile.name} has no My Air MCP server. Run:\n${mcpAddCommand(profile, server)}"
 }
 

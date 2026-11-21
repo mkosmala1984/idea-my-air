@@ -5,7 +5,11 @@ import dev.myair.claude.SessionStatus
 import dev.myair.store.PlanManager
 import dev.myair.store.PlanManagers
 import dev.myair.store.DEFAULT_PROFILE
+import dev.myair.store.Profile
 import dev.myair.store.ProfileStore
+import kotlin.io.path.createDirectories
+import kotlin.io.path.writeText
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.io.TempDir
 import java.time.Instant
 import org.junit.jupiter.api.Assertions.assertNull
@@ -42,6 +46,18 @@ class PlanFilesTest {
         val store = ProfileStore(dir.resolve("profiles.json"), dir.resolve(".claude"))
         assertEquals("no profile 'gone'; profiles: [default]", managerProfileRefusal("gone", store))
         assertNull(managerProfileRefusal(DEFAULT_PROFILE, store))
+    }
+
+    @Test fun `a profile whose tools cannot be read is refused with the reason rather than throwing`(@TempDir dir: Path) {
+        val store = ProfileStore(dir.resolve("profiles.json"), dir.resolve(".claude"))
+        val work = dir.resolve("work")
+        store.write(listOf(Profile("work", work)))
+        dir.resolve(".claude.json").writeText("""{"mcpServers":{"idea":{"type":"http","url":"http://x"}}}""")
+        work.createDirectories()
+        work.resolve(".claude.json").writeText("""{"mcpServers":{"ide":{"type":"http"}}}""")
+        assertEquals("http MCP server ide in ${work.resolve(".claude.json")} has no url", managerProfileRefusal("work", store))
+        dir.resolve("profiles.json").writeText("{broken")
+        assertTrue(managerProfileRefusal("work", store)!!.isNotBlank())
     }
 
     @Test fun `a plan tab path is the folder id`() {

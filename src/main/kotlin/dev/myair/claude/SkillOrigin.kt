@@ -37,8 +37,8 @@ internal fun installs(home: Path): List<Install> {
  * The origin of the skill [skill] defined at [definition]: of the installed [plugin] holding it, or of a skill the `skills`
  * tool linked into `~/.claude/skills` from its `~/.agents/skills` (`~/.agents/.skill-lock.json`); null for others.
  */
-internal fun skillOrigin(home: Path, plugin: String, skill: String, definition: Path): SkillOrigin? =
-    if (plugin.isEmpty()) lockedOrigin(home, skill, definition)
+internal fun skillOrigin(home: Path, plugin: String, skill: String, definition: Path, agents: Path): SkillOrigin? =
+    if (plugin.isEmpty()) lockedOrigin(skill, definition, agents)
     else installs(home).firstOrNull { it.plugin == plugin && definition.startsWith(it.path) }?.let { pluginOrigin(home, it, definition) }
 
 private fun pluginOrigin(home: Path, install: Install, definition: Path): SkillOrigin {
@@ -70,8 +70,10 @@ private fun pluginOrigin(home: Path, install: Install, definition: Path): SkillO
     )
 }
 
-private fun lockedOrigin(home: Path, skill: String, definition: Path): SkillOrigin? {
-    val agents = home.resolveSibling(".agents")
+/** `~/.agents` of the `skills` tool, the same whichever profile's home links its skills in. */
+val USER_AGENTS: Path = Path.of(System.getProperty("user.home"), ".agents")
+
+private fun lockedOrigin(skill: String, definition: Path, agents: Path): SkillOrigin? {
     val lock = agents.resolve(".skill-lock.json")
     if (!lock.isRegularFile() || !definition.toRealPath().startsWith(agents.resolve("skills").toRealPath())) return null
     val entry = json(lock).getAsJsonObject("skills").getAsJsonObject(skill) ?: return null

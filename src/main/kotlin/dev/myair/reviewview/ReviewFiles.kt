@@ -66,9 +66,9 @@ class ReviewTabs {
         return tabs.managerFile(folderId, manager, newId, args)
     }
 
-    /** Why the manager of the review of [folderId] cannot start now ([FolderTabs.startRefusal]); one not made yet is `default`'s. */
-    fun startRefusal(folderId: String): String? =
-        tabs.startRefusal(folderId, ReviewService.getInstance().review(folderId).manager?.profile ?: DEFAULT_PROFILE)
+    /** The profile to check before the manager of the review of [folderId] starts ([FolderTabs.profileToCheck]); one not made yet is `default`'s. */
+    fun profileToCheck(folderId: String): String? =
+        tabs.profileToCheck(folderId) { ReviewService.getInstance().review(folderId).manager?.profile ?: DEFAULT_PROFILE }
 
     /** The review whose manager [file] is; null for any other session's file. */
     fun reviewOf(file: ClaudeSessionVirtualFile): ReviewVirtualFile? = tabs.tabOf(file)

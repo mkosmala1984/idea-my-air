@@ -42,6 +42,7 @@ class ProfilesTest {
         val bad = listOf(
             json(entry(" ", p1)),
             json(entry("default", p1)),
+            json(entry("Default", p1)),
             json(entry("a", p1), entry("a", tmp.resolve("p2").toAbsolutePath())),
             json("""{"name":"a","dir":"rel/x"}"""),
             json(entry("a", p1), entry("b", p1)),
@@ -51,6 +52,16 @@ class ProfilesTest {
             json(entry("a", p1), version = 2),
         )
         bad.forEach { text -> assertThrows<IllegalArgumentException>(text) { parseProfiles(text, d) } }
+    }
+
+    @Test
+    fun `find answers default without reading the file and null for an unlisted name`() {
+        val broken = ProfileStore(tmp.resolve("broken.json").also { it.writeText("{not json") }, d)
+        assertEquals(Profile(DEFAULT_PROFILE, d), broken.find(DEFAULT_PROFILE))
+        val store = ProfileStore(tmp.resolve("profiles.json"), d)
+        store.write(listOf(Profile("test", p1)))
+        assertEquals(Profile("test", p1), store.find("test"))
+        assertEquals(null, store.find("gone"))
     }
 
     @Test
@@ -77,5 +88,12 @@ class ProfilesTest {
         assertEquals(emptyMap(), addedProfileEnv(Profile(DEFAULT_PROFILE, d), inherited = null))
         val e = assertThrows<IllegalStateException> { addedProfileEnv(Profile(DEFAULT_PROFILE, d), inherited = "E:/other") }
         assertEquals("The IDE runs with CLAUDE_CONFIG_DIR=E:/other; My Air's default profile is ~/.claude", e.message)
+    }
+
+    @Test
+    fun `a whole process env drops an inherited CLAUDE_CONFIG_DIR for default and sets a profile's dir`() {
+        val ide = mapOf("PATH" to "C:/bin", "CLAUDE_CONFIG_DIR" to "E:/other")
+        assertEquals(mapOf("PATH" to "C:/bin"), processProfileEnv(Profile(DEFAULT_PROFILE, d), ide))
+        assertEquals(mapOf("PATH" to "C:/bin", "CLAUDE_CONFIG_DIR" to p1.toString()), processProfileEnv(Profile("p", p1), ide))
     }
 }

@@ -24,6 +24,7 @@ import dev.myair.editor.projectBase
 import dev.myair.planview.startAsPlan
 import dev.myair.prompt.modelLabel
 import dev.myair.prompt.showPromptPopup
+import dev.myair.store.Profile
 import dev.myair.store.ProfileStore
 import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.Preset
@@ -41,8 +42,7 @@ import java.util.UUID
  */
 fun startPreset(project: Project, preset: Preset, where: RelativePoint, prompt: String? = null, branch: String? = null, planName: String? = null) {
     require(branch == null || preset.worktree) { "new branch $branch without a worktree" }
-    val profile = ProfileStore.getInstance().all().find { it.name == (preset.profile ?: DEFAULT_PROFILE) }
-    if (profile == null) return Messages.showErrorDialog(project, "Profile ${preset.profile} of \"${preset.name}\" is no longer listed in My Air's settings.", "Cannot Start Session")
+    val profile = presetProfile(preset, ProfileStore.getInstance()).getOrElse { return Messages.showErrorDialog(project, it.message, "Cannot Start Session") }
     val dir = preset.dir(projectBase(project))
     if (!allExist(project, preset, dir)) return
     val open: (Path, String, List<String>) -> Unit =
@@ -51,6 +51,10 @@ fun startPreset(project: Project, preset: Preset, where: RelativePoint, prompt: 
     if (preset.worktree) startInWorktree(project, dir, preset.base, preset.claudeArgs(prompt), where, branch = branch, open = open)
     else open(dir, UUID.randomUUID().toString(), preset.claudeArgs(prompt))
 }
+
+/** The profile [preset] starts in; a failure naming it when it is no longer listed. */
+internal fun presetProfile(preset: Preset, profiles: ProfileStore): Result<Profile> = profiles.find(preset.profile ?: DEFAULT_PROFILE)?.let { Result.success(it) }
+    ?: Result.failure(IllegalArgumentException("Profile ${preset.profile} of \"${preset.name}\" is no longer listed in My Air's settings."))
 
 /**
  * Starts a session continuing [session] in [workTree], the folder it works in now (its worktree too, no new one), with

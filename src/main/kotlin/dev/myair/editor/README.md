@@ -90,7 +90,7 @@ This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `m
 - `release` of a working session shows a "My Air" notification once per run.
 - `CloseAndSettleAction`:
   - updates the pins (settle), closes the process and the tab;
-  - runs `claude stop <job>` on a pooled thread with a 5 s timeout (`STOP_TIMEOUT_MS`) and logs a timeout or a non-zero exit as an error.
+  - runs `claude stop <job>` in the session's profile (`processProfileEnv`: the IDE's environment with `CLAUDE_CONFIG_DIR` removed for `default`, set otherwise) on a pooled thread with a 5 s timeout (`STOP_TIMEOUT_MS`) and logs a timeout or a non-zero exit as an error.
 - `ClaudeSessionOpener` shows dialogs ("Session Already Running", "Cannot Resume Session"), brings windows to the front, opens and pins tabs, and files sessions through `updateFolders`.
 - `confirmed` shows a warning OK/Cancel dialog.
 - `hasTranscript` lists `<profile dir>/projects/*/<id>.jsonl` of the session's profile.

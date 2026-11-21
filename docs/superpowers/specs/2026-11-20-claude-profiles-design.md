@@ -21,7 +21,7 @@
 - **R5** One session id found in two profiles makes the refresh throw, naming both directories.
 - **R6** The watcher covers `sessions/` and `projects/*` of every profile; a change of `profiles.json` rebuilds it and triggers a refresh.
 - **R7** Each profile has its own scan cache file; `default` keeps today's file name, so upgrading does not rescan.
-- **R8** A session tab's process gets `CLAUDE_CONFIG_DIR=<dir>` when its profile is not `default` and no `CLAUDE_CONFIG_DIR` when it is (one inherited by the IDE is removed).
+- **R8** A session tab's process gets `CLAUDE_CONFIG_DIR=<dir>` when its profile is not `default` and no `CLAUDE_CONFIG_DIR` when it is. The terminal cannot remove a variable the IDE has, so a `default` start throws while the IDE runs with `CLAUDE_CONFIG_DIR`; `claude stop` and `runClaude` (`claude -p`, reviewers) remove it instead.
 - **R9** The tab URL carries `profile=<name>` for a non-default profile; a URL without it restores as `default`; a restored tab whose profile is no longer listed shows "Profile <name> is gone" and does not start.
 - **R10** `--resume` vs `--session-id` (`restartArgs`, `hasTranscript`) looks only in the session's profile.
 - **R11** `claude attach <job>`, `claude stop <job>` and every registry lookup of a job use the profile of the session the tab shows.
@@ -41,7 +41,7 @@
 - **R29** Before starting or resuming a manager or starting a reviewer in a profile other than `default`, My Air reads (never writes) that profile's `.claude.json` and refuses the start, naming the profile and showing R24's command, unless its `mcpServers` holds an `http` entry whose `url` equals that of `default`'s `idea` entry. In `default` nothing is checked.
 - **R30** Removing a profile is also refused while a plan manager, a review manager or a reviewer profile names it.
 - **R23** Remove refuses while any session of the profile has a live registry entry or a tab (open or detached) in this IDE, naming one of them. *(builder's call, from the builder check)*
-- **R24** After Add, Settings shows, ready to copy, the command that adds the IDE's MCP server to the new profile at user scope: `claude mcp add --scope user --transport http <name> <url>` run with that profile's `CLAUDE_CONFIG_DIR`, `<name>` and `<url>` read from the `http` entry of `default`'s `~/.claude.json` `mcpServers` whose name is `idea`; without such an entry it says so. My Air never writes a profile's `.claude.json`.
+- **R24** After Add, Settings shows, ready to copy, the command that adds the IDE's MCP server to the new profile at user scope: `claude mcp add --scope user --transport http <name> <url>` run with that profile's `CLAUDE_CONFIG_DIR`, set for that command only and removed from the shell after it, `<name>` and `<url>` read from the `http` entry of `default`'s `~/.claude.json` `mcpServers` whose name is `idea`; without such an entry it says so. My Air never writes a profile's `.claude.json`.
 - **R25** A session started in a profile gets the same `--append-system-prompt`, brief hook (`--settings`) and plan prompt as one in `default`; whether its tools are there is the profile's business.
 - **R21** `claude -p` helpers (branch names, dashboard analysis) run in `default`, with any inherited `CLAUDE_CONFIG_DIR` removed.
 
@@ -87,7 +87,7 @@ Desktop sessions (`DesktopSessionReader`) apply to `default` only.
 
 ### Starting and following
 
-`ClaudeSessionVirtualFile` gets `val profile: Profile`. `SessionTerminals.start` sets or removes `CLAUDE_CONFIG_DIR` (R8). `SessionTabUrl` adds the optional `profile` key (R9); `parseSessionTabPath` accepts 2 or 3 keys, nothing else. `restartArgs`/`hasTranscript` take the profile's directory (R10). `CloseAndSettleAction`, `SessionPane`'s and `SessionTerminals`' registry reads and `claude stop`/`claude attach` use the file's profile (R11).
+`ClaudeSessionVirtualFile` gets `val profile: Profile`. `SessionTerminals.start` sets `CLAUDE_CONFIG_DIR` for a profile and throws for `default` while the IDE has one, since the terminal only adds variables (`addedProfileEnv`); `claude stop` (`GeneralCommandLine` with parent environment `NONE` and `processProfileEnv`) and `runClaude` (`ProcessBuilder`, `profileEnv`) remove it (R8). `SessionTabUrl` adds the optional `profile` key (R9); `parseSessionTabPath` accepts 2 or 3 keys, nothing else. `restartArgs`/`hasTranscript` take the profile's directory (R10). `CloseAndSettleAction`, `SessionPane`'s and `SessionTerminals`' registry reads and `claude stop`/`claude attach` use the file's profile (R11).
 
 ### Managers and reviewers
 

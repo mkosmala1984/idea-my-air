@@ -52,9 +52,9 @@ class ProfileChecksTest {
     }
 
     @Test
-    fun mcpAddCommand() {
+    fun `mcpAddCommand sets CLAUDE_CONFIG_DIR only for the command and removes it after`() {
         assertEquals(
-            "\$env:CLAUDE_CONFIG_DIR='C:\\p'; claude mcp add --scope user --transport http idea http://127.0.0.1:64342/stream",
+            "& { \$env:CLAUDE_CONFIG_DIR='C:\\p'; claude mcp add --scope user --transport http idea http://127.0.0.1:64342/stream; Remove-Item Env:CLAUDE_CONFIG_DIR }",
             dev.myair.store.mcpAddCommand(Profile("test", Path.of("C:\\p")), "idea" to "http://127.0.0.1:64342/stream"),
         )
     }
@@ -95,6 +95,21 @@ class ProfileChecksTest {
         assertEquals(expected, managerToolsRefusal(p, defaultJson()))
         profile("""{"mcpServers":{"other":{"type":"http","url":"http://x"}}}""")
         assertEquals(expected, managerToolsRefusal(p, defaultJson()))
+    }
+
+    @Test
+    fun `refuses any profile while default has no http idea entry`() {
+        val noIdea = claudeJson("""{"mcpServers":{"idea":{"type":"stdio","command":"x"}}}""")
+        assertEquals("No http MCP server named idea in $noIdea, so profile test cannot get My Air's.", managerToolsRefusal(profile(null), noIdea))
+    }
+
+    @Test
+    fun `an http entry without url fails naming the server and the file`() {
+        val ideaNoUrl = claudeJson("""{"mcpServers":{"idea":{"type":"http"}}}""")
+        assertEquals("http MCP server idea in $ideaNoUrl has no url", assertThrows(IllegalStateException::class.java) { ideServer(ideaNoUrl) }.message)
+        val p = profile("""{"mcpServers":{"ide":{"type":"http"}}}""")
+        val own = p.dir.resolve(".claude.json")
+        assertEquals("http MCP server ide in $own has no url", assertThrows(IllegalStateException::class.java) { managerToolsRefusal(p, defaultJson()) }.message)
     }
 
     @Test

@@ -21,7 +21,7 @@ through `writeAtomically`, so concurrent readers never see half a file.
 - `Preset` (`Presets.kt`): `dir(ideBase)`, `missingDirs(dir)`, `claudeArgs(prompt)`; `EFFORTS`, `presetOf(session, name)`,
   `continuationPrompt(session)`, `checkPresets`, `presetsJson`, `parsePresets`. `PresetStore(file)`: `read(): Result`,
   `write(presets)`, `PresetStore.INSTANCE` (`~/.my-air/presets.json`).
-- `Profile`, `ProfileStore` (`Profiles.kt`, `~/.my-air/profiles.json`): `all()`, `byName`, `default`, `profileEnv`, `addedProfileEnv`; `managerToolsRefusal`, `removeRefusal`, `mcpAddCommand` (`ProfileChecks.kt`).
+- `Profile`, `ProfileStore` (`Profiles.kt`, `~/.my-air/profiles.json`): `all()`, `byName`, `default`, `find` (null when not listed; `default` without reading the file), `profileEnv`, `addedProfileEnv`, `processProfileEnv`; `managerToolsRefusal`, `removeRefusal`, `mcpAddCommand` (`ProfileChecks.kt`).
 - `PlanManager(session, cwd, project, profile)`, `PlanManagers` (`PlanManagers.kt`): `set`, `moveSession`, `prune`, `folderOf`,
   `toJson`, `PlanManagers.parse`. `PlanManagerStore(file)`: `read()`, `update(op)`.
 - `PromptFiles` (`PromptFiles.kt`): `write(dir, text, pid)`, `prune(dir)`.

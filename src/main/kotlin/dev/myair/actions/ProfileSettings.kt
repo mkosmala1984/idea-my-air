@@ -96,7 +96,7 @@ class ProfilesEditor {
         val profile = list.selectedValue ?: return
         val tabs = ProjectManager.getInstance().openProjects.flatMap { shownSessionFiles(FileEditorManager.getInstance(it)) } +
             SessionTerminals.getInstance().detached().map { it.second }
-        val managers = PlanFiles.getInstance().store.read().byFolder.values + ReviewService.getInstance().reviews.values.mapNotNull { it.getOrNull()?.manager }
+        val managers = PlanFiles.getInstance().store.read().byFolder.values + ReviewService.getInstance().reviews.values.mapNotNull { it.getOrThrow().manager }
         val reviewerProfiles = ReviewProfileStore.INSTANCE.read().getOrThrow().flatMap { p -> p.reviewers.mapNotNull { it.profile } }
         val refusal = removeRefusal(profile.name, ClaudeSessionsService.getInstance().live.values, tabs.map { it.profile.name }, managers.map { it.profile }, reviewerProfiles)
         if (refusal != null) return Messages.showErrorDialog(refusal, "Cannot Remove Profile")

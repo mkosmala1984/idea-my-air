@@ -12,7 +12,7 @@ import com.intellij.openapi.project.DumbAwareAction
 import dev.myair.claude.LiveSessionRegistry
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.Profile
-import dev.myair.store.addedProfileEnv
+import dev.myair.store.processProfileEnv
 
 /**
  * Marks the session of the tab settled, ends its process, which a closed tab alone may leave running, then closes the tab.
@@ -38,7 +38,8 @@ class CloseAndSettleAction : DumbAwareAction() {
     private fun stop(job: String, profile: Profile) {
         // The tab keeps the job it attached to after the job ended; there is nothing left to stop then.
         if (LiveSessionRegistry(profile.dir.resolve("sessions")).read().values.none { it.job == job }) return
-        val command = GeneralCommandLine(claudeExecutable().path, "stop", job).withEnvironment(addedProfileEnv(profile))
+        val command = GeneralCommandLine(claudeExecutable().path, "stop", job)
+            .withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.NONE).withEnvironment(processProfileEnv(profile))
         val output = CapturingProcessHandler(command).runProcess(STOP_TIMEOUT_MS, true)
         when {
             output.isTimeout -> thisLogger().error("claude stop $job did not end within $STOP_TIMEOUT_MS ms: ${output.stderr}")

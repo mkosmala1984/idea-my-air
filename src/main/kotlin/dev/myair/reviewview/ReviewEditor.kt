@@ -50,7 +50,7 @@ class ReviewEditor(project: Project, private val file: ReviewVirtualFile) : Mana
 
     override fun startManager() = ReviewTabs.getInstance().startManager(file.folderId)
 
-    override fun startRefusal() = ReviewTabs.getInstance().startRefusal(file.folderId)
+    override fun profileToCheck() = ReviewTabs.getInstance().profileToCheck(file.folderId)
 
     override fun forgetManager() {
         ReviewTabs.getInstance().tabs.forgetManager(file.folderId)

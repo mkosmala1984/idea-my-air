@@ -24,7 +24,7 @@ class ClaudeSessionFileSystem : DeprecatedVirtualFileSystem(), NonPhysicalFileSy
     override fun findFileByPath(path: String): VirtualFile {
         val ref = parseSessionTabPath(path)
         ClaudeSessionsService.getInstance() // starts tracking which session each tab shows
-        val profile = ProfileStore.getInstance().all().find { it.name == ref.profile }
+        val profile = ProfileStore.getInstance().find(ref.profile)
             // Removed since the tab was saved: its directory is unknown, and the pane says so instead of starting ([SessionPane]).
             ?: return ClaudeSessionVirtualFile(ref.sessionId, ref.cwd, ref.project, Profile(ref.profile, Path.of("")), NEW_SESSION_TITLE, emptyList(), restored = true)
         return ClaudeSessionVirtualFile(ref.sessionId, ref.cwd, ref.project, profile, NEW_SESSION_TITLE, restartArgs(ref.sessionId, profile.dir), restored = true)

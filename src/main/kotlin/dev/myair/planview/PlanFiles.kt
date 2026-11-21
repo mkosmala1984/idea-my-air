@@ -84,8 +84,8 @@ class PlanFiles {
 
     fun manager(folderId: String): ClaudeSessionVirtualFile? = tabs.manager(folderId)
 
-    /** Why the manager of the plan of [folderId] cannot start now ([FolderTabs.startRefusal]); a new one is `default`'s. */
-    fun startRefusal(folderId: String): String? = tabs.startRefusal(folderId, store.read().byFolder[folderId]?.profile ?: DEFAULT_PROFILE)
+    /** The profile to check before the manager of the plan of [folderId] starts ([FolderTabs.profileToCheck]); a new one is `default`'s. */
+    fun profileToCheck(folderId: String): String? = tabs.profileToCheck(folderId) { store.read().byFolder[folderId]?.profile ?: DEFAULT_PROFILE }
 
     /**
      * The manager session's file of plan [folder], kept while `SessionTerminals` has its process, else built again from its

@@ -29,7 +29,7 @@ fun parseProfiles(text: String, defaultDir: Path): List<Profile> {
     }
     val names = profiles.map { it.name }
     require(names.none { it.isBlank() }) { "a profile name is blank" }
-    require(DEFAULT_PROFILE !in names) { "'$DEFAULT_PROFILE' is the profile of $defaultDir and is not listed" }
+    require(names.none { it.equals(DEFAULT_PROFILE, ignoreCase = true) }) { "'$DEFAULT_PROFILE' is the profile of $defaultDir and is not listed" }
     require(names.toSet().size == names.size) { "profile names repeat: $names" }
     profiles.forEach { require(it.dir.isAbsolute) { "directory of profile ${it.name} is not absolute: ${it.dir}" } }
     profiles.forEach { require("'" !in it.dir.toString()) { "directory of profile ${it.name} contains a quote: ${it.dir}" } }
@@ -48,13 +48,20 @@ fun profilesJson(profiles: List<Profile>): String {
 fun profileEnv(profile: Profile): Map<String, String?> = mapOf("CLAUDE_CONFIG_DIR" to profile.dir.toString().takeUnless { profile.isDefault })
 
 /**
- * [profileEnv] for a process that inherits the IDE's environment and can only have variables added (the terminal,
- * `GeneralCommandLine`): a `default` start throws while the IDE has `CLAUDE_CONFIG_DIR` ([inherited]), which it could not remove.
+ * [profileEnv] for a process that inherits the IDE's environment and can only have variables added (the terminal):
+ * a `default` start throws while the IDE has `CLAUDE_CONFIG_DIR` ([inherited]), which it could not remove.
  */
 fun addedProfileEnv(profile: Profile, inherited: String? = System.getenv("CLAUDE_CONFIG_DIR")): Map<String, String> {
     check(!profile.isDefault || inherited == null) { "The IDE runs with CLAUDE_CONFIG_DIR=$inherited; My Air's default profile is ~/.claude" }
     return profileEnv(profile).mapNotNull { (key, value) -> value?.let { key to it } }.toMap()
 }
+
+/**
+ * The whole environment of a `claude` process that does not inherit the IDE's (`GeneralCommandLine` with parent
+ * environment `NONE`): [ide] with `CLAUDE_CONFIG_DIR` removed for `default` and set to the directory of any other profile.
+ */
+fun processProfileEnv(profile: Profile, ide: Map<String, String> = System.getenv()): Map<String, String> =
+    ide - "CLAUDE_CONFIG_DIR" + profileEnv(profile).mapNotNull { (key, value) -> value?.let { key to it } }
 
 /** `~/.my-air/profiles.json`, shared by every IDE; parsed again only when the file's time or size changes. */
 class ProfileStore(val file: Path, val defaultDir: Path) {
@@ -74,10 +81,10 @@ class ProfileStore(val file: Path, val defaultDir: Path) {
         return parseProfiles(file.readText(), defaultDir).also { cached = stamp to it }
     }
 
-    fun byName(name: String): Profile {
-        val all = all()
-        return requireNotNull(all.find { it.name == name }) { "no profile '$name'; profiles: ${all.map { it.name }}" }
-    }
+    /** The profile named [name], null when it is not listed; `default` never reads the file. */
+    fun find(name: String): Profile? = if (name == DEFAULT_PROFILE) default else all().find { it.name == name }
+
+    fun byName(name: String): Profile = find(name) ?: throw IllegalArgumentException("no profile '$name'; profiles: ${all().map { it.name }}")
 
     fun write(profiles: List<Profile>) {
         val text = profilesJson(profiles)

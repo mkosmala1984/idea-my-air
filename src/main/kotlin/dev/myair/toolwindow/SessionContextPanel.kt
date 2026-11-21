@@ -358,10 +358,10 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         }
         if (context.skills.isNotEmpty()) card("Skills") {
             val (pinned, groups) = skillSections(context.skills, pinnedSkills())
-            for (skill in pinned) skill(context.cwd to skill, pinned = true)
+            for (skill in pinned) skill(context.cwd to skill, pinned = true, context.profile)
             for ((plugin, skills) in groups) {
                 section("$plugin (${skills.size})", key = "Skills/$plugin", expandedFirst = false) {
-                    for (skill in skills) skill(context.cwd to skill, pinned = false)
+                    for (skill in skills) skill(context.cwd to skill, pinned = false, context.profile)
                 }
             }
         }
@@ -371,12 +371,12 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
      * The row of a skill, with buttons pasting its command into the session and pinning it; once opened its description
      * and files. A pinned skill stands outside its plugin's group, so it is named in full.
      */
-    private fun Panel.skill(key: Pair<Path, String>, pinned: Boolean) {
+    private fun Panel.skill(key: Pair<Path, String>, pinned: Boolean, profile: String) {
         val open = key in skills
         val name = key.second
         row {
             icon(if (open) AllIcons.General.ArrowDown else AllIcons.General.ArrowRight)
-            link(if (pinned) name else name.substringAfterLast(':')) { toggleSkill(key) }.shrinkable()
+            link(if (pinned) name else name.substringAfterLast(':')) { toggleSkill(key, profile) }.shrinkable()
             cell(InplaceButton("Paste /$name into the session", AllIcons.Actions.MenuPaste) { pasteCommand("/$name ") })
             cell(InplaceButton(if (pinned) "Unpin skill" else "Pin skill above the groups", if (pinned) AllIcons.General.PinSelected else AllIcons.General.Pin_tab) {
                 setPinnedSkills(if (pinned) pinnedSkills() - name else pinnedSkills() + name)
@@ -504,12 +504,11 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         if (!pane.type(command)) Messages.showInfoMessage(project, "The session's tab does not run claude.", "Paste Skill Command")
     }
 
-    /** Opens or closes the skill [key], reading its files off the EDT. */
-    private fun toggleSkill(key: Pair<Path, String>) {
+    /** Opens or closes the skill [key], reading its files off the EDT from [profile]'s directory. */
+    private fun toggleSkill(key: Pair<Path, String>, profile: String) {
         if (key in skills) skills -= key
         else {
             skills[key] = null
-            val profile = service.sessions.first { it.id == shownId }.profile
             background(project, "Reading skill", { runCatching { skillFiles(key.second, service.profileHome(profile), key.first) } }) {
                 if (key in skills) skills[key] = it
                 render()

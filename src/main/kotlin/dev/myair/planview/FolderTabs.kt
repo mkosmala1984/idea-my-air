@@ -17,6 +17,7 @@ import dev.myair.editor.SessionTerminals
 import dev.myair.folders.ChangeSource
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.PlanManager
 import dev.myair.store.managerToolsRefusal
 import java.util.concurrent.ConcurrentHashMap
@@ -59,16 +60,14 @@ abstract class FolderTabFileSystem(private val protocol: String, private val fil
 }
 
 /**
- * Why a manager cannot start in the profile named [name]: [profiles] does not list it ([ProfileStore.byName]'s message,
- * a broken `profiles.json`'s too), or it lacks My Air's MCP server ([managerToolsRefusal]); null when it can.
+ * Why a manager cannot start in the profile named [name]: [profiles] does not list it ([ProfileStore.byName]'s message),
+ * it lacks My Air's MCP server ([managerToolsRefusal]), or either cannot be read (a broken `profiles.json` or
+ * `.claude.json`: the failure's message); null when it can. Reads files: call it off the EDT.
  */
-fun managerProfileRefusal(name: String, profiles: ProfileStore): String? {
-    val profile = try {
-        profiles.byName(name)
-    } catch (e: IllegalArgumentException) {
-        return e.message
-    }
-    return managerToolsRefusal(profile, profiles.defaultDir.resolveSibling(".claude.json"))
+fun managerProfileRefusal(name: String, profiles: ProfileStore): String? = try {
+    managerToolsRefusal(profiles.byName(name), profiles.defaultDir.resolveSibling(".claude.json"))
+} catch (e: Exception) {
+    e.message ?: e.toString()
 }
 
 /**
@@ -87,9 +86,12 @@ class FolderTabs<F : FolderTabFile>(private val create: (String) -> F) {
     /** The manager's file while `SessionTerminals` has its process: identity matters only then. */
     fun running(folderId: String): ClaudeSessionVirtualFile? = managers[folderId]?.takeIf(SessionTerminals.getInstance()::runs)
 
-    /** Why the manager of [folderId], of profile [profile] as stored, cannot start now; null when it can or its process runs. */
-    fun startRefusal(folderId: String, profile: String): String? =
-        if (running(folderId) != null) null else managerProfileRefusal(profile, ProfileStore.getInstance())
+    /**
+     * The stored profile of the manager of [folderId] ([profile], read only then) when its start is to be checked
+     * ([managerProfileRefusal]); null while its process runs and for `default`, which is never refused, so it binds at once.
+     */
+    fun profileToCheck(folderId: String, profile: () -> String): String? =
+        if (running(folderId) != null) null else profile().takeUnless { it == DEFAULT_PROFILE }
 
     fun setManager(folderId: String, file: ClaudeSessionVirtualFile) {
         managers[folderId] = file
