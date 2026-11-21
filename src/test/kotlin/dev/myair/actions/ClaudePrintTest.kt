@@ -6,6 +6,7 @@ import java.nio.file.Path
 import java.time.Duration
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** Runs real Windows processes in place of `claude`. */
@@ -29,5 +30,16 @@ class ClaudePrintTest {
     @Test fun `a process past the timeout is killed and throws`() {
         val e = assertThrows<IllegalStateException> { runClaude(listOf("powershell", "-NoProfile", "-Command", "Start-Sleep 20"), dir, "", Duration.ofSeconds(2)) }
         assertContains(e.message!!, "did not answer within")
+    }
+
+    @Test fun `a null env value removes the variable`() {
+        // build.gradle.kts gives the test JVM a CLAUDE_CONFIG_DIR, so removing it is not the absence of one never there.
+        val inherited = checkNotNull(System.getenv("CLAUDE_CONFIG_DIR")) { "the test JVM has no CLAUDE_CONFIG_DIR" }
+        assertEquals(inherited, processBuilder(listOf("cmd"), dir, emptyMap()).environment()["CLAUDE_CONFIG_DIR"])
+        val set = processBuilder(listOf("cmd", "/c", "set CLAUDE_CONFIG_DIR"), dir, mapOf("CLAUDE_CONFIG_DIR" to "E:/explicit"))
+        assertEquals("CLAUDE_CONFIG_DIR=E:/explicit", set.start().inputStream.bufferedReader().readText().trim())
+        val removed = processBuilder(listOf("cmd", "/c", "set CLAUDE_CONFIG_DIR"), dir, mapOf("CLAUDE_CONFIG_DIR" to null))
+        assertFalse("CLAUDE_CONFIG_DIR" in removed.environment())
+        assertEquals("", removed.start().inputStream.bufferedReader().readText().trim())
     }
 }

@@ -21,6 +21,7 @@ import com.intellij.util.IconUtil
 import dev.myair.claude.SessionStatus
 import dev.myair.claude.isAtOrUnder
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.store.Profile
 import java.awt.Color
 import java.nio.file.Path
 import javax.swing.Icon
@@ -30,6 +31,7 @@ import javax.swing.SwingConstants
  * A tab running `claude <claudeArgs>` in [cwd]. [sessionId] and [title] follow the session the process shows now, which
  * `/clear` or `/resume` can change; [ClaudeSessionsService] updates them by [pid], known once the process has started.
  * [project] is the session's [dev.myair.claude.ClaudeSession.project], whose icon and colour the tab takes outside that project's window.
+ * [profile]: the Claude Code configuration directory the process runs with and whose registry it is read from.
  * [restored]: the platform reopened the tab on startup through [ClaudeSessionFileSystem]; nobody checked it may start yet.
  * [planStart]: a new session started from a plan's row, for [sessionPlan] before a scan has seen it; a restored tab has none.
  */
@@ -37,6 +39,7 @@ class ClaudeSessionVirtualFile(
     var sessionId: String,
     val cwd: Path,
     val project: Path,
+    val profile: Profile,
     var title: String,
     val claudeArgs: List<String>,
     val restored: Boolean = false,
@@ -68,7 +71,7 @@ class ClaudeSessionVirtualFile(
     override fun getFileSystem() = ClaudeSessionFileSystem.instance
 
     /** Read when the platform saves the open tabs, so a tab `/clear` switched restores the session it shows now. */
-    override fun getPath() = sessionTabPath(sessionId, cwd, project)
+    override fun getPath() = sessionTabPath(sessionId, cwd, project, profile.name)
 
     // Recent Files would hold this object, its URL and claudeArgs from when it was opened, and reopen it unchecked.
     override fun isIncludedInEditorHistory(project: Project) = false

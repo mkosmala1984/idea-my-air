@@ -62,4 +62,12 @@ class ProfilesTest {
         assertEquals(mapOf("CLAUDE_CONFIG_DIR" to null), profileEnv(Profile(DEFAULT_PROFILE, d)))
         assertEquals(mapOf("CLAUDE_CONFIG_DIR" to p1.toString()), profileEnv(Profile("p", p1)))
     }
+
+    @Test
+    fun `an added env sets a profile's dir and refuses default while the IDE has CLAUDE_CONFIG_DIR`() {
+        assertEquals(mapOf("CLAUDE_CONFIG_DIR" to p1.toString()), addedProfileEnv(Profile("p", p1), inherited = "E:/other"))
+        assertEquals(emptyMap(), addedProfileEnv(Profile(DEFAULT_PROFILE, d), inherited = null))
+        val e = assertThrows<IllegalStateException> { addedProfileEnv(Profile(DEFAULT_PROFILE, d), inherited = "E:/other") }
+        assertEquals("The IDE runs with CLAUDE_CONFIG_DIR=E:/other; My Air's default profile is ~/.claude", e.message)
+    }
 }

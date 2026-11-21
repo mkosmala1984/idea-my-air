@@ -25,6 +25,8 @@ import dev.myair.service.ClaudeSessionsService
 import dev.myair.planview.PlanFiles
 import dev.myair.reviewview.ReviewTabs
 import dev.myair.store.Homes
+import dev.myair.store.ProfileStore
+import dev.myair.store.addedProfileEnv
 import dev.myair.store.PromptFiles
 import dev.myair.tabs.TabsSync
 import kotlinx.coroutines.CoroutineScope
@@ -210,12 +212,15 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
 
     /** [pane] null: no view yet, so the terminal must not wait for one to start the process. */
     private fun start(file: ClaudeSessionVirtualFile, pane: SessionPane?, project: Project) {
+        // Checked before anything is written or registered: a profile removed since the tab opened has no directory to run in.
+        check(file.profile in ProfileStore.getInstance().all()) { "Profile ${file.profile.name} is gone" }
+        val profileEnv = addedProfileEnv(file.profile)
         val claude = claudeExecutable()
         val settings = MyAirSettings.getInstance()
         val service = ClaudeSessionsService.getInstance()
         val folders = service.folders
         // Read now: a tab restored on startup opens before the service's first refresh.
-        val job = LiveSessionRegistry(Homes.claude.resolve("sessions")).read()[file.sessionId]?.job
+        val job = LiveSessionRegistry(file.profile.dir.resolve("sessions")).read()[file.sessionId]?.job
         file.job = job
         // claude refuses or forks a `--resume` of a session a job runs; `attach` opens the job itself, with its own prompt.
         val managed = PlanFiles.getInstance().planOf(file)?.folderId
@@ -235,7 +240,7 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
             .shellCommand(command)
             // Fullscreen renderer: no flicker, mouse support; otherwise claude asks on every start whether to try it.
             // Skip auto-install of claude's own JetBrains plugin into this IDE, as Air does.
-            .envVariables(mapOf("CLAUDE_CODE_NO_FLICKER" to "1", "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL" to "true"))
+            .envVariables(mapOf("CLAUDE_CODE_NO_FLICKER" to "1", "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL" to "true") + profileEnv)
             .processType(TerminalProcessType.NON_SHELL)
             .emulatorType(TerminalEmulatorType.Ghostty)
             .build()

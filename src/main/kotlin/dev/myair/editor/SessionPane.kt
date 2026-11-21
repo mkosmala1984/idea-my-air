@@ -11,6 +11,7 @@ import com.intellij.util.ui.UIUtil
 import dev.myair.MyAirSettings
 import dev.myair.claude.LiveSessionRegistry
 import dev.myair.store.Homes
+import dev.myair.store.ProfileStore
 import dev.myair.store.PromptFiles
 import dev.myair.tabs.SessionHosts
 import java.awt.BorderLayout
@@ -100,10 +101,11 @@ class SessionPane(private val project: Project, val file: ClaudeSessionVirtualFi
         return true
     }
 
-    /** What a restored tab shows instead of starting: its directory is gone, or its session already runs elsewhere. */
+    /** What a restored tab shows instead of starting: its profile or directory is gone, or its session already runs elsewhere. */
     private fun restoreBlocker(): JComponent? {
+        if (file.profile !in ProfileStore.getInstance().all()) return notice("Profile ${file.profile.name} is gone")
         if (!file.cwd.isDirectory()) return notice("Session directory no longer exists:\n${file.cwd}")
-        val live = LiveSessionRegistry(Homes.claude.resolve("sessions")).read()[file.sessionId]
+        val live = LiveSessionRegistry(file.profile.dir.resolve("sessions")).read()[file.sessionId]
         // A background job's tab attaches to it ([SessionTerminals.start]).
         if (live == null || live.job != null) return null
         val running = RunningElsewhere(file.title, live, file.cwd)

@@ -48,4 +48,6 @@ intellijPlatform {
 
 tasks.test {
     useJUnitPlatform()
+    // ClaudePrintTest removes an inherited CLAUDE_CONFIG_DIR from a child's environment, so the test JVM must have one.
+    environment("CLAUDE_CONFIG_DIR", "E:/inherited-claude-config")
 }

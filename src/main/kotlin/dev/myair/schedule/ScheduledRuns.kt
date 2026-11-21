@@ -1,5 +1,7 @@
 package dev.myair.schedule
 
+import dev.myair.store.DEFAULT_PROFILE
+import dev.myair.store.ProfileStore
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
@@ -157,7 +159,7 @@ class ScheduledRuns(private val scope: CoroutineScope) {
             // Seen as of its start: the first refresh would otherwise mark it at its last message, maybe the reply itself.
             service.seenStore.mark(session, now.toEpochMilli())
             task.folder?.let { folder -> service.updateFolders(ChangeSource.AUTO) { it.assign(session, folder) } }
-            val file = ClaudeSessionVirtualFile(session, dir!!, dir, task.name, task.claudeArgs(session))
+            val file = ClaudeSessionVirtualFile(session, dir!!, dir, ProfileStore.getInstance().byName(DEFAULT_PROFILE), task.name, task.claudeArgs(session))
             SessionTerminals.getInstance().startDetached(file, project!!)
             files[session] = file
             pending.add(session)

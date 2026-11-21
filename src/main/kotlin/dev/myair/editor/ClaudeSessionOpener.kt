@@ -15,6 +15,9 @@ import dev.myair.review.managedReviewFolder
 import dev.myair.reviewview.ReviewOpener
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
+import dev.myair.store.DEFAULT_PROFILE
+import dev.myair.store.Profile
+import dev.myair.store.ProfileStore
 import dev.myair.tabs.HostWindow
 import dev.myair.tabs.SessionHosts
 import dev.myair.tabs.TabsSync
@@ -58,7 +61,7 @@ object ClaudeSessionOpener {
             Messages.showErrorDialog(project, "Session directory no longer exists:\n${session.cwd}", "Cannot Resume Session")
             return
         }
-        openTab(project, ClaudeSessionVirtualFile(session.id, session.cwd, session.project, session.title, listOf("--resume", session.id)))
+        openTab(project, ClaudeSessionVirtualFile(session.id, session.cwd, session.project, ProfileStore.getInstance().byName(session.profile), session.title, listOf("--resume", session.id)))
     }
 
     /** Offers the window of the program [running] the session, when there is one; returns whether to open a second process. */
@@ -85,9 +88,10 @@ object ClaudeSessionOpener {
         args: List<String> = emptyList(),
         plan: PlanStart? = null,
         folderId: String? = plan?.folderId,
+        profile: Profile = ProfileStore.getInstance().byName(DEFAULT_PROFILE),
     ) {
         folderId?.let { ClaudeSessionsService.getInstance().updateFolders(ChangeSource.UI) { folders -> folders.assign(id, it) } }
-        val file = ClaudeSessionVirtualFile(id, cwd, sessionProject, NEW_SESSION_TITLE, listOf("--session-id", id) + args, planStart = plan)
+        val file = ClaudeSessionVirtualFile(id, cwd, sessionProject, profile, NEW_SESSION_TITLE, listOf("--session-id", id) + args, planStart = plan)
         openTab(project, file)
         // The tab just opened with focus, so the current window holds it.
         val window = checkNotNull(FileEditorManagerEx.getInstanceEx(project).currentWindow) { "no editor window after opening $id" }

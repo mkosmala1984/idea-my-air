@@ -1,5 +1,8 @@
 package dev.myair.actions
 
+import dev.myair.store.DEFAULT_PROFILE
+import dev.myair.store.ProfileStore
+import dev.myair.store.profileEnv
 import java.io.File
 import java.nio.file.Path
 import java.time.Duration
@@ -18,12 +21,18 @@ private val PIPES = Executors.newCachedThreadPool { Thread(it, "claude stdin").a
  * a non-zero exit throws with what it printed; a timeout or an interrupt kills it with its descendants, never a
  * process left once it exited, as the daemon runs every background job.
  */
-fun runClaude(args: List<String>, dir: Path, input: String, timeout: Duration): String {
+fun runClaude(
+    args: List<String>,
+    dir: Path,
+    input: String,
+    timeout: Duration,
+    env: Map<String, String?> = profileEnv(ProfileStore.getInstance().byName(DEFAULT_PROFILE)),
+): String {
     val out = File.createTempFile("claude", ".out")
     val err = File.createTempFile("claude", ".err")
     var process: Process? = null
     try {
-        process = ProcessBuilder(args).directory(dir.toFile()).redirectOutput(out).redirectError(err).start()
+        process = processBuilder(args, dir, env).redirectOutput(out).redirectError(err).start()
         val stdin = CompletableFuture.runAsync({ process.outputStream.use { it.write(input.toByteArray()) } }, PIPES)
         check(process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) { "claude did not answer within $timeout" }
         check(process.exitValue() == 0) { "claude failed (exit ${process.exitValue()}): ${err.readText().trim()} ${out.readText().trim()}".trim() }
@@ -37,4 +46,9 @@ fun runClaude(args: List<String>, dir: Path, input: String, timeout: Duration): 
         // Windows keeps a file a running process holds: the daemon's copy goes when the IDE exits.
         listOf(out, err).filterNot { it.delete() }.forEach { it.deleteOnExit() }
     }
+}
+
+/** A process of [args] in [dir] with the IDE's environment changed by [env]: a null value removes the variable. */
+fun processBuilder(args: List<String>, dir: Path, env: Map<String, String?>): ProcessBuilder = ProcessBuilder(args).directory(dir.toFile()).apply {
+    env.forEach { (key, value) -> if (value == null) environment().remove(key) else environment()[key] = value }
 }

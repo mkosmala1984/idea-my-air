@@ -1,5 +1,7 @@
 package dev.myair.planview
 
+import dev.myair.store.DEFAULT_PROFILE
+import dev.myair.store.ProfileStore
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.impl.EditorHistoryManager
@@ -82,7 +84,7 @@ class FolderTabs<F : FolderTabFile>(private val create: (String) -> F) {
      */
     fun managerFile(folderId: String, manager: PlanManager, newId: String, args: List<String>, planStart: PlanStart? = null): ClaudeSessionVirtualFile {
         if (manager.session == newId) ClaudeSessionsService.getInstance().updateFolders(ChangeSource.AUTO) { it.assign(newId, folderId) }
-        return ClaudeSessionVirtualFile(manager.session, manager.cwd, manager.project, NEW_SESSION_TITLE, args, planStart = planStart).also { setManager(folderId, it) }
+        return ClaudeSessionVirtualFile(manager.session, manager.cwd, manager.project, ProfileStore.getInstance().byName(DEFAULT_PROFILE), NEW_SESSION_TITLE, args, planStart = planStart).also { setManager(folderId, it) }
     }
 
     /**

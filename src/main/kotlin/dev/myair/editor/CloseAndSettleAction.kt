@@ -11,7 +11,8 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.DumbAwareAction
 import dev.myair.claude.LiveSessionRegistry
 import dev.myair.service.ClaudeSessionsService
-import dev.myair.store.Homes
+import dev.myair.store.Profile
+import dev.myair.store.addedProfileEnv
 
 /**
  * Marks the session of the tab settled, ends its process, which a closed tab alone may leave running, then closes the tab.
@@ -31,13 +32,14 @@ class CloseAndSettleAction : DumbAwareAction() {
         ClaudeSessionsService.getInstance().updatePins { it.settle(listOf(file.sessionId)) }
         terminals.close(file)
         FileEditorManager.getInstance(e.project!!).closeFile(file)
-        if (job != null) ApplicationManager.getApplication().executeOnPooledThread { stop(job) }
+        if (job != null) ApplicationManager.getApplication().executeOnPooledThread { stop(job, file.profile) }
     }
 
-    private fun stop(job: String) {
+    private fun stop(job: String, profile: Profile) {
         // The tab keeps the job it attached to after the job ended; there is nothing left to stop then.
-        if (LiveSessionRegistry(Homes.claude.resolve("sessions")).read().values.none { it.job == job }) return
-        val output = CapturingProcessHandler(GeneralCommandLine(claudeExecutable().path, "stop", job)).runProcess(STOP_TIMEOUT_MS, true)
+        if (LiveSessionRegistry(profile.dir.resolve("sessions")).read().values.none { it.job == job }) return
+        val command = GeneralCommandLine(claudeExecutable().path, "stop", job).withEnvironment(addedProfileEnv(profile))
+        val output = CapturingProcessHandler(command).runProcess(STOP_TIMEOUT_MS, true)
         when {
             output.isTimeout -> thisLogger().error("claude stop $job did not end within $STOP_TIMEOUT_MS ms: ${output.stderr}")
             output.exitCode != 0 -> thisLogger().error("claude stop $job exited with ${output.exitCode}: ${output.stderr}")

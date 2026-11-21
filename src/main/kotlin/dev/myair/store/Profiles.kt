@@ -46,6 +46,15 @@ fun profilesJson(profiles: List<Profile>): String {
 /** What to set in a `claude` process's environment: a null value removes the variable. */
 fun profileEnv(profile: Profile): Map<String, String?> = mapOf("CLAUDE_CONFIG_DIR" to profile.dir.toString().takeUnless { profile.isDefault })
 
+/**
+ * [profileEnv] for a process that inherits the IDE's environment and can only have variables added (the terminal,
+ * `GeneralCommandLine`): a `default` start throws while the IDE has `CLAUDE_CONFIG_DIR` ([inherited]), which it could not remove.
+ */
+fun addedProfileEnv(profile: Profile, inherited: String? = System.getenv("CLAUDE_CONFIG_DIR")): Map<String, String> {
+    check(!profile.isDefault || inherited == null) { "The IDE runs with CLAUDE_CONFIG_DIR=$inherited; My Air's default profile is ~/.claude" }
+    return profileEnv(profile).mapNotNull { (key, value) -> value?.let { key to it } }.toMap()
+}
+
 /** `~/.my-air/profiles.json`, shared by every IDE; parsed again only when the file's time or size changes. */
 class ProfileStore(val file: Path, val defaultDir: Path) {
     private var cached: Pair<Pair<FileTime, Long>, List<Profile>>? = null
