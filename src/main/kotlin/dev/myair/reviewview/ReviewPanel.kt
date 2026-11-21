@@ -66,8 +66,6 @@ import dev.myair.review.runProblem
 import dev.myair.review.removeRun
 import dev.myair.review.resolveQuestion
 import dev.myair.review.reviewerArgs
-import dev.myair.store.ProfileStore
-import dev.myair.store.managerToolsRefusal
 import dev.myair.review.reviewerPrompt
 import dev.myair.review.setBase
 import dev.myair.review.storeBase
@@ -79,10 +77,12 @@ import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.BranchReview
 import dev.myair.store.Finding
 import dev.myair.store.FindingState
+import dev.myair.store.ProfileStore
 import dev.myair.store.ReviewProfile
 import dev.myair.store.ReviewProfileStore
 import dev.myair.store.Run
 import dev.myair.store.Severity
+import dev.myair.store.managerToolsRefusal
 import dev.myair.toolwindow.PaneFont
 import dev.myair.toolwindow.commentLabel
 import dev.myair.toolwindow.durationText
@@ -340,10 +340,10 @@ class ReviewPanel(
             ApplicationManager.getApplication().executeOnPooledThread {
                 val job = try {
                     val profiles = ProfileStore.getInstance()
-                    val profile = reviewer.profile?.let(profiles::byName) ?: profiles.default
-                    managerToolsRefusal(profile, profiles.defaultDir.resolveSibling(".claude.json"))?.let { error("Reviewer ${reviewer.name}: $it") }
+                    val claudeProfile = reviewer.profile?.let(profiles::byName) ?: profiles.default
+                    managerToolsRefusal(claudeProfile, profiles.defaultDir.resolveSibling(".claude.json"))?.let { error("Reviewer ${reviewer.name}: $it") }
                     val prompt = reviewerPrompt(folderId, runId, review, mergeBase, head, range, Git.rangeSize(review.dir, range))
-                    Result.success(Reviewers.start(review.dir, reviewerArgs(reviewer, prompt), profile))
+                    Result.success(Reviewers.start(review.dir, reviewerArgs(reviewer, prompt), claudeProfile))
                 } catch (e: Exception) {
                     Result.failure(e)
                 }

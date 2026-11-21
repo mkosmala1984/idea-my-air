@@ -2,7 +2,7 @@
 
 ## Overview
 
-The application-wide session state of My Air. `ClaudeSessionsService` is the one watcher over `~/.claude` and `~/.my-air`:
+The application-wide session state of My Air. `ClaudeSessionsService` is the one watcher over `~/.claude`, the directories of the profiles in `~/.my-air/profiles.json` and `~/.my-air`:
 it scans transcripts, reads the live registry, folders and pins, and pushes every change to subscribed panels on the EDT.
 After each change it re-targets open tabs to the session their process shows now and writes the taskbar board. The
 other files are pure functions the service and the UI call, kept here so plain JUnit tests can cover them.
@@ -50,7 +50,7 @@ other files are pure functions the service and the UI call, kept here so plain J
 
 ## Side Effects
 
-- Watches `~/.claude/sessions`, `~/.claude/projects/*`, `~/.my-air` and `~/.my-air/seen` (`ClaudeHomeWatcher`), plus a
+- Watches `sessions/` and `projects/*` of `~/.claude` and of every profile, `~/.my-air` and `~/.my-air/seen` (`ClaudeHomeWatcher`), plus a
   60 s scheduled rescan (`safetyNet`).
 - Reads transcripts, the registry, `%LOCALAPPDATA%/Claude-Data` (Desktop sessions), HEAD files of every session's and
   open project's directories (`Git.head`) and `.git/worktrees/*`.

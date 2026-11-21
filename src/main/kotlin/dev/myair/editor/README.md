@@ -78,7 +78,7 @@ This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `m
 
 ## Side Effects
 
-- `SessionTerminals.start` reads the live registry at `~/.claude/sessions` and starts `claude` through `TransferableTerminalSessionFactory` on the EDT.
+- `SessionTerminals.start` reads the live registry at `<profile dir>/sessions` and starts `claude` with the profile's `CLAUDE_CONFIG_DIR` (`addedProfileEnv`); it starts `claude` through `TransferableTerminalSessionFactory` on the EDT.
   - The terminal uses the Ghostty emulator and `NON_SHELL` process type, runs in the file's `cwd`, and sets `CLAUDE_CODE_NO_FLICKER=1` and `CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL=true`.
   - The command is one of:
     - `claude attach <jobId>` for a session that a job runs;
@@ -93,7 +93,7 @@ This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `m
   - runs `claude stop <job>` on a pooled thread with a 5 s timeout (`STOP_TIMEOUT_MS`) and logs a timeout or a non-zero exit as an error.
 - `ClaudeSessionOpener` shows dialogs ("Session Already Running", "Cannot Resume Session"), brings windows to the front, opens and pins tabs, and files sessions through `updateFolders`.
 - `confirmed` shows a warning OK/Cancel dialog.
-- `hasTranscript` lists `~/.claude/projects/*/<id>.jsonl`.
+- `hasTranscript` lists `<profile dir>/projects/*/<id>.jsonl` of the session's profile.
 - `projectColor` reads `ProjectIconPalette` on the EDT (`invokeLater`) and caches the colour. `ClaudeSessionTabColorProvider` then repaints the tab (`updateFilePresentation`).
 - `SessionPane.type` sends text to the terminal. `ClaudeSessionEditor` subscribes to `ClaudeSessionsService` to update its header.
 

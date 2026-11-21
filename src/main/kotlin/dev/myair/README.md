@@ -3,7 +3,7 @@
 ## Overview
 
 The root package of the My Air plugin. It holds one file, `MyAirSettings.kt`: the IDE-wide settings and their page in
-Settings › Tools › My Air. Everything else lives in the feature packages below.
+Settings › Tools › My Air, which also hosts the Claude Profiles group (its editor is `actions/ProfileSettings.kt`). Everything else lives in the feature packages below.
 
 ## Interface
 

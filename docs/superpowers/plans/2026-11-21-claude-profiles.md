@@ -10,17 +10,17 @@
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
-| 6 | | |
-| 7 | | |
-| 8 | | |
-| 9 | | |
-| 10 | | |
-| 11 | | |
+| 1 | done | `7f8955b` |
+| 2 | done | `b22db37` |
+| 3 | done | `eef3cc2` |
+| 4 | done | `6e05c95` |
+| 5 | done | `b31817f` |
+| 6 | done | `4d53c09` |
+| 7 | done | `4f4620c` |
+| 8 | done | `d4e3387` |
+| 9 | done | `4b10ee8` |
+| 10 | done | `f3983c0` |
+| 11 | in progress | |
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -289,36 +289,36 @@ git commit -m "Plan: profiles, Task 1 findings"
 
 | R | Task | Evidence |
 |---|---|---|
-| R1 | 2 | |
-| R2 | 8 | |
-| R3 | 8 | |
-| R4 | 3 | |
-| R5 | 3 | |
-| R6 | 3 | |
-| R7 | 3 | |
-| R8 | 1, 4 | |
-| R9 | 4 | |
-| R10 | 4 | |
-| R11 | 1, 4 | |
-| R12 | 5, 6 | |
-| R13 | 6 | |
-| R14 | 5 | |
-| R15 | 5 | |
-| R16 | 5 | |
-| R17 | 7 | |
-| R18 | 7 | |
-| R19 | 5 | |
-| R20 | 5 | |
+| R1 | 2 | test `ProfilesTest` › `the file's profiles follow default`; test `ProfilesTest` › `rejects bad files`; commit b22db37 |
+| R2 | 8 | test `ProfileChecksTest` › `createProfileDirs makes projects and sessions`; commit 77289f4; not done: runIde check needs the user |
+| R3 | 8 | commit 77289f4; not done: runIde check needs the user |
+| R4 | 3 | test `ProfileReadsTest` › `sessions get their profile`; test `ProfileReadsTest` › `merged live entries keep pid and profile`; commit eef3cc2 |
+| R5 | 3 | test `ProfileReadsTest` › `one id in two profiles throws naming both dirs`; commit eef3cc2 |
+| R6 | 3 | test `ClaudeHomeWatcherTest` › `a transcript in a second projects dir triggers a change`; commit eef3cc2 |
+| R7 | 3 | test `ClaudeSessionScannerTest` › `the default profile keeps its cache file name`; test `ClaudeSessionScannerTest` › `another profile gets its own cache file`; commit eef3cc2 |
+| R8 | 1, 4 | test `ProfilesTest` › `default profile env clears CLAUDE_CONFIG_DIR`; test `ProfilesTest` › `an added env sets a profile's dir and refuses default while the IDE has CLAUDE_CONFIG_DIR`; test `ClaudePrintTest` › `a null env value removes the variable`; checked: terminal env merge read from terminal.jar bytecode (Task 1); commit 6e05c95 |
+| R9 | 4 | test `SessionTabUrlTest` › `a default session's path has no profile key`; test `SessionTabUrlTest` › `a path without a profile reads as default`; test `SessionTabUrlTest` › `a profile name with spaces and ampersands round-trips`; commit 6e05c95 |
+| R10 | 4 | test `SessionTabUrlTest` › `a session with a transcript resumes, one closed before its first message starts again under its id`; commit 6e05c95 |
+| R11 | 1, 4 | checked: terminal env merge read from terminal.jar bytecode (Task 1); commit 6e05c95 |
+| R12 | 5, 6 | test `PresetsTest` › `a preset's profile round-trips and is left out when null`; test `RunProjectTest` › `an unlisted profile stops the run`; commit b31817f |
+| R13 | 6 | test `PromptChoicesTest` › `toPreset carries the chosen profile`; test `PromptChoicesTest` › `a draft keeps its profile`; test `PromptChoicesTest` › `choosing a configuration takes its profile`; commit 0b194a4; not done: runIde check needs the user |
+| R14 | 5 | test `PresetsTest` › `presetOf keeps a non-default profile`; test `PresetsTest` › `presetOf of a default session has no profile`; commit b31817f |
+| R15 | 5 | test `FolderQueriesTest` › `the json names a session's profile unless it is default`; test `SessionStartTest` › `profile overrides the configuration's`; commit b31817f |
+| R16 | 5 | test `RunProjectTest` › `an unlisted profile stops the run`; commit b31817f |
+| R17 | 7 | commit 4f4620c |
+| R18 | 7 | test `BriefTextTest` › `tooltip names a non-default profile`; test `BriefTextTest` › `tooltip of a default session has no profile line`; test `TabTitleTest` › `tab tooltip names the profile`; test `SessionHeaderTest` › `header carries the profile`; commit 4f4620c; not done: runIde check needs the user |
+| R19 | 5 | test `ClaudeSessionTest` › `a session is found by its non-default profile name and a default one is not found by default`; commit b31817f |
+| R20 | 5 | test `PresetsTest` › `continuationPrompt names the transcript path`; commit b31817f |
 | R21 | 4 | |
-| R22 | 9 | |
-| R23 | 8 | |
-| R24 | 8 | |
-| R25 | 4 | |
-| R26 | 9 | |
-| R27 | 9 | |
-| R28 | 10 | |
-| R29 | 9, 10 | |
-| R30 | 8, 9, 10 | |
+| R22 | 9 | test `PlanManagersTest` › `profile round-trips and default is left out`; test `PlanManagersTest` › `a file without profile reads as default`; test `ReviewsTest` › `a review manager's profile round-trips`; test `PlanFilesTest` › `an existing manager keeps its profile and checks its transcript there`; commit 4b10ee8 |
+| R23 | 8 | test `ProfileChecksTest` › `remove is refused while a session of the profile is live`; test `ProfileChecksTest` › `remove is refused while a tab shows it`; commit 77289f4 |
+| R24 | 8 | test `ProfileChecksTest` › `remove is allowed otherwise`; commit 77289f4 |
+| R25 | 4 | test `ProfileChecksTest` › `mcpAddCommand refuses a quote in the directory`; commit 6e05c95 |
+| R26 | 9 | test `PlanFilesTest` › `a new manager takes the given profile`; commit 4b10ee8 |
+| R27 | 9 | commit 4b10ee8 |
+| R28 | 10 | test `ReviewProfilesTest` › `a reviewer's profile is read`; test `ReviewProfilesTest` › `a reviewer without profile is default`; commit f3983c0 |
+| R29 | 9, 10 | test `ProfileChecksTest` › `refuses a profile without the server`; test `ProfileChecksTest` › `accepts a profile with the same url under another name`; test `ProfileChecksTest` › `managerToolsRefusal is null for default`; commit 4b10ee8 |
+| R30 | 8, 9, 10 | test `ProfileChecksTest` › `remove is refused while a plan manager names it`; test `ProfileChecksTest` › `remove is refused while a reviewer names it`; commit f3983c0 |
 
 ## Task 1 findings
 

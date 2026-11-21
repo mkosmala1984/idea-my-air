@@ -26,7 +26,7 @@ This package reads the files that `claude` and Claude Desktop write. It covers s
   - `Transcript` and its parts `Conversation`, `Messages`, `Environment` and `Call`: the incremental parse state. `Transcript.toSession(file, desktopProject)` turns it into a session.
   - `parse(file)` and `read(file, from)` on the companion object.
   - `PROMPTS = 3`.
-- `LiveSessionRegistry(dir, isSameProcess)` (`LiveSessionRegistry.kt`): reads `<dir>/<pid>.json` (`~/.claude/sessions`) with `read(): Map<String, LiveSession>`. `isSameProcess(pid, procStart)` compares the process start time with `procStart`, a Windows FILETIME.
+- `LiveSessionRegistry(dir, isSameProcess)` (`LiveSessionRegistry.kt`): reads `<dir>/<pid>.json` (`~/.claude/sessions`, or a profile's `sessions/`; one instance per profile, merged by `service/ProfileReads.kt`) with `read(): Map<String, LiveSession>`. `isSameProcess(pid, procStart)` compares the process start time with `procStart`, a Windows FILETIME.
 - `LiveSession`, `SessionStatus` (`WORKING`, `NEEDS_INPUT`, `IDLE`; `waitRank`) (`LiveSessionRegistry.kt`). `Map<String, LiveSession>.shownBy(pid, job)` returns the entry a tab shows: the entry with that job, else the entry with that pid or whose `parkedBy` contains it.
 - `DesktopSessionReader(dataDir)` (`DesktopSessions.kt`): `read()` maps `cliSessionId` to `originCwd` from `<dataDir>/*/claude-code-sessions/*/*/local_*.json`. Each file is cached by its modification time.
 - `ClaudeHomeWatcher(dirs, projectsDir, quiet = 500 ms, maxWait = 700 ms, onChange)` (`ClaudeHomeWatcher.kt`), `Closeable`: calls `onChange` once a burst of file events settles.

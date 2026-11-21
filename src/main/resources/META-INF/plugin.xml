@@ -2,7 +2,7 @@
   <id>dev.myair</id>
   <name>My Air</name>
   <vendor>mkosmala</vendor>
-  <description><![CDATA[Lists Claude Code sessions from ~/.claude/projects and resumes them in an editor tab.]]></description>
+  <description><![CDATA[Lists Claude Code sessions from ~/.claude/projects (and the projects of other Claude Code profiles) and resumes them in an editor tab.]]></description>
 
   <depends>com.intellij.modules.platform</depends>
   <depends>org.jetbrains.plugins.terminal</depends>

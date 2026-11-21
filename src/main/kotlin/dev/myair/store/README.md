@@ -9,7 +9,7 @@ through `writeAtomically`, so concurrent readers never see half a file.
 ## Interface
 
 - `writeAtomically(target, text)` (`AtomicFiles.kt`): temp file, then a Win32 POSIX-semantics rename over the target.
-- `Homes` (`Homes.kt`): `claude` (`~/.claude`), `myAir` (`~/.my-air`).
+- `Homes` (`Homes.kt`): `claude` (`~/.claude`, the `default` profile), `myAir` (`~/.my-air`).
 - `TabStore(root, self, isAlive)` (`TabStore.kt`): `publish(tabs)`, `all()`, `requestFocus(pid, sessionId)`,
   `receiveRequests(onRequest): Closeable`, `withdraw()`; `TabStore.startMillis`, `TabStore.isAlive`; data `OpenTab`,
   `IdeTabs`.
@@ -21,7 +21,8 @@ through `writeAtomically`, so concurrent readers never see half a file.
 - `Preset` (`Presets.kt`): `dir(ideBase)`, `missingDirs(dir)`, `claudeArgs(prompt)`; `EFFORTS`, `presetOf(session, name)`,
   `continuationPrompt(session)`, `checkPresets`, `presetsJson`, `parsePresets`. `PresetStore(file)`: `read(): Result`,
   `write(presets)`, `PresetStore.INSTANCE` (`~/.my-air/presets.json`).
-- `PlanManager(session, cwd, project)`, `PlanManagers` (`PlanManagers.kt`): `set`, `moveSession`, `prune`, `folderOf`,
+- `Profile`, `ProfileStore` (`Profiles.kt`, `~/.my-air/profiles.json`): `all()`, `byName`, `default`, `profileEnv`, `addedProfileEnv`; `managerToolsRefusal`, `removeRefusal`, `mcpAddCommand` (`ProfileChecks.kt`).
+- `PlanManager(session, cwd, project, profile)`, `PlanManagers` (`PlanManagers.kt`): `set`, `moveSession`, `prune`, `folderOf`,
   `toJson`, `PlanManagers.parse`. `PlanManagerStore(file)`: `read()`, `update(op)`.
 - `PromptFiles` (`PromptFiles.kt`): `write(dir, text, pid)`, `prune(dir)`.
 
