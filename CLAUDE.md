@@ -64,5 +64,6 @@ Rules that hold across features:
 - Session system-prompt text (`SessionSystemPrompt.kt`) must name every tool of `FoldersMcpToolset` (`SessionSystemPromptTest` checks it).
 - `structure.json` is versioned; a build that writes a newer version stops older installs reading it, so bump only when a new field is used.
 - When you change behaviour described in `docs/internals/`, update that file in the same commit (moved verbatim from the former CLAUDE.md, so it may lag the code: trust the code).
+- When you add, remove or rename a public class or function, update the `README.md` of its package too (the interface index); `docs/internals/` describes behaviour across packages, the READMEs list what each package holds, and neither repeats the other.
 
 Code, comments and strings are in English.
