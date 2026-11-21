@@ -32,6 +32,7 @@ fun parseProfiles(text: String, defaultDir: Path): List<Profile> {
     require(DEFAULT_PROFILE !in names) { "'$DEFAULT_PROFILE' is the profile of $defaultDir and is not listed" }
     require(names.toSet().size == names.size) { "profile names repeat: $names" }
     profiles.forEach { require(it.dir.isAbsolute) { "directory of profile ${it.name} is not absolute: ${it.dir}" } }
+    profiles.forEach { require("'" !in it.dir.toString()) { "directory of profile ${it.name} contains a quote: ${it.dir}" } }
     val dirs = profiles.map { it.dir }
     require(dirs.toSet().size == dirs.size) { "profile directories repeat: $dirs" }
     require(defaultDir !in dirs) { "a profile uses the default directory $defaultDir" }

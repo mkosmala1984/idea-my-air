@@ -46,6 +46,7 @@ class ProfilesTest {
             json("""{"name":"a","dir":"rel/x"}"""),
             json(entry("a", p1), entry("b", p1)),
             json(entry("a", d)),
+            json(entry("a", tmp.resolve("it's").toAbsolutePath())),
             json("""{"name":"a","dir":"${p1.toString().replace("\\", "\\\\")}","colour":"red"}"""),
             json(entry("a", p1), version = 2),
         )

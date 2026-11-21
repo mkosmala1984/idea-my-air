@@ -1,8 +1,8 @@
 package dev.myair.actions
 
+import com.intellij.icons.AllIcons
 import com.intellij.ide.DataManager
 import com.intellij.ide.actions.RevealFileAction
-import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -14,16 +14,15 @@ import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.CollectionListModel
-import com.intellij.ui.DocumentAdapter
-import com.intellij.ui.dsl.builder.COLUMNS_MEDIUM
-import com.intellij.ui.dsl.builder.columns
-import javax.swing.event.DocumentEvent
 import com.intellij.ui.ColoredListCellRenderer
+import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.COLUMNS_MEDIUM
+import com.intellij.ui.dsl.builder.columns
 import com.intellij.ui.dsl.builder.panel
 import dev.myair.editor.ClaudeSessionOpener
 import dev.myair.editor.SessionTerminals
@@ -39,6 +38,7 @@ import dev.myair.store.profilesJson
 import dev.myair.store.removeRefusal
 import java.nio.file.Path
 import javax.swing.JList
+import javax.swing.event.DocumentEvent
 
 /** The profiles list of Settings › Tools › My Air: Add and Remove act at once on `profiles.json`; a profile's directory is never edited. */
 class ProfilesEditor {
@@ -78,7 +78,7 @@ class ProfilesEditor {
 
     private fun add() {
         val project = checkNotNull(project()) { "Settings opened without a project" }
-        val profile = NewProfileDialog(store.all().drop(1), store.defaultDir).profile(true) ?: return
+        val profile = NewProfileDialog(store.all().drop(1), store.defaultDir).showAndGetProfile() ?: return
         createProfileDirs(profile)
         store.write(store.all().drop(1) + profile)
         reload()
@@ -127,9 +127,10 @@ private class NewProfileDialog(private val taken: List<Profile>, private val def
         nameField.document.addDocumentListener(object : DocumentAdapter() {
             override fun textChanged(e: DocumentEvent) {
                 val name = nameField.text.trim()
-                if (dirEdited || name.isEmpty() || runCatching { Path.of(name) }.isFailure) return
+                if (dirEdited || name.isEmpty()) return
+                val dir = runCatching { Path.of(System.getProperty("user.home"), ".my-air", "claude-profiles", name).toString() }.getOrNull() ?: return
                 prefilling = true
-                dirField.text = Path.of(System.getProperty("user.home"), ".my-air", "claude-profiles", name).toString()
+                dirField.text = dir
                 prefilling = false
             }
         })
@@ -142,7 +143,7 @@ private class NewProfileDialog(private val taken: List<Profile>, private val def
 
     private fun profile() = Profile(nameField.text.trim(), Path.of(dirField.text.trim()))
 
-    fun profile(show: Boolean): Profile? = if (showAndGet()) profile() else null
+    fun showAndGetProfile(): Profile? = if (showAndGet()) profile() else null
 }
 
 private class McpCommandDialog(private val command: String) : DialogWrapper(true) {
