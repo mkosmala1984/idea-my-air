@@ -37,7 +37,9 @@ import dev.myair.editor.projectBase
 import dev.myair.service.LatestRead
 import dev.myair.service.gitWorktrees
 import com.intellij.util.concurrency.AppExecutorUtil
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.EFFORTS
+import dev.myair.store.ProfileStore
 import dev.myair.store.Preset
 import dev.myair.store.PresetStore
 import dev.myair.editor.projectIcon
@@ -144,6 +146,9 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
     private val effortChip = Chip(AllIcons.Actions.ProfileCPU) { chip ->
         choose(chip, EFFORTS, choice.effort, { it.replaceFirstChar(Char::uppercase) }) { update(choice.copy(effort = it)) }
     }
+    private val profileChip = Chip(AllIcons.General.User) { chip ->
+        choose(chip, ProfileStore.getInstance().all().map { it.name }, choice.profile, ::profileLabel) { update(choice.copy(profile = it)) }
+    }
     private val workspaceChip = Chip(null) { chip ->
         choose(chip, Workspace.entries, Workspace.of(choice), { it.text }, { it.description }, title = "Workspace") {
             update(choice.copy(worktree = it.worktree, newBranch = it.newBranch, existing = it.existing))
@@ -197,7 +202,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
             add(JBScrollPane(prompt).apply { isOpaque = false; viewport.isOpaque = false; border = JBUI.Borders.empty() }, BorderLayout.CENTER)
             add(JPanel(BorderLayout()).apply {
                 isOpaque = false
-                add(row(presetChip, modelChip, effortChip, planChip), BorderLayout.WEST)
+                add(row(presetChip, modelChip, effortChip, profileChip, planChip), BorderLayout.WEST)
                 add(send, BorderLayout.EAST)
             }, BorderLayout.SOUTH)
         }
@@ -287,6 +292,7 @@ class PromptPanel(private val project: Project, private val started: () -> Unit,
         presetChip.text = new.preset.name
         modelChip.text = modelLabel(new.model)
         effortChip.text = new.effort.replaceFirstChar(Char::uppercase)
+        profileChip.text = profileLabel(new.profile)
         workspaceChip.icon = if (new.worktree) AllIcons.Actions.NewFolder else AllIcons.Nodes.Folder
         workspaceChip.text = Workspace.of(new).text
         nameRow.isVisible = new.newBranch
@@ -400,7 +406,7 @@ private fun loadChoice(key: String) = PropertiesComponent.getInstance().run {
     LastChoice(
         getValue("$key.preset"), getValue("$key.model"), getValue("$key.effort"), getValue("$key.worktree")?.toBooleanStrict(),
         getValue("$key.newBranch")?.toBooleanStrict(), getValue("$key.project"), getValue("$key.existing")?.toBooleanStrict(),
-        getValue("$key.plan")?.toBooleanStrict(),
+        getValue("$key.plan")?.toBooleanStrict(), getValue("$key.profile"),
     ).present { Path.of(it).isDirectory() }
 }
 
@@ -414,6 +420,7 @@ private fun saveChoice(key: String, choice: LastChoice?) = PropertiesComponent.g
     setValue("$key.project", choice?.project)
     setValue("$key.existing", choice?.existing?.toString())
     setValue("$key.plan", choice?.plan?.toString())
+    setValue("$key.profile", choice?.profile)
 }
 
 private fun loadDraft(): Draft? {
@@ -456,3 +463,5 @@ fun showPromptPopup(project: Project, from: Preset? = null) {
         .createPopup()
     popup.showCenteredInCurrentWindow(project)
 }
+
+private fun profileLabel(name: String) = if (name == DEFAULT_PROFILE) "Default" else name

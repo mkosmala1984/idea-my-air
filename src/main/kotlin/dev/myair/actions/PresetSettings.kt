@@ -30,7 +30,9 @@ import com.intellij.util.ui.UIUtil
 import dev.myair.editor.projectBase
 import dev.myair.service.LatestRead
 import com.intellij.util.concurrency.AppExecutorUtil
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.EFFORTS
+import dev.myair.store.ProfileStore
 import dev.myair.store.Preset
 import dev.myair.store.parseVariants
 import dev.myair.store.variantsText
@@ -102,6 +104,7 @@ class PresetDialog(
 ) : DialogWrapper(true) {
     private var model: String? = preset?.model.orEmpty()
     private var effort: String? = preset?.effort.orEmpty()
+    private var profile: String = preset?.profile ?: DEFAULT_PROFILE
     private var project = preset?.project.orEmpty()
     private var worktree = when {
         preset?.worktree != true -> WorktreeMode.NONE
@@ -146,6 +149,9 @@ class PresetDialog(
         row("Effort:") {
             comboBox(listOf("") + EFFORTS, textListCellRenderer { it?.ifEmpty { OWN_SETTING } }).bindItem(::effort)
         }.enabledIf(noPairs)
+        row("Profile:") {
+            comboBox(ProfileStore.getInstance().all().map { it.name }).bindItem({ profile }, { profile = it!! })
+        }
         row("Or pick from:") {
             cell(variantsArea).bindText(::variants).rows(3).align(AlignX.FILL)
                 .comment("Model and effort pairs, one per line, e.g. \"opus high\" or \"- low\"; at least two, listed at the click.")
@@ -218,6 +224,7 @@ class PresetDialog(
             prompt.trim().ifEmpty { null },
             askMore,
             pairs,
+            profile.takeIf { it != DEFAULT_PROFILE },
         )
     }
 }

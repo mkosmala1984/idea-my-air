@@ -1,5 +1,6 @@
 package dev.myair.prompt
 
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.EFFORTS
 import dev.myair.store.Preset
 import java.nio.file.Path
@@ -19,7 +20,7 @@ val DEFAULT_PRESET = Preset("Default")
  */
 data class Choice(
     val preset: Preset, val model: String, val effort: String, val worktree: Boolean, val newBranch: Boolean = false,
-    val project: String? = null, val existing: Boolean = false, val plan: Boolean = false,
+    val project: String? = null, val existing: Boolean = false, val plan: Boolean = false, val profile: String = DEFAULT_PROFILE,
 ) {
     init {
         require(effort in EFFORTS) { "effort $effort is not one of $EFFORTS" }
@@ -35,18 +36,20 @@ data class Choice(
         require(existing == (existingDir != null)) { "existing worktree $existingDir for a choice with existing=$existing" }
         return preset.copy(
             model = model, effort = effort, variants = emptyList(), worktree = worktree, base = base.takeIf { worktree },
-            project = existingDir?.toString() ?: project ?: preset.project,
+            project = existingDir?.toString() ?: project ?: preset.project, profile = profile.takeIf { it != DEFAULT_PROFILE },
         )
     }
 }
 
 /** The choices [preset] makes; a preset with model and effort pairs makes its first. */
-fun choiceOf(preset: Preset) = preset.firstVariant().let { Choice(preset, it.model ?: DEFAULT_MODEL, it.effort ?: DEFAULT_EFFORT, preset.worktree) }
+fun choiceOf(preset: Preset) = preset.firstVariant().let {
+    Choice(preset, it.model ?: DEFAULT_MODEL, it.effort ?: DEFAULT_EFFORT, preset.worktree, profile = preset.profile ?: DEFAULT_PROFILE)
+}
 
 /** The choices of the last start, each null when never made; the configuration is kept by name. */
 data class LastChoice(
     val preset: String?, val model: String?, val effort: String?, val worktree: Boolean?, val newBranch: Boolean? = null,
-    val project: String? = null, val existing: Boolean? = null, val plan: Boolean? = null,
+    val project: String? = null, val existing: Boolean? = null, val plan: Boolean? = null, val profile: String? = null,
 )
 
 /**
@@ -59,7 +62,7 @@ data class Draft(val text: String, val choice: LastChoice, val base: String?) {
     }
 }
 
-fun Choice.toLast() = LastChoice(preset.name, model, effort, worktree, newBranch, project, existing, plan)
+fun Choice.toLast() = LastChoice(preset.name, model, effort, worktree, newBranch, project, existing, plan, profile)
 
 /** The draft's choices when there is one, else the last start's. */
 fun opening(presets: List<Preset>, last: LastChoice, draft: Draft?) = restore(presets, draft?.choice ?: last)
@@ -70,7 +73,7 @@ fun restore(presets: List<Preset>, last: LastChoice): Choice {
     val worktree = last.worktree ?: own.worktree
     return Choice(
         own.preset, last.model ?: own.model, last.effort ?: own.effort, worktree, worktree && last.newBranch == true, last.project,
-        !worktree && last.existing == true, last.plan == true,
+        !worktree && last.existing == true, last.plan == true, last.profile ?: own.profile,
     )
 }
 

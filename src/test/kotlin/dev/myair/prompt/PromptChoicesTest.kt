@@ -157,4 +157,23 @@ class PromptChoicesTest {
         assertEquals(false, restore(presets, LastChoice("Review", null, null, null)).plan)
         assertEquals(true, Choice(review, "opus", "low", false, plan = true).toLast().plan)
     }
+
+    @Test
+    fun `toPreset carries the chosen profile`() {
+        assertEquals("work", choiceOf(DEFAULT_PRESET).copy(profile = "work").toPreset(null).profile)
+        assertEquals(null, choiceOf(DEFAULT_PRESET).toPreset(null).profile)
+    }
+
+    @Test
+    fun `a draft keeps its profile`() {
+        val chosen = choiceOf(review).copy(profile = "work")
+        assertEquals("work", restore(presets, Draft("text", chosen.toLast(), null).choice).profile)
+        assertEquals("default", restore(presets, chosen.toLast().copy(profile = null)).profile)
+    }
+
+    @Test
+    fun `choosing a configuration takes its profile`() {
+        assertEquals("work", choiceOf(review.copy(profile = "work")).profile)
+        assertEquals("default", choiceOf(review).profile)
+    }
 }

@@ -1,6 +1,5 @@
 package dev.myair.schedule
 
-import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.ProfileStore
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.notification.NotificationAction
@@ -155,13 +154,14 @@ class ScheduledRuns(private val scope: CoroutineScope) {
             val service = ClaudeSessionsService.getInstance()
             val claude = PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS("claude") != null
             val profiles = ProfileStore.getInstance()
-            val profileName = task.preset.profile ?: DEFAULT_PROFILE
-            val error = preStartError(task, dir.takeIf { project != null }, task.folder?.let { service.folders.find(it) } != null, claude, profileName == DEFAULT_PROFILE || profiles.all().any { it.name == profileName })
+            // A default task never reads profiles.json; a named one must be listed.
+            val profile = task.preset.profile?.let { name -> profiles.all().find { it.name == name } } ?: if (task.preset.profile == null) profiles.default else null
+            val error = preStartError(task, dir.takeIf { project != null }, task.folder?.let { service.folders.find(it) } != null, claude, profile != null)
             if (error != null) return record.copy(state = RunState.FAILED, error = error).also(records::update)
             // Seen as of its start: the first refresh would otherwise mark it at its last message, maybe the reply itself.
             service.seenStore.mark(session, now.toEpochMilli())
             task.folder?.let { folder -> service.updateFolders(ChangeSource.AUTO) { it.assign(session, folder) } }
-            val file = ClaudeSessionVirtualFile(session, dir!!, dir, profiles.byName(profileName), task.name, task.claudeArgs(session))
+            val file = ClaudeSessionVirtualFile(session, dir!!, dir, profile!!, task.name, task.claudeArgs(session))
             SessionTerminals.getInstance().startDetached(file, project!!)
             files[session] = file
             pending.add(session)

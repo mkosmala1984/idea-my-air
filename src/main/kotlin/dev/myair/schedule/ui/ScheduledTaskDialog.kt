@@ -15,7 +15,9 @@ import dev.myair.actions.MODELS
 import dev.myair.actions.OWN_SETTING
 import dev.myair.schedule.Schedule
 import dev.myair.schedule.ScheduledTask
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.EFFORTS
+import dev.myair.store.ProfileStore
 import dev.myair.store.Preset
 import java.time.DayOfWeek
 import java.time.Instant
@@ -39,6 +41,7 @@ class ScheduledTaskDialog(private val task: ScheduledTask?, private val folders:
     private var addDirs = task?.preset?.addDirs.orEmpty().joinToString("\n")
     private var model: String? = task?.preset?.model.orEmpty()
     private var effort: String? = task?.preset?.effort.orEmpty()
+    private var profile: String = task?.preset?.profile ?: DEFAULT_PROFILE
     private var time = task?.schedule?.time?.toString() ?: "08:00"
     private var allowedTools = task?.allowedTools.orEmpty().joinToString("\n")
     private var folder: String? = task?.folder?.let { id -> folders.firstOrNull { it.first == id }?.second } ?: NO_FOLDER
@@ -87,6 +90,9 @@ class ScheduledTaskDialog(private val task: ScheduledTask?, private val folders:
         row("Effort:") {
             comboBox(listOf("") + EFFORTS, textListCellRenderer { it?.ifEmpty { OWN_SETTING } }).bindItem(::effort)
         }
+        row("Profile:") {
+            comboBox(ProfileStore.getInstance().all().map { it.name }).bindItem({ profile }, { profile = it!! })
+        }
         row("Allowed tools:") {
             textArea().bindText(::allowedTools).rows(3).align(AlignX.FILL)
                 .comment("One per line, passed to --allowedTools, e.g. Read or Bash(git log:*). Others ask, and the run waits for you.")
@@ -112,6 +118,7 @@ class ScheduledTaskDialog(private val task: ScheduledTask?, private val folders:
             Preset(
                 name.trim(), model?.trim()?.takeIf { it.isNotEmpty() }, effort?.takeIf { it.isNotEmpty() },
                 project.trim().takeIf { it.isNotEmpty() }, addDirs = lines(addDirs), prompt = prompt.trim(),
+                profile = profile.takeIf { it != DEFAULT_PROFILE },
             ),
             Schedule(days.filterValues { it.isSelected }.keys, checkNotNull(parseTime(time))),
             enabled,
