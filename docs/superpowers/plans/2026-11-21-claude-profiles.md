@@ -20,7 +20,7 @@
 | 8 | done | `d4e3387` |
 | 9 | done | `4b10ee8` |
 | 10 | done | `f3983c0` |
-| 11 | in progress | |
+| 11 | done | `0d4b9f7` |
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -309,7 +309,7 @@ git commit -m "Plan: profiles, Task 1 findings"
 | R18 | 7 | test `BriefTextTest` › `tooltip names a non-default profile`; test `BriefTextTest` › `tooltip of a default session has no profile line`; test `TabTitleTest` › `tab tooltip names the profile`; test `SessionHeaderTest` › `header carries the profile`; commit 4f4620c; not done: runIde check needs the user |
 | R19 | 5 | test `ClaudeSessionTest` › `a session is found by its non-default profile name and a default one is not found by default`; commit b31817f |
 | R20 | 5 | test `PresetsTest` › `continuationPrompt names the transcript path`; commit b31817f |
-| R21 | 4 | |
+| R21 | 4 | test `ClaudePrintTest` › `a null env value removes the variable`; test `ProfilesTest` › `default does not read the file`; commit `6e05c95`; commit `b31817f` |
 | R22 | 9 | test `PlanManagersTest` › `profile round-trips and default is left out`; test `PlanManagersTest` › `a file without profile reads as default`; test `ReviewsTest` › `a review manager's profile round-trips`; test `PlanFilesTest` › `an existing manager keeps its profile and checks its transcript there`; commit 4b10ee8 |
 | R23 | 8 | test `ProfileChecksTest` › `remove is refused while a session of the profile is live`; test `ProfileChecksTest` › `remove is refused while a tab shows it`; commit 77289f4 |
 | R24 | 8 | test `ProfileChecksTest` › `remove is allowed otherwise`; commit 77289f4 |
