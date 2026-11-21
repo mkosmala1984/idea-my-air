@@ -3,7 +3,8 @@
 .intellijPlatform/
 build/
 .idea/
-.claude/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
 air-plugin/
 air-plugin-*.zip
 taskbar/bin/
