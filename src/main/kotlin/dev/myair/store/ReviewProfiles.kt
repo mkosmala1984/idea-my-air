@@ -18,7 +18,7 @@ data class Reviewer(val name: String, val prompt: String, val model: String? = n
 
 data class ReviewProfile(val name: String, val reviewers: List<Reviewer>)
 
-fun parseProfiles(text: String, source: Path = Path.of("review-profiles.json")): List<ReviewProfile> {
+fun parseReviewProfiles(text: String, source: Path = Path.of("review-profiles.json")): List<ReviewProfile> {
     val root = Keys(JsonParser.parseString(text), "profiles file", source, setOf("profiles"))
     return root.array("profiles").map { p ->
         val profile = Keys(p, "profile", source, setOf("name", "reviewers"))
@@ -43,7 +43,7 @@ class ReviewProfileStore(val file: Path) {
         if (!file.exists()) return Result.success(emptyList())
         val stamp = file.getLastModifiedTime() to file.fileSize()
         cached?.takeIf { it.first == stamp }?.let { return it.second }
-        return runCatching { parseProfiles(file.readText(), file) }.also { cached = stamp to it }
+        return runCatching { parseReviewProfiles(file.readText(), file) }.also { cached = stamp to it }
     }
 
     companion object {

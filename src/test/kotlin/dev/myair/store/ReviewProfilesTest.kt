@@ -12,11 +12,11 @@ class ReviewProfilesTest {
         val ok = """{"profiles":[{"name":"deep","reviewers":[{"name":"a","prompt":"p","model":"opus","effort":"high"},{"name":"b","prompt":"q"}]}]}"""
         assertEquals(
             listOf(ReviewProfile("deep", listOf(Reviewer("a", "p", "opus", "high"), Reviewer("b", "q")))),
-            parseProfiles(ok),
+            parseReviewProfiles(ok),
         )
-        assertThrows(IllegalStateException::class.java) { parseProfiles(ok.replace("\"prompt\":\"q\"", "\"prompt\":\"q\",\"color\":1")) }
-        assertThrows(IllegalArgumentException::class.java) { parseProfiles(ok.replace("high", "huge")) }
-        assertThrows(IllegalStateException::class.java) { parseProfiles(ok.replace("\"name\":\"b\"", "\"name\":\"a\"")) }
+        assertThrows(IllegalStateException::class.java) { parseReviewProfiles(ok.replace("\"prompt\":\"q\"", "\"prompt\":\"q\",\"color\":1")) }
+        assertThrows(IllegalArgumentException::class.java) { parseReviewProfiles(ok.replace("high", "huge")) }
+        assertThrows(IllegalStateException::class.java) { parseReviewProfiles(ok.replace("\"name\":\"b\"", "\"name\":\"a\"")) }
     }
 
     @Test
