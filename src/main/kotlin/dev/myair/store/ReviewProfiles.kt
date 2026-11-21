@@ -8,8 +8,8 @@ import kotlin.io.path.fileSize
 import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.readText
 
-/** One reviewer of a profile: [prompt] is its first message; a null [model] or [effort] leaves its flag out. */
-data class Reviewer(val name: String, val prompt: String, val model: String? = null, val effort: String? = null) {
+/** One reviewer of a profile: [prompt] is its first message; a null [model] or [effort] leaves its flag out; a null [profile] is `default`. */
+data class Reviewer(val name: String, val prompt: String, val model: String? = null, val effort: String? = null, val profile: String? = null) {
     init {
         require(name.isNotBlank() && prompt.isNotBlank()) { "reviewer $name has a blank name or prompt" }
         require(effort == null || effort in EFFORTS) { "effort of reviewer $name is $effort, not one of $EFFORTS" }
@@ -25,8 +25,8 @@ fun parseReviewProfiles(text: String, source: Path = Path.of("review-profiles.js
         ReviewProfile(
             profile.string("name"),
             profile.array("reviewers").map {
-                Keys(it, "reviewer", source, setOf("name", "prompt"), setOf("model", "effort")).run {
-                    Reviewer(string("name"), string("prompt"), if (has("model")) string("model") else null, if (has("effort")) string("effort") else null)
+                Keys(it, "reviewer", source, setOf("name", "prompt"), setOf("model", "effort", "profile")).run {
+                    Reviewer(string("name"), string("prompt"), if (has("model")) string("model") else null, if (has("effort")) string("effort") else null, if (has("profile")) string("profile") else null)
                 }
             }.also { rs -> check(rs.map { it.name }.toSet().size == rs.size) { "$source: reviewer names repeat in ${profile.string("name")}" } },
         )

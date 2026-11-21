@@ -108,6 +108,11 @@ class ProfileChecksTest {
     }
 
     @Test
+    fun `remove is refused while a reviewer names it`() {
+        assertEquals("A reviewer profile uses profile test.", removeRefusal("test", emptyList(), emptyList(), emptyList(), listOf("test")))
+    }
+
+    @Test
     fun `createProfileDirs makes projects and sessions`() {
         val dir = tmp.resolve("p")
         createProfileDirs(Profile("p", dir))

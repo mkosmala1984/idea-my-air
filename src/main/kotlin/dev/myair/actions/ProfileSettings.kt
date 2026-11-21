@@ -32,6 +32,7 @@ import dev.myair.review.ReviewService
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.Profile
 import dev.myair.store.ProfileStore
+import dev.myair.store.ReviewProfileStore
 import dev.myair.store.createProfileDirs
 import dev.myair.store.ideServer
 import dev.myair.store.mcpAddCommand
@@ -96,7 +97,8 @@ class ProfilesEditor {
         val tabs = ProjectManager.getInstance().openProjects.flatMap { shownSessionFiles(FileEditorManager.getInstance(it)) } +
             SessionTerminals.getInstance().detached().map { it.second }
         val managers = PlanFiles.getInstance().store.read().byFolder.values + ReviewService.getInstance().reviews.values.mapNotNull { it.getOrNull()?.manager }
-        val refusal = removeRefusal(profile.name, ClaudeSessionsService.getInstance().live.values, tabs.map { it.profile.name }, managers.map { it.profile }, emptyList())
+        val reviewerProfiles = ReviewProfileStore.INSTANCE.read().getOrThrow().flatMap { p -> p.reviewers.mapNotNull { it.profile } }
+        val refusal = removeRefusal(profile.name, ClaudeSessionsService.getInstance().live.values, tabs.map { it.profile.name }, managers.map { it.profile }, reviewerProfiles)
         if (refusal != null) return Messages.showErrorDialog(refusal, "Cannot Remove Profile")
         store.write(store.all().drop(1) - profile)
         reload()

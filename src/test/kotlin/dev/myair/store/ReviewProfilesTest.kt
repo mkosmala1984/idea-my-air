@@ -20,6 +20,18 @@ class ReviewProfilesTest {
     }
 
     @Test
+    fun `a reviewer's profile is read`() {
+        val text = """{"profiles":[{"name":"deep","reviewers":[{"name":"a","prompt":"p","profile":"work"}]}]}"""
+        assertEquals("work", parseReviewProfiles(text).single().reviewers.single().profile)
+    }
+
+    @Test
+    fun `a reviewer without profile is default`() {
+        val text = """{"profiles":[{"name":"deep","reviewers":[{"name":"a","prompt":"p"}]}]}"""
+        assertEquals(null, parseReviewProfiles(text).single().reviewers.single().profile)
+    }
+
+    @Test
     fun `a missing profiles file means no profiles`() {
         val dir = Files.createTempDirectory("profiles")
         val store = ReviewProfileStore(dir.resolve("review-profiles.json"))
