@@ -15,6 +15,7 @@ import dev.myair.actions.MODELS
 import dev.myair.actions.OWN_SETTING
 import dev.myair.schedule.Schedule
 import dev.myair.schedule.ScheduledTask
+import dev.myair.prompt.profileLabel
 import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.EFFORTS
 import dev.myair.store.ProfileStore
@@ -91,7 +92,8 @@ class ScheduledTaskDialog(private val task: ScheduledTask?, private val folders:
             comboBox(listOf("") + EFFORTS, textListCellRenderer { it?.ifEmpty { OWN_SETTING } }).bindItem(::effort)
         }
         row("Profile:") {
-            comboBox(ProfileStore.getInstance().all().map { it.name }).bindItem({ profile }, { profile = it!! })
+            comboBox(ProfileStore.getInstance().all().map { it.name }, textListCellRenderer { it?.let(::profileLabel) })
+                .bindItem({ profile }, { profile = checkNotNull(it) { "no profile chosen" } })
         }
         row("Allowed tools:") {
             textArea().bindText(::allowedTools).rows(3).align(AlignX.FILL)

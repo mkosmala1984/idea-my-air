@@ -464,4 +464,4 @@ fun showPromptPopup(project: Project, from: Preset? = null) {
     popup.showCenteredInCurrentWindow(project)
 }
 
-private fun profileLabel(name: String) = if (name == DEFAULT_PROFILE) "Default" else name
+fun profileLabel(name: String) = if (name == DEFAULT_PROFILE) "Default" else name

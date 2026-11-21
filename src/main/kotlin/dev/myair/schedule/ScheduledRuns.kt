@@ -155,7 +155,8 @@ class ScheduledRuns(private val scope: CoroutineScope) {
             val claude = PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS("claude") != null
             val profiles = ProfileStore.getInstance()
             // A default task never reads profiles.json; a named one must be listed.
-            val profile = task.preset.profile?.let { name -> profiles.all().find { it.name == name } } ?: if (task.preset.profile == null) profiles.default else null
+            val profileName = task.preset.profile
+            val profile = if (profileName == null) profiles.default else profiles.all().find { it.name == profileName }
             val error = preStartError(task, dir.takeIf { project != null }, task.folder?.let { service.folders.find(it) } != null, claude, profile != null)
             if (error != null) return record.copy(state = RunState.FAILED, error = error).also(records::update)
             // Seen as of its start: the first refresh would otherwise mark it at its last message, maybe the reply itself.

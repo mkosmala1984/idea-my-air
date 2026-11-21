@@ -30,6 +30,7 @@ import com.intellij.util.ui.UIUtil
 import dev.myair.editor.projectBase
 import dev.myair.service.LatestRead
 import com.intellij.util.concurrency.AppExecutorUtil
+import dev.myair.prompt.profileLabel
 import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.EFFORTS
 import dev.myair.store.ProfileStore
@@ -150,7 +151,8 @@ class PresetDialog(
             comboBox(listOf("") + EFFORTS, textListCellRenderer { it?.ifEmpty { OWN_SETTING } }).bindItem(::effort)
         }.enabledIf(noPairs)
         row("Profile:") {
-            comboBox(ProfileStore.getInstance().all().map { it.name }).bindItem({ profile }, { profile = it!! })
+            comboBox(ProfileStore.getInstance().all().map { it.name }, textListCellRenderer { it?.let(::profileLabel) })
+                .bindItem({ profile }, { profile = checkNotNull(it) { "no profile chosen" } })
         }
         row("Or pick from:") {
             cell(variantsArea).bindText(::variants).rows(3).align(AlignX.FILL)
