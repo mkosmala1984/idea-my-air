@@ -19,6 +19,8 @@ import com.intellij.ui.components.JBCheckBox
 import dev.myair.editor.SessionPaneHost
 import com.intellij.ui.dsl.builder.bindText
 import dev.myair.actions.PresetsEditor
+import dev.myair.actions.ProfilesEditor
+import dev.myair.store.ProfileStore
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.Preset
 import dev.myair.store.PresetStore
@@ -105,6 +107,14 @@ class MyAirConfigurable : BoundConfigurable("My Air") {
             textField().bindText(MyAirSettings.getInstance().state::jiraTools.toNonNullableProperty("")).columns(COLUMNS_LARGE)
                 .comment("MCP tools Haiku may call to read the Jira issue a task names when it suggests a branch name, separated by spaces.")
         }
+        val profiles = ProfilesEditor()
+        group("Claude Profiles") {
+            row {
+                cell(profiles.component).align(Align.FILL)
+                    .comment("Claude Code configuration directories (CLAUDE_CONFIG_DIR) with their own login, in ${ProfileStore.getInstance().file}. Add and Remove take effect at once; Remove keeps the directory.")
+            }.resizableRow()
+        }
+        onReset { profiles.reload() }
         val presets = PresetsEditor()
         // What the file held at reset; null when it is broken, which leaves it to be fixed by hand.
         var saved: List<Preset>? = null
