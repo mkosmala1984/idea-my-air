@@ -67,7 +67,7 @@ there by class name, so moving or renaming one means updating that file too.
   - `PresetAction` (starts with the preset's `prompt`, or with `askMore` opens `prompt.showPromptPopup` on it; with model and effort pairs, `Preset.variants`, it first lists them in a popup under the button, `variantLabel`, and starts `withVariant` of the pick), `PresetsGroup` (toolbar buttons and dropdown, where a preset with pairs is a submenu of them)
   - `SameSettingsAction`, `SaveAsPresetAction` (on a session's menu)
 - `PresetSettings.kt`: `PresetsEditor` (the list in Settings › Tools › My Air), `PresetDialog(preset, takenNames, dialogTitle, ideBase, name)` (`preset(): Preset?`; a Profile row), `Row.profileComboBox(prop)` (a profile combo; a stored name no longer listed stays chosen as missing and OK is refused until a listed one is chosen), `internal profileChoices(listed, stored)`, `internal val MODELS = listOf("fable", "opus", "sonnet")`, `internal const val OWN_SETTING`.
-- `ProfileSettings.kt`: `ProfilesEditor` (the Claude Profiles list in Settings › Tools › My Air; Add, Remove, Open Folder; `reload()` rereads `profiles.json`), with the private `NewProfileDialog` (directory prefilled as `~/.my-air/claude-profiles/<name>` until edited, validated with `parseProfiles`) and `McpCommandDialog` (the `claude mcp add` command to copy).
+- `ProfileSettings.kt`: `ProfilesEditor` (the Claude Profiles list in Settings › Tools › My Air; Add, Remove, Open Folder; `reload()` rereads `profiles.json`), with the private `NewProfileDialog` (directory prefilled as `~/.my-air/claude-profiles/<name>` until edited, validated with `parseProfiles` and refused inside the default profile's directory; a section of `CopyItem` checkboxes under their group headings to copy once from the default profile, look and behaviour ticked, each item's availability read once off the EDT and an unavailable one disabled with its reason, red when the source is broken) and `McpCommandDialog` (the `claude mcp add` command to copy).
 
 ### Navigation and other actions
 
@@ -117,7 +117,7 @@ there by class name, so moving or renaming one means updating that file too.
   requires that `args` hold no `--`. `startPreset` requires a `branch` only together with `preset.worktree`.
 - `myAirBuild` throws when several `my-air-*.zip` files exist. `InstallMyAirBuildAction` checks that the zip's
   root entry has the installed plugin folder's name.
-- `ProfilesEditor` never removes `default` and refuses a removal while `removeRefusal` names a use of the profile (a live session, a tab or detached process, a plan or review manager, a reviewer profile); Add requires a project.
+- `ProfilesEditor` never removes `default` and refuses a removal while `removeRefusal` names a use of the profile (a live session, a tab or detached process, a plan or review manager, a reviewer profile); Add requires a project. Add with ticked items needs an absent or empty directory, and registers nothing when the copy or the registration fails.
 - `runClaude` throws on a timeout, an interrupt or a non-zero exit with what `claude` printed; a timeout or an interrupt kills the process with its descendants, never a process it left once it exited.
 - `PresetsGroup` returns the same action instances while `PresetStore.read()` gives an equal result. A broken
   `presets.json` shows as a separator in the dropdown instead of throwing on every update.
@@ -129,9 +129,9 @@ there by class name, so moving or renaming one means updating that file too.
 - File system: `copyIncluded` copies `.worktreeinclude` files into the new worktree. `declineProjectMcpServers` adds the undecided `.mcp.json` servers to its `.claude/settings.local.json` `disabledMcpjsonServers`. `InstallMyAirBuildAction` schedules a plugin swap (`PluginInstaller.installAfterRestart`) and restarts the IDE.
 - Application properties: `dev.myair.worktreeBases:<mainRoot>` (recent bases, `rememberBase`).
 - `presets.json` through `PresetStore.write` (`SaveAsPresetAction`; `PresetsEditor` edits the list the settings page saves).
-- `profiles.json` through `ProfileStore.write`, at once on `ProfilesEditor`'s Add and Remove; Add also creates the profile's directories (`createProfileDirs`), refreshes `ClaudeSessionsService` and opens a session tab of the profile for its first login (`ClaudeSessionOpener.startNew`).
+- `profiles.json` through `ProfileStore.write`, at once on `ProfilesEditor`'s Add and Remove; Add runs `copyFromDefault`, which copies the ticked items, then creates the profile's directories (`createProfileDirs`) and writes `profiles.json`; then Add refreshes `ClaudeSessionsService` and opens a session tab of the profile for its first login (`ClaudeSessionOpener.startNew`).
 - IDE UI: popups, error dialogs, Terminal tool-window tabs (`openInTerminal`, `reviewInPlannotator`), diff windows and tabs, project open or focus (`openInIdea`, on a pooled thread), focus requests to other IDEs (`TabsSync.focusIn`).
-- Threading: `background` runs work under `Task.Backgroundable`. `runningDirs` and `rememberBase` run on the EDT. `changesOf` builds its changes inside a read action, off the EDT.
+- Threading: `background` runs work under `Task.Backgroundable`. The profile copy and registration run in a `Task.Modal` that cannot be cancelled; `NewProfileDialog` reads `copyAvailability` once on a pooled thread. `runningDirs` and `rememberBase` run on the EDT. `changesOf` builds its changes inside a read action, off the EDT.
 
 ## Verification
 

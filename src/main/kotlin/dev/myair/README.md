@@ -48,7 +48,8 @@ Settings › Tools › My Air, which also hosts the Claude Profiles group (its e
 ## Side Effects
 
 - Settings persist in the IDE's `myAir.xml`.
-- The Claude Profiles group acts at once, not on Apply: Add creates the profile's directories (`createProfileDirs`),
+- The Claude Profiles group acts at once, not on Apply: Add copies the ticked items from the default profile
+  (`copyFromDefault`), creates the profile's directories (`createProfileDirs`),
   writes `profiles.json`, calls `ClaudeSessionsService.refresh()`, opens a session tab of the profile
   (`ClaudeSessionOpener.startNew`) and shows the `claude mcp add` command; Remove writes `profiles.json` and refreshes.
 - Apply writes `presets.json` through `PresetStore.write` whenever it parsed at reset, changed or not, calls

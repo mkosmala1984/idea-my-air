@@ -7,8 +7,13 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
@@ -17,7 +22,10 @@ import com.intellij.ui.CollectionListModel
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.SimpleTextAttributes
+import com.intellij.ui.JBColor
 import com.intellij.ui.ToolbarDecorator
+import com.intellij.ui.components.JBCheckBox
+import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
@@ -30,15 +38,20 @@ import dev.myair.planview.PlanFiles
 import dev.myair.planview.shownSessionFiles
 import dev.myair.review.ReviewService
 import dev.myair.service.ClaudeSessionsService
+import dev.myair.store.Availability
+import dev.myair.store.CopyItem
 import dev.myair.store.Profile
 import dev.myair.store.ProfileStore
 import dev.myair.store.ReviewProfileStore
+import dev.myair.store.copyAvailability
+import dev.myair.store.copyFromDefault
 import dev.myair.store.createProfileDirs
 import dev.myair.store.ideServer
 import dev.myair.store.mcpAddCommand
 import dev.myair.store.parseProfiles
 import dev.myair.store.profilesJson
 import dev.myair.store.removeRefusal
+import com.intellij.util.ui.UIUtil
 import java.nio.file.Path
 import javax.swing.JList
 import javax.swing.event.DocumentEvent
@@ -81,15 +94,33 @@ class ProfilesEditor {
 
     private fun add() {
         val project = checkNotNull(project()) { "Settings opened without a project" }
-        val profile = NewProfileDialog(store.all().drop(1), store.defaultDir).showAndGetProfile() ?: return
-        createProfileDirs(profile)
-        store.write(store.all().drop(1) + profile)
-        reload()
-        ClaudeSessionsService.getInstance().refresh()
-        ClaudeSessionOpener.startNew(project, profile = profile)
-        val server = ideServer(store.defaultDir.resolveSibling(".claude.json"))
-        if (server == null) Messages.showInfoMessage(project, "No http MCP server named idea in ~/.claude.json", "Profile ${profile.name}")
-        else McpCommandDialog(mcpAddCommand(profile, server)).show()
+        val (profile, selection) = NewProfileDialog(store.all().drop(1), store.defaultDir).showAndGetProfile() ?: return
+        val copied = selection.sortedBy { it.ordinal }.map { it.name }
+        // Modal and not cancellable: Settings stays blocked until the profile is registered or everything copied is removed.
+        object : Task.Modal(project, "Creating Profile ${profile.name}", false) {
+            override fun run(indicator: ProgressIndicator) {
+                indicator.isIndeterminate = true
+                copyFromDefault(store.defaultDir, profile.dir, selection) {
+                    createProfileDirs(profile)
+                    store.write(store.all().drop(1) + profile)
+                }
+            }
+
+            override fun onSuccess() {
+                thisLogger().info("Created profile ${profile.name}, copied from default: $copied")
+                reload()
+                ClaudeSessionsService.getInstance().refresh()
+                ClaudeSessionOpener.startNew(project, profile = profile)
+                val server = ideServer(store.defaultDir.resolveSibling(".claude.json"))
+                if (server == null) Messages.showInfoMessage(project, "No http MCP server named idea in ~/.claude.json", "Profile ${profile.name}")
+                else McpCommandDialog(mcpAddCommand(profile, server)).show()
+            }
+
+            override fun onThrowable(error: Throwable) {
+                thisLogger().warn("Profile ${profile.name} not created (copying $copied): ${error.message}")
+                Messages.showErrorDialog(project, error.message ?: error.toString(), "Cannot Create Profile ${profile.name}")
+            }
+        }.queue()
     }
 
     private fun remove() {
@@ -106,16 +137,49 @@ class ProfilesEditor {
     }
 }
 
+/** What [NewProfileDialog] returns: the profile and the items to copy once from the default profile (ticked and available). */
+private data class NewProfile(val profile: Profile, val selection: Set<CopyItem>)
+
 private class NewProfileDialog(private val taken: List<Profile>, private val defaultDir: Path) : DialogWrapper(true) {
     private val nameField = JBTextField()
     private lateinit var dirField: TextFieldWithBrowseButton
     private var dirEdited = false
     private var prefilling = false
+    private val boxes = CopyItem.entries.associateWith { JBCheckBox(it.label, it.tickedByDefault).apply { isEnabled = false } }
+    private val reasons = CopyItem.entries.associateWith { JBLabel("checking...").apply { foreground = UIUtil.getContextHelpForeground() } }
+    private var availability: Map<CopyItem, Availability> = emptyMap()
 
     init {
         title = "New Claude Profile"
         init()
+        // Read once off the EDT; the default profile does not change while the dialog is open.
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val result = runCatching { copyAvailability(defaultDir) }
+            ApplicationManager.getApplication().invokeLater({ if (!isDisposed) showAvailability(result) }, ModalityState.any())
+        }
     }
+
+    private fun showAvailability(result: Result<Map<CopyItem, Availability>>) {
+        availability = result.getOrElse { e -> CopyItem.entries.associateWith { Availability.Unavailable(e.message ?: e.toString(), true) } }
+        for ((item, a) in availability) {
+            val box = boxes.getValue(item)
+            val reason = reasons.getValue(item)
+            when (a) {
+                Availability.Available -> {
+                    box.isEnabled = true
+                    reason.text = ""
+                }
+                is Availability.Unavailable -> {
+                    box.isEnabled = false
+                    box.isSelected = false
+                    reason.text = a.reason
+                    reason.foreground = if (a.error) JBColor.RED else UIUtil.getContextHelpForeground()
+                }
+            }
+        }
+    }
+
+    private fun selection() = CopyItem.entries.filter { boxes.getValue(it).isSelected && availability[it] == Availability.Available }.toSet()
 
     override fun createCenterPanel() = panel {
         row("Name:") {
@@ -126,7 +190,22 @@ private class NewProfileDialog(private val taken: List<Profile>, private val def
                 .align(AlignX.FILL)
                 .validationOnApply {
                     runCatching { parseProfiles(profilesJson(taken + profile()), defaultDir) }.exceptionOrNull()?.let { e -> error(e.message!!) }
+                        ?: insideDefault()?.let { error(it) }
                 }.component
+        }
+        group("Copy Once from the Default Profile (Later Changes Are Not Synced)") {
+            CopyItem.entries.groupBy { it.group }.forEach { (group, items) ->
+                row { label(group).bold() }
+                indent {
+                    items.forEach { item -> row { cell(boxes.getValue(item)).comment(item.effect); cell(reasons.getValue(item)) } }
+                }
+            }
+            row {
+                comment(
+                    "Sign in through the tab that opens, with the same Claude account as the default profile. " +
+                        "A status line command is copied as it is, so the scripts it runs stay in the default profile."
+                )
+            }
         }
     }.also {
         nameField.document.addDocumentListener(object : DocumentAdapter() {
@@ -148,7 +227,13 @@ private class NewProfileDialog(private val taken: List<Profile>, private val def
 
     private fun profile() = Profile(nameField.text.trim(), Path.of(dirField.text.trim()))
 
-    fun showAndGetProfile(): Profile? = if (showAndGet()) profile() else null
+    /** Why the directory may not be used: inside the default profile, a walk of `skills/` could reach its own target. A path comparison only. */
+    private fun insideDefault(): String? {
+        val dir = runCatching { profile().dir.toAbsolutePath().normalize() }.getOrNull() ?: return null
+        return if (dir.startsWith(defaultDir.toAbsolutePath().normalize())) "The directory lies in the default profile's $defaultDir" else null
+    }
+
+    fun showAndGetProfile(): NewProfile? = if (showAndGet()) NewProfile(profile(), selection()) else null
 }
 
 private class McpCommandDialog(private val command: String) : DialogWrapper(true) {

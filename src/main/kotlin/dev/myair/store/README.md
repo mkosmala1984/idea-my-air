@@ -29,6 +29,10 @@ focus requests, pins, seen marks, presets, profiles (`profiles.json`), plan mana
   `byName`, `default`, `find` (null when not listed; `default` without reading the file), `write(profiles)`;
   `profileEnv`, `addedProfileEnv`, `processProfileEnv`; `ideServer(claudeJson)`, `managerToolsRefusal`, `removeRefusal`,
   `mcpAddCommand`, `createProfileDirs(profile)` (`ProfileChecks.kt`).
+- `ProfileCopy.kt`: `CopyItem` (the nine items a new profile can copy once from the default one, each with its group,
+  label, effect and `CopySource`: a `settings.json` key, a file or a directory; `tickedByDefault`), `Availability`
+  (`Available`, `Unavailable(reason, error)`), `copyAvailability(sourceDir)`, `copyFromDefault(sourceDir, targetDir,
+  selection, register)`, `ProfileCopyException`.
 - `PlanManager(session, cwd, project, profile)`, `PlanManagers` (`PlanManagers.kt`): `set`, `moveSession`, `prune`, `folderOf`,
   `toJson`, `PlanManagers.parse`. `PlanManagerStore(file)`: `read()`, `update(op)`.
 - `PromptFiles` (`PromptFiles.kt`): `write(dir, text, pid)`, `prune(dir)`.
@@ -51,6 +55,11 @@ focus requests, pins, seen marks, presets, profiles (`profiles.json`), plan mana
   the root, `name`/`reviewers` per profile and `name`/`prompt`, optionally `model`/`effort`/`profile`, per reviewer.
 - Profile names are not blank, not `default` in any case, and unique; directories are absolute, unique, hold no quote
   and are not the default directory. `ProfileStore.write` checks what it writes the same way.
+- `copyFromDefault` writes only into an absent or empty directory (an empty selection only calls `register`), copies
+  no link, junction or other special entry (it fails naming it), and on any failure of the copy or `register` deletes
+  everything under the target (the target too when it was absent) before throwing. `copyAvailability` marks a missing
+  or broken source as unavailable instead of throwing: a broken `settings.json` only the five key items, a bad
+  `custom:` theme only the theme.
 - Reviewer names and prompts are not blank and an effort is in `EFFORTS`; neither reviewer names within a profile nor
   profile names repeat. A `Finding` has at least one report, and a rejected, fixed or posted one its `reason`,
   `fixCommit` or `comment`. `BranchReview.next` is never lowered.
@@ -76,6 +85,7 @@ focus requests, pins, seen marks, presets, profiles (`profiles.json`), plan mana
 - Creates and writes `~/.my-air/ides/<pid>.json`, `requests/<pid>/*.json`, `pins.json`, `seen/<id>`, `presets.json`,
   `profiles.json`, `plan-managers.json`, `reviews/<folderId>/review.json` and prompt files; deletes stale IDE files, drained requests and stale prompt files.
 - `createProfileDirs` creates a profile's `projects/` and `sessions/`.
+- `copyFromDefault` creates files in a new profile's directory and, on failure, deletes everything under it.
 - `TabStore.receiveRequests` starts a daemon thread with a `WatchService` on its inbox; the returned `Closeable` stops it.
 - `writeAtomically` calls Win32 through JNA (`CreateFile`, `SetFileInformationByHandle`) and sleeps 50 ms between retries.
 
