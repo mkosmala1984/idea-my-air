@@ -322,4 +322,6 @@ git commit -m "Plan: profiles, Task 1 findings"
 
 ## Task 1 findings
 
-(filled by Task 1)
+- Steps 1-3 (on-disk layout, `--bg`/`attach`/`stop` per config dir) deferred to the runIde checks of Tasks 8 and 11, where the user logs into a profile; the docs (claude-directory, authentication, agent-view) are what Tasks 2-10 build on.
+- Step 4, terminal: `ShellStartupOptions.envVariables` is merged over the IDE's environment (`LocalOptionsConfigurer.getTerminalEnvironment`: parent env when `isPassParentEnvs`, then ours, then Settings › Terminal env vars, which win); only `put`/`putAll`, no removal. So outcome **(b)**: a `default` start throws when the IDE has `CLAUDE_CONFIG_DIR`; a profile start puts its dir.
+- Step 4, `GeneralCommandLine` (`claude stop`): `getEnvironment()` holds overrides only; removing a parent variable needs `withParentEnvironmentType(NONE)` plus `System.getenv()` without the key. `ProcessBuilder` (`runClaude`) removes with `environment().remove(key)`.
