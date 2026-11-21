@@ -131,6 +131,14 @@ class FolderQueriesTest {
     }
 
     @Test
+    fun `the json names a session's profile unless it is default`() {
+        val page = SessionPage(2, 0, listOf(session("a", "A", "/t", now).copy(profile = "test"), session("b", "B", "/t", now)))
+        val entries = JsonParser.parseString(page.toJson(structure, zone)).asJsonObject.getAsJsonArray("sessions").map { it.asJsonObject }
+        assertEquals("test", entries[0]["profile"].asString)
+        assertTrue("profile" !in entries[1].keySet())
+    }
+
+    @Test
     fun `the json gives each session its folder path or null, and prompts cut short`() {
         val long = "x".repeat(PROMPT_CHARS + 50)
         val page = SessionPage(1, 0, listOf(session("fix", "Fix", "/rtm", now, listOf(long, "b"))))

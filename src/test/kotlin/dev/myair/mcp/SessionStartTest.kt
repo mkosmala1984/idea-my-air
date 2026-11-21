@@ -13,7 +13,14 @@ class SessionStartTest {
     private fun start(
         preset: String? = null, dir: String? = null, model: String? = null, effort: String? = null, addDirs: String? = null,
         worktree: Boolean? = null, base: String? = null,
-    ) = sessionStartPreset(listOf(review), preset, dir, model, effort, addDirs, worktree, base)
+    ) = sessionStartPreset(listOf(review), preset, dir, model, effort, addDirs, worktree, base, null)
+
+    @Test
+    fun `profile overrides the configuration's`() {
+        val saved = review.copy(profile = "a")
+        assertEquals("a", sessionStartPreset(listOf(saved), "Review", null, null, null, null, null, null, null).profile)
+        assertEquals("b", sessionStartPreset(listOf(saved), "Review", null, null, null, null, null, null, "b").profile)
+    }
 
     @Test
     fun `without a configuration sets only what is given`() {
@@ -26,8 +33,8 @@ class SessionStartTest {
     @Test
     fun `a configuration with model and effort pairs starts with its first, a given model or effort replacing its part`() {
         val pick = Preset("Pick", variants = listOf(Variant("opus", "high"), Variant("sonnet")))
-        assertEquals(Preset("Pick", "opus", "max"), sessionStartPreset(listOf(pick), "Pick", null, null, "max", null, null, null))
-        assertEquals(Preset("Pick", "opus", "high"), sessionStartPreset(listOf(pick), "Pick", null, null, null, null, null, null))
+        assertEquals(Preset("Pick", "opus", "max"), sessionStartPreset(listOf(pick), "Pick", null, null, "max", null, null, null, null))
+        assertEquals(Preset("Pick", "opus", "high"), sessionStartPreset(listOf(pick), "Pick", null, null, null, null, null, null, null))
     }
 
     @Test

@@ -59,7 +59,7 @@ fun edited(old: ScheduledTask, new: ScheduledTask, now: Instant): ScheduledTask 
     new.copy(since = if (new.schedule != old.schedule || new.enabled && !old.enabled) now else old.since)
 
 private const val VERSION = 1
-private val TASK_KEYS = setOf("id", "name", "model", "effort", "project", "addDirs", "prompt", "days", "time", "enabled", "allowedTools", "folder", "since")
+private val TASK_KEYS = setOf("id", "name", "model", "effort", "project", "addDirs", "prompt", "days", "time", "enabled", "allowedTools", "folder", "since", "profile")
 
 fun scheduledTasksJson(tasks: List<ScheduledTask>): String {
     checkIds(tasks)
@@ -72,6 +72,7 @@ fun scheduledTasksJson(tasks: List<ScheduledTask>): String {
             p.model?.let { addProperty("model", it) }
             p.effort?.let { addProperty("effort", it) }
             p.project?.let { addProperty("project", it) }
+            p.profile?.let { addProperty("profile", it) }
             if (p.addDirs.isNotEmpty()) add("addDirs", strings(p.addDirs))
             addProperty("prompt", p.prompt)
             add("days", strings(task.schedule.days.sorted().map { it.name }))
@@ -97,7 +98,7 @@ fun parseScheduledTasks(text: String): List<ScheduledTask> {
         check(TASK_KEYS.containsAll(o.keySet())) { "unexpected keys in a scheduled task: ${o.keySet() - TASK_KEYS}" }
         ScheduledTask(
             o.required("id"),
-            Preset(o.required("name"), o.optional("model"), o.optional("effort"), o.optional("project"), addDirs = o.list("addDirs"), prompt = o.required("prompt")),
+            Preset(o.required("name"), o.optional("model"), o.optional("effort"), o.optional("project"), addDirs = o.list("addDirs"), prompt = o.required("prompt"), profile = o.optional("profile")),
             Schedule(o.list("days").map(DayOfWeek::valueOf).toSet(), LocalTime.parse(o.required("time"))),
             o["enabled"].also { check(it.isJsonPrimitive && it.asJsonPrimitive.isBoolean) { "enabled is not a boolean: $it" } }.asBoolean,
             o.list("allowedTools"),

@@ -1,6 +1,5 @@
 package dev.myair.actions
 
-import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.ProfileStore
 import dev.myair.store.profileEnv
 import java.io.File
@@ -26,7 +25,7 @@ fun runClaude(
     dir: Path,
     input: String,
     timeout: Duration,
-    env: Map<String, String?> = profileEnv(ProfileStore.getInstance().byName(DEFAULT_PROFILE)),
+    env: Map<String, String?> = profileEnv(ProfileStore.getInstance().default),
 ): String {
     val out = File.createTempFile("claude", ".out")
     val err = File.createTempFile("claude", ".err")

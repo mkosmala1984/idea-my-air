@@ -29,6 +29,9 @@ import dev.myair.planview.PlanEditor
 import dev.myair.planview.PlanFiles
 import dev.myair.planview.PlanOpener
 import dev.myair.planview.managerRefusal
+import dev.myair.store.ProfileStore
+import dev.myair.store.Profile
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.PlanManager
 import dev.myair.tabs.SessionHosts
 import dev.myair.MyAirSettings
@@ -115,17 +118,18 @@ class FoldersMcpToolset : McpToolset {
                 "bound directory of that folder or the nearest folder above it having either.",
         )
         folder: String? = null,
+        @McpDescription("Profile name, a Claude Code config directory listed in My Air's settings; default: default.") profile: String? = null,
     ): String {
         val project = currentCoroutineContext().project
-        val (start, plan, folderId, running) = onEdt { service ->
+        val (start, plan, folderId, running, sessionProfile) = onEdt { service ->
             val saved = if (preset == null) emptyList()
             else PresetStore.INSTANCE.read().getOrElse { throw IllegalArgumentException("Cannot read ${PresetStore.INSTANCE.file}: ${it.message}") }
             val filed = folder?.let { requireNotNull(service.folders.findByPath(it)) { "no folder '$it'" } }
             val folderDir = filed?.let { requireNotNull(service.folders.startFolder(it.id)?.startDir) { "no folder at or above '$folder' has a working or bound directory" } }
-            val start = sessionStartPreset(saved, preset, dir ?: folderDir, model, effort, add_dirs, worktree, base)
+            val start = sessionStartPreset(saved, preset, dir ?: folderDir, model, effort, add_dirs, worktree, base, profile)
             require(branch == null || start.worktree) { "branch without worktree" }
             val plan = plan_task?.let { service.folders.requireTask(it) }?.let { (folder, task) -> PlanStart(folder.id, task.id) }
-            Started(start, plan, filed?.id ?: plan?.folderId, runningDirs())
+            Started(start, plan, filed?.id ?: plan?.folderId, runningDirs(), ProfileStore.getInstance().byName(start.profile ?: DEFAULT_PROFILE))
         }
         val sessionProject = start.dir(projectBase(project))
         val args = expected {
@@ -138,7 +142,7 @@ class FoldersMcpToolset : McpToolset {
         val cwd = if (repo == null) sessionProject else withContext(Dispatchers.IO) { expected { createWorktree(repo, checkNotNull(start.base), branch, id, running) } }
         withContext(Dispatchers.EDT) {
             repo?.let { rememberBase(it, checkNotNull(start.base)) }
-            ClaudeSessionOpener.startNew(project, sessionProject, cwd, id, args, plan, folderId)
+            ClaudeSessionOpener.startNew(project, sessionProject, cwd, id, args, plan, folderId, sessionProfile)
         }
         return startedJson(id, cwd, sessionProject)
     }
@@ -338,4 +342,4 @@ class FoldersMcpToolset : McpToolset {
     }
 }
 
-private data class Started(val start: Preset, val plan: PlanStart?, val folderId: String?, val running: List<Path>)
+private data class Started(val start: Preset, val plan: PlanStart?, val folderId: String?, val running: List<Path>, val profile: Profile)

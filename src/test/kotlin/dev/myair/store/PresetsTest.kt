@@ -126,11 +126,36 @@ class PresetsTest {
 
     @Test
     fun `a continuation's first message names the session, its title on one line, and its transcript`() {
-        val session = ClaudeSession("3fb8-id", Path.of("E:/dev/rtm"), "Fix the\n  login bug ", Instant.EPOCH, emptyList(), emptyList())
+        val session = ClaudeSession("3fb8-id", Path.of("E:/dev/rtm"), "Fix the\n  login bug ", Instant.EPOCH, emptyList(), emptyList(), transcript = Path.of("C:/p/projects/x/s.jsonl"))
         val prompt = continuationPrompt(session)
         assertTrue(prompt.startsWith("This session continues Claude Code session 3fb8-id (Fix the login bug). "), prompt)
-        assertTrue("~/.claude/projects/*/3fb8-id.jsonl" in prompt, prompt)
         assertTrue('\n' !in prompt, prompt)
+    }
+
+    @Test
+    fun `continuationPrompt names the transcript path`() {
+        val path = Path.of("C:/p/projects/x/s.jsonl")
+        val prompt = continuationPrompt(ClaudeSession("s", Path.of("E:/dev/rtm"), "t", Instant.EPOCH, emptyList(), emptyList(), transcript = path))
+        assertTrue(path.toString() in prompt, prompt)
+        assertTrue("~/.claude" !in prompt, prompt)
+    }
+
+    @Test
+    fun `a preset's profile round-trips and is left out when null`() {
+        val with = Preset("P", profile = "test")
+        assertEquals(listOf(with), parsePresets(presetsJson(listOf(with))))
+        assertTrue("profile" !in presetsJson(listOf(Preset("Plain"))))
+    }
+
+    @Test
+    fun `presetOf keeps a non-default profile`() {
+        val session = ClaudeSession("s", Path.of("E:/dev/rtm"), "t", Instant.EPOCH, emptyList(), emptyList(), profile = "test")
+        assertEquals("test", presetOf(session, "Mine").profile)
+    }
+
+    @Test
+    fun `presetOf of a default session has no profile`() {
+        assertEquals(null, presetOf(ClaudeSession("s", Path.of("E:/dev/rtm"), "t", Instant.EPOCH, emptyList(), emptyList()), "Mine").profile)
     }
 
     @Test

@@ -32,6 +32,7 @@ data class Variant(val model: String? = null, val effort: String? = null) {
  * picked at start when [base] is null. [addDirs] go to `--add-dir`. [pinned] gives the preset its own toolbar button.
  * [prompt] is the first message of its sessions; [askMore] opens the composer with it typed in, to add to it before the start.
  * [variants], none or at least two, are the model and effort pairs picked from at the click, in place of [model] and [effort].
+ * [profile] names the Claude Code profile its sessions run in; null is `default`.
  */
 data class Preset(
     val name: String,
@@ -45,10 +46,11 @@ data class Preset(
     val prompt: String? = null,
     val askMore: Boolean = false,
     val variants: List<Variant> = emptyList(),
+    val profile: String? = null,
 ) {
     init {
         require(name.isNotBlank()) { "preset name is blank" }
-        require(listOfNotNull(model, project, base, prompt).plus(addDirs).none { it.isBlank() }) { "preset $name has a blank value" }
+        require(listOfNotNull(model, project, base, prompt, profile).plus(addDirs).none { it.isBlank() }) { "preset $name has a blank value" }
         require(effort == null || effort in EFFORTS) { "effort of preset $name is $effort, not one of $EFFORTS" }
         require(worktree || base == null) { "preset $name has a base branch without a worktree" }
         require(variants.size != 1) { "preset $name has a single model and effort pair; set its model and effort instead" }
@@ -95,7 +97,7 @@ data class Preset(
  */
 fun presetOf(session: ClaudeSession, name: String) = Preset(
     name, session.model, session.effort, session.project.toString(), worktree = session.cwd != session.project,
-    addDirs = session.addedDirs.map { it.toString() },
+    addDirs = session.addedDirs.map { it.toString() }, profile = session.profile.takeIf { it != DEFAULT_PROFILE },
 )
 
 /**
@@ -104,7 +106,7 @@ fun presetOf(session: ClaudeSession, name: String) = Preset(
  */
 fun continuationPrompt(session: ClaudeSession) =
     "This session continues Claude Code session ${session.id} (${session.title.replace(Regex("\\s+"), " ").trim()}). " +
-        "Its transcript is ~/.claude/projects/*/${session.id}.jsonl. Read its end, sum up in a few lines where that session " +
+        "Its transcript is ${checkNotNull(session.transcript) { "session ${session.id} has no transcript" }}. Read its end, sum up in a few lines where that session " +
         "stopped and what was left to do, then wait for my instructions."
 
 fun checkPresets(presets: List<Preset>) {
@@ -139,11 +141,12 @@ fun parsePresets(text: String): List<Preset> {
             preset.string("prompt"),
             preset.boolean("askMore"),
             preset["variants"]?.asJsonArray?.map { it.variant() }.orEmpty(),
+            preset.string("profile"),
         )
     }.also(::checkPresets)
 }
 
-private val PRESET_KEYS = setOf("name", "model", "effort", "project", "worktree", "base", "addDirs", "pinned", "prompt", "askMore", "variants")
+private val PRESET_KEYS = setOf("name", "model", "effort", "project", "worktree", "base", "addDirs", "pinned", "prompt", "askMore", "variants", "profile")
 
 private fun JsonElement.variant(): Variant {
     val pair = asJsonObject

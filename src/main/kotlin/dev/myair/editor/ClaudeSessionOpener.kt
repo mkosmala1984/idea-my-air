@@ -15,7 +15,6 @@ import dev.myair.review.managedReviewFolder
 import dev.myair.reviewview.ReviewOpener
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
-import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.Profile
 import dev.myair.store.ProfileStore
 import dev.myair.tabs.HostWindow
@@ -88,7 +87,7 @@ object ClaudeSessionOpener {
         args: List<String> = emptyList(),
         plan: PlanStart? = null,
         folderId: String? = plan?.folderId,
-        profile: Profile = ProfileStore.getInstance().byName(DEFAULT_PROFILE),
+        profile: Profile = ProfileStore.getInstance().default,
     ) {
         folderId?.let { ClaudeSessionsService.getInstance().updateFolders(ChangeSource.UI) { folders -> folders.assign(id, it) } }
         val file = ClaudeSessionVirtualFile(id, cwd, sessionProject, profile, NEW_SESSION_TITLE, listOf("--session-id", id) + args, planStart = plan)

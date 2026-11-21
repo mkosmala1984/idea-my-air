@@ -24,12 +24,18 @@ class RunProjectTest {
     fun `names the first reason a run cannot start`(@TempDir temp: Path) {
         val gone = temp.resolve("gone")
         val task = ScheduledTask("t", Preset("T", prompt = "p", addDirs = listOf(gone.toString())), Schedule(setOf(DayOfWeek.MONDAY), LocalTime.NOON), true, emptyList(), "f1", Instant.EPOCH)
-        assertEquals("no IDE project open", preStartError(task, null, folderExists = false, claudeFound = false))
-        assertEquals("directory missing: $gone", preStartError(task, temp, folderExists = false, claudeFound = false))
+        assertEquals("no IDE project open", preStartError(task, null, folderExists = false, claudeFound = false, profileListed = true))
+        assertEquals("directory missing: $gone", preStartError(task, temp, folderExists = false, claudeFound = false, profileListed = true))
         val plain = task.copy(preset = task.preset.copy(addDirs = emptyList()))
-        assertEquals("folder deleted", preStartError(plain, temp, folderExists = false, claudeFound = false))
-        assertEquals("claude not found on PATH", preStartError(plain, temp, folderExists = true, claudeFound = false))
-        assertNull(preStartError(plain, temp, folderExists = true, claudeFound = true))
-        assertNull(preStartError(plain.copy(folder = null), temp, folderExists = false, claudeFound = true))
+        assertEquals("folder deleted", preStartError(plain, temp, folderExists = false, claudeFound = false, profileListed = true))
+        assertEquals("claude not found on PATH", preStartError(plain, temp, folderExists = true, claudeFound = false, profileListed = true))
+        assertNull(preStartError(plain, temp, folderExists = true, claudeFound = true, profileListed = true))
+        assertNull(preStartError(plain.copy(folder = null), temp, folderExists = false, claudeFound = true, profileListed = true))
+    }
+
+    @Test
+    fun `an unlisted profile stops the run`(@TempDir temp: Path) {
+        val task = ScheduledTask("t", Preset("T", prompt = "p", profile = "work"), Schedule(setOf(DayOfWeek.MONDAY), LocalTime.NOON), true, emptyList(), null, Instant.EPOCH)
+        assertEquals("profile work is no longer listed", preStartError(task, temp, folderExists = true, claudeFound = true, profileListed = false))
     }
 }

@@ -35,10 +35,10 @@ data class ClaudeSession(
 ) {
     /**
      * Case-insensitive substring match on the title, the cwd, [startBranch] or [branch], the branch checked out where it
-     * works now; every word of [query] must match one of them.
+     * works now, or the [profile] unless it is `default`; every word of [query] must match one of them.
      */
     fun matches(query: String, branch: String?): Boolean {
-        val fields = listOfNotNull(title, cwd.toString(), startBranch, branch)
+        val fields = listOfNotNull(title, cwd.toString(), startBranch, branch, profile.takeIf { it != DEFAULT_PROFILE })
         return queryWords(query).all { word -> fields.any { it.contains(word, true) } }
     }
 

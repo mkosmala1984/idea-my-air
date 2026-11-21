@@ -24,7 +24,7 @@ fun firstMessage(start: Preset, prompt: String?): String {
 }
 
 fun sessionStartPreset(
-    saved: List<Preset>, preset: String?, dir: String?, model: String?, effort: String?, addDirs: String?, worktree: Boolean?, base: String?,
+    saved: List<Preset>, preset: String?, dir: String?, model: String?, effort: String?, addDirs: String?, worktree: Boolean?, base: String?, profile: String?,
 ): Preset {
     val from = if (preset == null) Preset("my_air_session_start")
     else requireNotNull(saved.firstOrNull { it.name == preset }) { "no configuration '$preset'; configurations: ${saved.joinToString { it.name }.ifEmpty { "none" }}" }
@@ -33,6 +33,7 @@ fun sessionStartPreset(
         model = model ?: from.model, effort = effort ?: from.effort, project = dir ?: from.project,
         // A configuration's worktree turned off takes its base along.
         worktree = worktree ?: from.worktree, base = if (worktree == false) base else base ?: from.base, addDirs = addDirs?.let(::stringArray) ?: from.addDirs,
+        profile = profile ?: from.profile,
     )
     require(!start.worktree || start.base != null) { "a worktree needs base, a branch of the directory's repository" }
     return start

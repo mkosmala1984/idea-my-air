@@ -59,9 +59,12 @@ fun addedProfileEnv(profile: Profile, inherited: String? = System.getenv("CLAUDE
 class ProfileStore(val file: Path, val defaultDir: Path) {
     private var cached: Pair<Pair<FileTime, Long>, List<Profile>>? = null
 
+    /** `default`, which never reads the file, so what must run in it (branch names, analyses) does not depend on the file. */
+    val default = Profile(DEFAULT_PROFILE, defaultDir)
+
     /** `default` first, then the file's. Throws when the file is broken. */
     @Synchronized
-    fun all(): List<Profile> = listOf(Profile(DEFAULT_PROFILE, defaultDir)) + fromFile()
+    fun all(): List<Profile> = listOf(default) + fromFile()
 
     private fun fromFile(): List<Profile> {
         if (!file.exists()) return emptyList()

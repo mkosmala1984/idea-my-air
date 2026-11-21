@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
+import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -23,6 +24,12 @@ class ProfilesTest {
         store.write(listOf(Profile("test", p1)))
         assertEquals(listOf("default", "test"), store.all().map { it.name })
         assertEquals(d, store.all().first().dir)
+    }
+
+    @Test
+    fun `default does not read the file`() {
+        val file = tmp.resolve("broken.json").also { it.writeText("{not json") }
+        assertEquals(Profile(DEFAULT_PROFILE, d), ProfileStore(file, d).default)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package dev.myair.editor
 
+import dev.myair.store.ProfileStore
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.fileEditor.FileEditor
@@ -77,7 +78,7 @@ private class NewSessionHereAction(private val project: Project, private val fil
     override fun actionPerformed(e: AnActionEvent) {
         val session = session()
         if (session != null) newSessionHere(project, session)
-        else ClaudeSessionOpener.startNew(project, file.project, file.cwd, folderId = ClaudeSessionsService.getInstance().folders.folderOf(file.sessionId))
+        else ClaudeSessionOpener.startNew(project, file.project, file.cwd, folderId = ClaudeSessionsService.getInstance().folders.folderOf(file.sessionId), profile = file.profile)
     }
 }
 
@@ -85,4 +86,4 @@ const val NEW_SESSION_HERE_TOOLTIP = "A new Claude session in the folder this se
 
 /** A new session of [session]'s project in the folder it works in now (`workDir`), filed in the folder it shows in (`placeOf`). */
 fun newSessionHere(project: Project, session: ClaudeSession) =
-    ClaudeSessionOpener.startNew(project, session.project, session.workDir, folderId = ClaudeSessionsService.getInstance().folders.placeOf(session))
+    ClaudeSessionOpener.startNew(project, session.project, session.workDir, folderId = ClaudeSessionsService.getInstance().folders.placeOf(session), profile = ProfileStore.getInstance().byName(session.profile))

@@ -8,6 +8,7 @@ import dev.myair.folders.Folder
 import dev.myair.folders.progress
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.StructureHistory
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.PlanManager
 import dev.myair.store.PlanManagers
 import java.nio.file.Path
@@ -24,7 +25,7 @@ fun SessionPage.toJson(structure: SessionFolders, zone: ZoneId): String = gson.t
         "total" to total,
         "offset" to offset,
         "sessions" to sessions.map { session ->
-            linkedMapOf(
+            linkedMapOf<String, Any?>(
                 "id" to session.id,
                 "title" to session.title,
                 "project" to session.cwd.toString(),
@@ -33,7 +34,7 @@ fun SessionPage.toJson(structure: SessionFolders, zone: ZoneId): String = gson.t
                 "prompts" to session.prompts.map { it.take(PROMPT_CHARS) },
                 "changedFiles" to session.changedFiles.size,
                 "match" to snippets[session.id],
-            )
+            ).apply { if (session.profile != DEFAULT_PROFILE) put("profile", session.profile) }
         },
     ),
 )
