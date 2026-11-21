@@ -57,9 +57,14 @@ class TabTitleTest {
     }
 
     @Test
+    fun `tab tooltip names the profile`() {
+        assertEquals(listOf("Fix", "Project: $ide", "Profile: work"), tabTooltip("Fix", ide, null, "work"))
+    }
+
+    @Test
     fun `the tooltip names the project, and for a worktree where it lies and its branch`() {
-        assertEquals(listOf("Fix", "Project: $ide"), tabTooltip("Fix", ide, null))
-        assertEquals(listOf("Fix", "Project: $ide", "Worktree: ${worktree.root}", "Branch: feat"), tabTooltip("Fix", ide, worktree))
-        assertEquals(listOf("Fix", "Project: $ide", "Worktree: ${worktree.root}", "Branch: detached"), tabTooltip("Fix", ide, worktree.copy(branch = null)))
+        assertEquals(listOf("Fix", "Project: $ide"), tabTooltip("Fix", ide, null, "default"))
+        assertEquals(listOf("Fix", "Project: $ide", "Worktree: ${worktree.root}", "Branch: feat"), tabTooltip("Fix", ide, worktree, "default"))
+        assertEquals(listOf("Fix", "Project: $ide", "Worktree: ${worktree.root}", "Branch: detached"), tabTooltip("Fix", ide, worktree.copy(branch = null), "default"))
     }
 }

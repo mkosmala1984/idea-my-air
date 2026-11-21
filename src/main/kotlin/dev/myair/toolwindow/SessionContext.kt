@@ -33,7 +33,7 @@ val OUTPUT_EXTENSIONS = setOf("md", "html")
  * not the one checked out now. [gitError]: why git could not read [cwd].
  */
 data class SessionContext(
-    val title: String, val lastMessage: Instant, val model: String?, val effort: String?,
+    val title: String, val lastMessage: Instant, val model: String?, val effort: String?, val profile: String,
     val project: String, val projectPath: Path, val cwd: Path, val worktree: Boolean, val startedIn: Path?, val startBranch: String?,
     val desktop: Boolean,
     val addedDirs: List<AddedDirBranch>, val brief: Brief?, val files: List<Path>, val outputs: List<Path>, val artifacts: List<Artifact>,
@@ -55,7 +55,7 @@ fun contextOf(session: ClaudeSession, cwdExists: Boolean, live: Boolean, read: G
     val git = read?.state?.getOrNull()
     val workTree = read?.workTree ?: session.cwd
     return SessionContext(
-        session.title, session.lastMessage, session.model, session.effort,
+        session.title, session.lastMessage, session.model, session.effort, session.profile,
         (session.project.fileName ?: session.project).toString(), session.project, workTree, workTree != session.project,
         session.cwd.takeIf { it != workTree }, session.startBranch?.takeIf { git != null && it != git.branch },
         session.desktop,

@@ -1,5 +1,6 @@
 package dev.myair.toolwindow
 
+import dev.myair.store.DEFAULT_PROFILE
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.ui.ColoredTreeCellRenderer
@@ -59,11 +60,12 @@ fun statusText(live: LiveSession?, unread: Boolean): String? = when (live?.statu
     null -> null
 }
 
-/** A session row's tooltip: its status, settled, Desktop, the [project] when the row does not show it, its brief, and the first human prompt. */
+/** A session row's tooltip: its status, settled, Desktop, its profile unless default, the [project] when the row does not show it, its brief, and the first human prompt. */
 fun tooltipLines(session: ClaudeSession, live: LiveSession?, unread: Boolean, settled: Boolean, project: Path?): List<String> = listOfNotNull(
     statusText(live, unread),
     "Settled".takeIf { settled },
     "Desktop".takeIf { session.desktop },
+    "Profile: ${session.profile}".takeIf { session.profile != DEFAULT_PROFILE },
     project?.let { "Project: ${it.fileName ?: it}" },
     session.brief?.goal?.let { "Goal: $it" },
 ) + session.brief?.tasks.orEmpty().map { it.line() } + listOfNotNull(session.prompts.firstOrNull()?.lineSequence()?.first()?.take(PROMPT_CHARS)?.let { "Asked: $it" })

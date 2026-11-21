@@ -82,7 +82,7 @@ class ClaudeSessionTabTitleProvider : EditorTabTitleProvider, DumbAware {
     override fun getEditorTabTitle(project: Project, file: VirtualFile) = (file as? ClaudeSessionVirtualFile)?.title
 
     override fun getEditorTabTooltipHtml(project: Project, file: VirtualFile): HtmlChunk? = (file as? ClaudeSessionVirtualFile)?.let {
-        HtmlBuilder().appendWithSeparators(HtmlChunk.br(), tabTooltip(it.title, it.project, it.mark?.worktree).map(HtmlChunk::text)).toFragment()
+        HtmlBuilder().appendWithSeparators(HtmlChunk.br(), tabTooltip(it.title, it.project, it.mark?.worktree, it.profile.name).map(HtmlChunk::text)).toFragment()
     }
 }
 

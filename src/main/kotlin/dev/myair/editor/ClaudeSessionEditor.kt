@@ -1,5 +1,6 @@
 package dev.myair.editor
 
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.ProfileStore
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -46,7 +47,7 @@ class ClaudeSessionEditor(project: Project, private val file: ClaudeSessionVirtu
     private fun updateHeader() {
         val service = ClaudeSessionsService.getInstance()
         val session = service.listed.firstOrNull { it.id == file.sessionId }
-        header.show(if (session == null) HeaderText(file.title, file.project, null, null, null) else headerText(session, service.branchOf(session)))
+        header.show(if (session == null) HeaderText(file.title, file.project, null, null, null, file.profile.name.takeIf { it != DEFAULT_PROFILE }) else headerText(session, service.branchOf(session)))
     }
 
     override fun getComponent(): JComponent = root

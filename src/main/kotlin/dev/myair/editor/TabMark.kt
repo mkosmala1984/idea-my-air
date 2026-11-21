@@ -1,5 +1,6 @@
 package dev.myair.editor
 
+import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.actions.Git
 import java.nio.file.Path
 
@@ -20,7 +21,7 @@ fun tabMark(sessionProject: Path, sessionHead: Git.Head?, projectHead: Git.Head?
     return TabMark(other, sessionHead?.takeIf { home != null && it.root != home })
 }
 
-/** The tooltip's lines: [title], the project, and for a [worktree] where it lies and its branch. */
-fun tabTooltip(title: String, sessionProject: Path, worktree: Git.Head?) =
-    listOf(title, "Project: $sessionProject") +
+/** The tooltip's lines: [title], the project, the [profile] unless default, and for a [worktree] where it lies and its branch. */
+fun tabTooltip(title: String, sessionProject: Path, worktree: Git.Head?, profile: String) =
+    listOfNotNull(title, "Project: $sessionProject", "Profile: $profile".takeIf { profile != DEFAULT_PROFILE }) +
         listOfNotNull(worktree?.let { "Worktree: ${it.root}" }, worktree?.let { "Branch: ${it.branch ?: "detached"}" })

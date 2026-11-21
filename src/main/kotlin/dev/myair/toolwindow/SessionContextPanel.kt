@@ -2,7 +2,7 @@ package dev.myair.toolwindow
 
 import com.intellij.markdown.utils.convertMarkdownToHtml
 import dev.myair.planview.PlanOpener
-import dev.myair.store.Homes
+import dev.myair.store.DEFAULT_PROFILE
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.ide.util.PropertiesComponent
@@ -509,7 +509,8 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
         if (key in skills) skills -= key
         else {
             skills[key] = null
-            background(project, "Reading skill", { runCatching { skillFiles(key.second, Homes.claude, key.first) } }) {
+            val profile = service.sessions.first { it.id == shownId }.profile
+            background(project, "Reading skill", { runCatching { skillFiles(key.second, service.profileHome(profile), key.first) } }) {
                 if (key in skills) skills[key] = it
                 render()
             }
@@ -572,7 +573,7 @@ class SessionContextPanel(private val project: Project, parent: Disposable) : JP
             }.customize(UnscaledGaps(bottom = 6)) // The text cell's default gaps without the top one, flush with the card's top.
         }
         row {
-            val parts = listOfNotNull(context.model?.let(::modelName), context.effort).map<String, JComponent> { Chip(it) }.toMutableList()
+            val parts = listOfNotNull(context.model?.let(::modelName), context.effort, context.profile.takeIf { it != DEFAULT_PROFILE }).map<String, JComponent> { Chip(it) }.toMutableList()
             // The session is looked up at the click, as the tab is: the pane is not rebuilt for every change of it.
             if (context.cwdExists) {
                 parts.add(InplaceButton("Continue in a new session: same model, effort and added directories, in ${context.cwd}", CONTINUE_SESSION_ICON) {

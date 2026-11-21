@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class SessionHeaderTest {
     private val tasks = listOf(BriefTask("a", TaskStatus.COMPLETED), BriefTask("b", TaskStatus.IN_PROGRESS), BriefTask("c", TaskStatus.PENDING))
@@ -18,16 +19,22 @@ class SessionHeaderTest {
 
     @Test
     fun `the header names the title, the project, the branch, the goal and the task count`() {
-        assertEquals(HeaderText("Title", project, "main", "Goal", "1/3"), headerText(session(Brief("Goal", tasks)), "main"))
+        assertEquals(HeaderText("Title", project, "main", "Goal", "1/3", null), headerText(session(Brief("Goal", tasks)), "main"))
     }
 
     @Test
     fun `a plan without a goal says its task in progress`() {
-        assertEquals(HeaderText("Title", project, null, "b", "1/3"), headerText(session(Brief(null, tasks)), null))
+        assertEquals(HeaderText("Title", project, null, "b", "1/3", null), headerText(session(Brief(null, tasks)), null))
     }
 
     @Test
     fun `a session without a brief says only where it works`() {
-        assertEquals(HeaderText("Title", project, "main", null, null), headerText(session(null), "main"))
+        assertEquals(HeaderText("Title", project, "main", null, null, null), headerText(session(null), "main"))
+    }
+
+    @Test
+    fun `header carries the profile`() {
+        assertEquals("work", headerText(session(null).copy(profile = "work"), null).profile)
+        assertNull(headerText(session(null), null).profile)
     }
 }

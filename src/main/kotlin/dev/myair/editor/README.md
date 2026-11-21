@@ -39,7 +39,7 @@ This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `m
 - Prompts:
   - `appendedSystemPrompt(briefs, filing)`, `PlanStart(folderId, taskId)`, `sessionPlan(structure, sessionId, session, start, managed)` and `planPrompt(structure, folder, task, briefs, manager)`, and `turnIntoPlanMessage(plan, managerPrompt)`, what Turn into Plan sends its session (`SessionSystemPrompt.kt`).
   - `BRIEF_CALL`, `BRIEF_REMINDER`, `briefReminderCommand()` and `writeBriefReminderSettings(dir)` (`BriefReminder.kt`).
-- Tab marks: `TabMark`, `tabMark(...)` and `tabTooltip(title, sessionProject, worktree)` (`TabMark.kt`).
+- Tab marks: `TabMark`, `tabMark(...)` and `tabTooltip(title, sessionProject, worktree, profile)` (`TabMark.kt`).
 - Icons and colours (`SessionIcons.kt`):
   - `sessionIcon(status, unread)`, `projectIcon(dir, name, size)` and `projectColor(dir, onRead)`;
   - the icon constants `CLAUDE_ICON`, `OFFLINE_SESSION_ICON`, `UNREAD_SESSION_ICON`, `NEEDS_INPUT_ICON` and `WORKING_ICON` (an `AnimatedIcon` of 8 frames at 100 ms);

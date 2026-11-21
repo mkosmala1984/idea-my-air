@@ -25,6 +25,16 @@ class BriefTextTest {
     }
 
     @Test
+    fun `tooltip names a non-default profile`() {
+        assertEquals(listOf("Profile: work", "Asked: Migrate AGC"), tooltipLines(session.copy(profile = "work", brief = null), null, unread = false, settled = false, project = null))
+    }
+
+    @Test
+    fun `tooltip of a default session has no profile line`() {
+        assertEquals(listOf("Asked: Migrate AGC"), tooltipLines(session.copy(brief = null), null, unread = false, settled = false, project = null))
+    }
+
+    @Test
     fun `the tooltip carries the status, settled, Desktop and project before the brief`() {
         val waiting = LiveSession(1, "cli", SessionStatus.NEEDS_INPUT, "dialog open", Instant.EPOCH, Path.of("/p"), Instant.EPOCH)
         assertEquals(

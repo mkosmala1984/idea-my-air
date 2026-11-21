@@ -1,5 +1,6 @@
 package dev.myair.editor
 
+import dev.myair.store.DEFAULT_PROFILE
 import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.impl.ActionButton
@@ -16,12 +17,13 @@ import java.awt.FlowLayout
 import java.nio.file.Path
 import javax.swing.JPanel
 
-/** What the bar above a session tab's terminal says: the session's [title], [project] and [branch], what it is for ([about]) and its brief's [count]. */
-data class HeaderText(val title: String, val project: Path, val branch: String?, val about: String?, val count: String?)
+/** What the bar above a session tab's terminal says: the session's [title], [project] and [branch], what it is for ([about]) and its brief's [count] and its [profile] (null for default). */
+data class HeaderText(val title: String, val project: Path, val branch: String?, val about: String?, val count: String?, val profile: String?)
 
 /** [about] is the brief's goal, else its task in progress (a Desktop plan has no goal). */
 fun headerText(session: ClaudeSession, branch: String?) = HeaderText(
     session.title, session.project, branch, session.brief?.let { it.goal ?: it.current?.content }, briefCount(session.brief),
+    session.profile.takeIf { it != DEFAULT_PROFILE },
 )
 
 /** The bar above a session tab's terminal, so the tab says which session it shows and what that session is for; [actions] are buttons at its right. */
@@ -58,7 +60,7 @@ class SessionHeader(actions: List<AnAction>, private val repaintLater: () -> Uni
         first.append(text.title)
         val color = projectColor(text.project, repaintLater) ?: SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
         first.append("   " + projectName(text.project), SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, color))
-        listOfNotNull(text.branch, text.count).forEach { first.append(" · $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
+        listOfNotNull(text.branch, text.count, text.profile).forEach { first.append(" · $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
         second.clear()
         second.isVisible = text.about != null
         text.about?.let { second.append(it, SimpleTextAttributes.GRAYED_ATTRIBUTES) }
