@@ -1,10 +1,13 @@
 package dev.myair.claude
 
+import dev.myair.store.DEFAULT_PROFILE
+import dev.myair.store.Profile
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
+import java.security.MessageDigest
 import java.time.Instant
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -629,10 +632,10 @@ class ClaudeSessionScannerTest {
     @Test
     fun `a jar's cache keeps its build while the transcript-reading classes stay, and each jar has its own file`() {
         val scanner = "dev/myair/claude/ClaudeSessionScanner.class" to "v1"
-        val first = ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", scanner, "dev/myair/toolwindow/Panel.class" to "x"))
-        val rebuilt = ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", "dev/myair/toolwindow/Panel.class" to "y", scanner))
-        val changed = ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", "dev/myair/claude/ClaudeSessionScanner.class" to "v2"))
-        val sandbox = ClaudeSessionScanner.Saved.forJar(dir, jar("b.jar", scanner))
+        val first = ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", scanner, "dev/myair/toolwindow/Panel.class" to "x"), defaultProfile)
+        val rebuilt = ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", "dev/myair/toolwindow/Panel.class" to "y", scanner), defaultProfile)
+        val changed = ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", "dev/myair/claude/ClaudeSessionScanner.class" to "v2"), defaultProfile)
+        val sandbox = ClaudeSessionScanner.Saved.forJar(dir, jar("b.jar", scanner), defaultProfile)
         val file = write("s1", user("\"prompt\""))
         first.write(mapOf(file to ClaudeSessionScanner.read(file, ClaudeSessionScanner.Transcript.EMPTY)))
         assertEquals(setOf(file), rebuilt.load().keys)
@@ -642,9 +645,30 @@ class ClaudeSessionScannerTest {
         assertNotEquals(first.file, sandbox.file)
     }
 
+    private val defaultProfile = Profile(DEFAULT_PROFILE, Path.of("/home/.claude"))
+
+    @Test
+    fun `the default profile keeps its cache file name`() {
+        val jar = jar("a.jar", "dev/myair/claude/ClaudeSessionScanner.class" to "v1")
+        val jarHash = hex(sha256(jar.toAbsolutePath().toString())).take(8)
+        assertEquals(dir.resolve("scan-cache-$jarHash.json"), ClaudeSessionScanner.Saved.forJar(dir, jar, defaultProfile).file)
+    }
+
+    @Test
+    fun `another profile gets its own cache file`() {
+        val jar = jar("a.jar", "dev/myair/claude/ClaudeSessionScanner.class" to "v1")
+        val profileDir = Path.of("/profiles/test")
+        val name = "scan-cache-${hex(sha256(jar.toAbsolutePath().toString())).take(8)}-${hex(sha256(profileDir.toString())).take(8)}.json"
+        assertEquals(dir.resolve(name), ClaudeSessionScanner.Saved.forJar(dir, jar, Profile("test", profileDir)).file)
+    }
+
+    private fun sha256(text: String) = MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
+
+    private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
+
     @Test
     fun `a jar without transcript-reading classes is a broken build`() {
-        assertFailsWith<IllegalStateException> { ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", "dev/myair/toolwindow/Panel.class" to "x")) }
+        assertFailsWith<IllegalStateException> { ClaudeSessionScanner.Saved.forJar(dir, jar("a.jar", "dev/myair/toolwindow/Panel.class" to "x"), defaultProfile) }
     }
 
     @Test

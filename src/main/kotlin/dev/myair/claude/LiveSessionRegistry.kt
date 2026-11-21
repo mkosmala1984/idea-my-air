@@ -1,6 +1,7 @@
 package dev.myair.claude
 
 import com.google.gson.JsonParser
+import dev.myair.store.DEFAULT_PROFILE
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.time.Instant
@@ -28,6 +29,8 @@ enum class SessionStatus {
 data class LiveSession(
     val pid: Long, val entrypoint: String, val status: SessionStatus, val waitingFor: String?, val since: Instant,
     val cwd: Path, val started: Instant, val job: String? = null, val parkedBy: Set<Long> = emptySet(),
+    /** The name of the profile whose `sessions/` lists the process. */
+    val profile: String = DEFAULT_PROFILE,
 )
 
 /**

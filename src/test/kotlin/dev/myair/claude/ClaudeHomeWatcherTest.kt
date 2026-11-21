@@ -20,7 +20,9 @@ class ClaudeHomeWatcherTest {
     private val sessions by lazy { home.resolve("sessions").createDirectories() }
     private val projects by lazy { home.resolve("projects").createDirectories() }
 
-    private fun watcher() = ClaudeHomeWatcher(listOf(sessions), projects) { calls.put(System.nanoTime()) }
+    private val otherProjects by lazy { home.resolve("other/projects").createDirectories() }
+
+    private fun watcher() = ClaudeHomeWatcher(listOf(sessions), listOf(projects, otherProjects)) { calls.put(System.nanoTime()) }
 
     private fun awaitCall() = assertNotNull(calls.poll(5, TimeUnit.SECONDS), "onChange was not called")
     private fun assertNoCall() = assertNull(calls.poll(1500, TimeUnit.MILLISECONDS), "unexpected onChange")
@@ -42,6 +44,16 @@ class ClaudeHomeWatcherTest {
     fun `transcript in a project directory created after start is seen`() {
         watcher().use {
             val project = projects.resolve("E--new").createDirectories()
+            awaitCall()
+            project.resolve("s.jsonl").writeText("{}\n")
+            awaitCall()
+        }
+    }
+
+    @Test
+    fun `a transcript in a second projects dir triggers a change`() {
+        watcher().use {
+            val project = otherProjects.resolve("E--other").createDirectories()
             awaitCall()
             project.resolve("s.jsonl").writeText("{}\n")
             awaitCall()

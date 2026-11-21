@@ -10,7 +10,7 @@ import dev.myair.claude.LiveSession
 fun unscannedSessions(scanned: List<ClaudeSession>, live: Map<String, LiveSession>): List<ClaudeSession> {
     val ids = scanned.mapTo(HashSet()) { it.id }
     return live.filterKeys { it !in ids }
-        .map { (id, session) -> ClaudeSession(id, session.cwd, NEW_SESSION_TITLE, session.started, emptyList(), emptyList()) }
+        .map { (id, session) -> ClaudeSession(id, session.cwd, NEW_SESSION_TITLE, session.started, emptyList(), emptyList(), profile = session.profile) }
         .sortedByDescending { it.lastMessage }
 }
 

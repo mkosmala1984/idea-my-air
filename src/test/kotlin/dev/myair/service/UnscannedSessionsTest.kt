@@ -29,6 +29,12 @@ class UnscannedSessionsTest {
     }
 
     @Test
+    fun `an unscanned session keeps its live entry's profile`() {
+        val unscanned = unscannedSessions(scanned, mapOf("a" to live("/a", 2).copy(profile = "test")))
+        assertEquals("test", unscanned.single().profile)
+    }
+
+    @Test
     fun `none once every running session has a transcript`() {
         assertEquals(emptyList(), unscannedSessions(scanned, mapOf("old" to live("/rtm", 1))))
     }

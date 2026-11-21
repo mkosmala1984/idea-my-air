@@ -1,5 +1,6 @@
 package dev.myair.claude
 
+import dev.myair.store.DEFAULT_PROFILE
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -29,6 +30,8 @@ data class ClaudeSession(
     val lastBranch: String? = null, val asks: Boolean = false,
     /** The `.jsonl` this session was read from (the copy that counts); null for a session not scanned. */
     val transcript: Path? = null,
+    /** The name of the profile ([dev.myair.store.Profile]) whose directory holds the session. */
+    val profile: String = DEFAULT_PROFILE,
 ) {
     /**
      * Case-insensitive substring match on the title, the cwd, [startBranch] or [branch], the branch checked out where it

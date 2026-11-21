@@ -8,6 +8,8 @@ import com.google.gson.TypeAdapter
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
+import dev.myair.store.Profile
+import dev.myair.store.isDefault
 import dev.myair.store.writeAtomically
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
@@ -95,9 +97,10 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             /**
              * The cache of the plugin in [jar], in [dir]. Each jar (the installed plugin, a sandbox's) gets a file of its
              * own, so IDEs running different builds do not discard each other's; its build is a hash of the classes of
-             * this package, which read the transcripts, so a rebuild that leaves them as they were keeps the cache.
+             * this package, which read the transcripts, so a rebuild that leaves them as they were keeps the cache. A
+             * [profile] other than `default` gets a file of its own, named also by a hash of its directory.
              */
-            fun forJar(dir: Path, jar: Path): Saved {
+            fun forJar(dir: Path, jar: Path, profile: Profile): Saved {
                 val classes = ZipFile(jar.toFile()).use { zip ->
                     zip.entries().asSequence().filter { it.name.startsWith(CLASSES) && it.name.endsWith(".class") }
                         .sortedBy { it.name }.map { it.name to zip.getInputStream(it).readBytes() }.toList()
@@ -105,7 +108,9 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 check(classes.isNotEmpty()) { "no $CLASSES classes in $jar" }
                 val build = MessageDigest.getInstance("SHA-256")
                 classes.forEach { (name, bytes) -> build.update(name.toByteArray()); build.update(bytes) }
-                return Saved(dir.resolve("scan-cache-${hex(sha256(jar.toAbsolutePath().toString().toByteArray())).take(8)}.json"), hex(build.digest()))
+                val jarHash = hex(sha256(jar.toAbsolutePath().toString().toByteArray())).take(8)
+                val suffix = if (profile.isDefault) "" else "-" + hex(sha256(profile.dir.toString().toByteArray())).take(8)
+                return Saved(dir.resolve("scan-cache-$jarHash$suffix.json"), hex(build.digest()))
             }
 
             private const val CLASSES = "dev/myair/claude/"

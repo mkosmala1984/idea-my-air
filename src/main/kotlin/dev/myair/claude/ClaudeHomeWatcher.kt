@@ -16,13 +16,13 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Watches [dirs] (not their subdirectories) and every `projects/<encoded-cwd>/` and calls [onChange] on its own thread
- * once a burst of writes settles: [quiet] after the last event, but no later than [maxWait] after the first, so a session
+ * Watches [dirs] (not their subdirectories), every directory of [projectsDirs] and each `<encoded-cwd>/` in them, and
+ * calls [onChange] on its own thread once a burst of writes settles: [quiet] after the last event, but no later than [maxWait] after the first, so a session
  * that keeps writing still refreshes. Air uses the same 500/700 ms.
  */
 class ClaudeHomeWatcher(
     dirs: List<Path>,
-    private val projectsDir: Path,
+    private val projectsDirs: List<Path>,
     private val quiet: Duration = 500.milliseconds,
     private val maxWait: Duration = 700.milliseconds,
     private val onChange: () -> Unit,
@@ -31,8 +31,10 @@ class ClaudeHomeWatcher(
 
     init {
         dirs.forEach(::register)
-        register(projectsDir)
-        projectsDir.listDirectoryEntries().filter { it.isDirectory() }.forEach(::register)
+        projectsDirs.forEach { projects ->
+            register(projects)
+            projects.listDirectoryEntries().filter { it.isDirectory() }.forEach(::register)
+        }
     }
 
     private val worker = thread(isDaemon = true, name = "Claude home watcher") {
@@ -60,7 +62,7 @@ class ClaudeHomeWatcher(
     private fun handle(key: WatchKey) {
         for (event in key.pollEvents()) {
             val child = (key.watchable() as Path).resolve(event.context() as? Path ?: continue)
-            if (key.watchable() == projectsDir && event.kind() == ENTRY_CREATE && child.isDirectory()) register(child)
+            if (key.watchable() in projectsDirs && event.kind() == ENTRY_CREATE && child.isDirectory()) register(child)
         }
         key.reset()
     }

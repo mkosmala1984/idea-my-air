@@ -20,12 +20,10 @@ import dev.myair.editor.SessionTerminals
 import java.time.Instant
 import dev.myair.editor.projectBase
 import com.intellij.util.concurrency.AppExecutorUtil
-import dev.myair.claude.ClaudeHomeWatcher
 import dev.myair.claude.ClaudeSession
 import dev.myair.claude.ClaudeSessionScanner
 import dev.myair.claude.DesktopSessionReader
 import dev.myair.claude.LiveSession
-import dev.myair.claude.LiveSessionRegistry
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.StructureHistory
@@ -33,6 +31,8 @@ import dev.myair.folders.StructureStore
 import dev.myair.search.SessionIndex
 import dev.myair.store.PinStore
 import dev.myair.store.Pins
+import dev.myair.store.ProfileStore
+import dev.myair.store.isDefault
 import dev.myair.store.pinnedSessions
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -40,15 +40,12 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.isRegularFile
 
 /**
- * The one watcher over `~/.claude` and `~/.my-air`, shared by every project: session list, live statuses, the session each
- * tab shows, and the user's folders. [sessions], [live], [folders] and the listeners are touched on the EDT only.
+ * The one watcher over every profile's directory ([ProfileStore]) and `~/.my-air`, shared by every project: session
+ * list, live statuses, the session each tab shows, and the user's folders. [sessions], [live], [folders] and the listeners are touched on the EDT only.
  */
 @Service(Service.Level.APP)
 class ClaudeSessionsService : Disposable {
-    private val claudeHome = Homes.claude
     private val structure = StructureStore(Homes.myAir.resolve("structure.json"))
-    private val scanner = ClaudeSessionScanner(claudeHome.resolve("projects"), ClaudeSessionScanner.Saved.forJar(structure.file.parent, pluginJar()))
-    private val registry = LiveSessionRegistry(claudeHome.resolve("sessions"))
     private val desktop = DesktopSessionReader(Path.of(checkNotNull(System.getenv("LOCALAPPDATA")) { "LOCALAPPDATA is not set" }, "Claude-Data"))
     private val pinStore = PinStore(structure.file.resolveSibling("pins.json"))
     private val board = BoardWriter(structure.file.parent)
@@ -115,8 +112,11 @@ class ClaudeSessionsService : Disposable {
     private val indexer = AppExecutorUtil.createBoundedApplicationPoolExecutor("Claude sessions index", 1)
     private val toIndex = AtomicReference<List<Path>>()
 
+    /** The readers of the profiles the last refresh read; touched on the refresh thread, and by [dispose]. */
+    @Volatile
+    private var readers: ProfileReaders? = null
+
     // File events drive refreshes; the 60 s rescan covers events the OS dropped, as Air's REREAD_INTERVAL does.
-    private val watcher = ClaudeHomeWatcher(listOf(claudeHome.resolve("sessions"), structure.file.parent, board.seenStore.dir), claudeHome.resolve("projects")) { refresh() }
     private val safetyNet = AppExecutorUtil.getAppScheduledExecutorService().scheduleWithFixedDelay(::refresh, 60, 60, TimeUnit.SECONDS)
 
     init {
@@ -137,9 +137,12 @@ class ClaudeSessionsService : Disposable {
             val (scanned, current, unscanned, heads) = try {
                 // With briefs turned off nothing downstream sees them: rows, tree, tooltips and the board.
                 val briefs = MyAirSettings.getInstance().briefs
-                val read = scanner.scan(desktop.read()).map { if (briefs) it else it.copy(brief = null) }
+                val readers = currentReaders()
+                // Claude Desktop runs its sessions in the default profile.
+                val byProfile = readers.scanners.mapValues { (profile, scanner) -> if (profile.isDefault) scanner.scan(desktop.read()) else scanner.scan() }
+                val read = mergeSessions(byProfile).map { if (briefs) it else it.copy(brief = null) }
                 indexConversations(read.mapNotNull { it.transcript })
-                val current = registry.read()
+                val current = mergeLive(readers.registries.mapValues { it.value.read() })
                 val ids = read.mapTo(HashSet()) { it.id }
                 // Together, so a new session in a worktree finds its project among the directories the others ran in.
                 val (scanned, unscanned) = inProjects(read + unscannedSessions(read, current)).partition { it.id in ids }
@@ -174,6 +177,23 @@ class ClaudeSessionsService : Disposable {
             }
         }
     }
+
+    /**
+     * The readers of the profiles listed now, built again when the list changed: the old watcher closed and its scanners
+     * saved first, so the new ones load what they read. `~/.my-air` is watched, so an edit of `profiles.json` refreshes.
+     */
+    private fun currentReaders(): ProfileReaders {
+        val profiles = ProfileStore.getInstance().all()
+        readers?.takeIf { it.profiles == profiles }?.let { return it }
+        profiles.forEach(::requireProfileDirs)
+        readers?.close()
+        readers = null
+        val watched = listOf(structure.file.parent, board.seenStore.dir)
+        return ProfileReaders(profiles, structure.file.parent, pluginJar(), watched) { refresh() }.also { readers = it }
+    }
+
+    /** The directory of the listed profile [name]; throws when no profile has that name. */
+    fun profileHome(name: String): Path = ProfileStore.getInstance().byName(name).dir
 
     private fun indexConversations(transcripts: List<Path>) {
         toIndex.set(transcripts)
@@ -253,8 +273,7 @@ class ClaudeSessionsService : Disposable {
 
     override fun dispose() {
         safetyNet.cancel(false)
-        watcher.close()
-        scanner.save()
+        readers?.close()
     }
 
     companion object {

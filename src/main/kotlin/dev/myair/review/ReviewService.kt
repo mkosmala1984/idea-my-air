@@ -222,7 +222,7 @@ class ReviewService : Disposable {
         files.root.createDirectories()
         // At once, as structure.json is read on the EDT, so the first tool call after a start finds the reviews; git follows.
         all = files.readAll()
-        watcher = ClaudeHomeWatcher(emptyList(), files.root) { refresh() }
+        watcher = ClaudeHomeWatcher(emptyList(), listOf(files.root)) { refresh() }
         sessions.subscribe(this) {
             // Later, not inside the notification: change() itself writes the folders, which notifies again.
             ApplicationManager.getApplication().invokeLater(::sync)
