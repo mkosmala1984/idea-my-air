@@ -768,7 +768,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
     private fun state() = stateKey().let { key -> states.getOrPut(key) { treeStateOf(PropertiesComponent.getInstance().getValue(key)) } }
 
     /**
-     * Takes what the user expanded or collapsed as the tree's state; not during a search, which expands everything, so
+     * Takes what the user expanded or collapsed as the tree's state; not during a search, which expands the tree down to the sessions, so
      * closing it brings back the tree as it was before.
      */
     private fun rememberState() {
@@ -780,7 +780,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
 
     /**
      * Keeps expanded nodes across rebuilds and restarts ([state]); a non-empty filter expands
-     * everything, so all matches are visible at once. Folders mode with an unreadable `structure.json` shows the error
+     * everything above the session rows, so all matching sessions are visible at once. Folders mode with an unreadable `structure.json` shows the error
      * instead of the tree.
      */
     private fun render() {
@@ -811,12 +811,19 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
             )
             // Before the state, which selects (none) only when nothing is selected.
             tree.selectionPaths = pathsOf(tree.model.root as DefaultMutableTreeNode, selected).toTypedArray()
-            if (query.isNotEmpty()) TreeUtil.expandAll(tree) else state().applyTo(tree)
+            if (query.isNotEmpty()) expandAboveSessions(tree.model.root as DefaultMutableTreeNode) else state().applyTo(tree)
         } finally {
             rendering = false
         }
         pendingReveal?.let(::reveal)
         readBranches()
+    }
+
+    /** Expands every node above the session rows, so a search shows all matches without opening what lies under them. */
+    private fun expandAboveSessions(node: DefaultMutableTreeNode) {
+        if (node.userObject is ClaudeSession) return
+        tree.expandPath(TreePath(node.path))
+        node.children().asSequence().forEach { expandAboveSessions(it as DefaultMutableTreeNode) }
     }
 
     companion object {
