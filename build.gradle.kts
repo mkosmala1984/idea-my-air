@@ -55,4 +55,6 @@ tasks.test {
     environment("CLAUDE_CONFIG_DIR", "E:/inherited-claude-config")
     // CanvasProtocolTest reads the contract it shares with canvas-web's tests from there (tests run in the project dir).
     inputs.file("canvas-web/src/protocol.json")
+    // OpenUiMergeTest checks the Kotlin merge against the cases lang-core merged (canvas-web/src/merge/cases.mjs).
+    inputs.file("canvas-web/src/merge/merge-cases.json")
 }

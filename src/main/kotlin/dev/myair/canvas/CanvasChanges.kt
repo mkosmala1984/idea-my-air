@@ -86,3 +86,18 @@ object CanvasChanges {
         }
     }
 }
+
+/**
+ * [canvas] with [patch] merged into frame [frame]'s document ([mergeOpenUi]), kept in place with its id, title and
+ * state, and the merge. [expect] is the revision ([openUiRev]) the patch was written against; any other revision
+ * throws, naming the current one and giving the current document, so a change made in between is never overwritten.
+ */
+fun patchFrame(canvas: Canvas, frame: String, patch: String, expect: String): Pair<Canvas, OpenUiMerge> {
+    val f = canvas.frame(frame)
+    val rev = openUiRev(f.openui)
+    require(expect == rev) {
+        "frame $frame is at rev $rev, not $expect: it changed since you read it. Patch it again with expect \"$rev\"; its document now is:\n${f.openui}"
+    }
+    val merge = mergeOpenUi(f.openui, patch)
+    return canvas.edit(frame) { it.copy(openui = merge.text) } to merge
+}

@@ -7,6 +7,8 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.openapi.application.EDT
 import dev.myair.canvas.CanvasChanges
 import dev.myair.canvas.CanvasService
+import dev.myair.canvas.OpenUiMerge
+import dev.myair.canvas.patchFrame
 import dev.myair.canvas.addFrame
 import dev.myair.canvas.canvasLanguage
 import dev.myair.canvasview.CanvasBrowser
@@ -55,10 +57,44 @@ class CanvasMcpToolset : McpToolset {
     ): String {
         val shown = withCanvas(folder) { service, id ->
             val frame = checkNotNull(service.update(id) { addFrame(it, title, openui, Instant.now()) }.newest)
-            val validation = UUID.randomUUID().toString()
-            val browser = CanvasRenderers.getInstance().validator(id)
-            Shown(id, ClaudeSessionsService.getInstance().folders.pathOf(id), frame, browser?.let { it to validation }, browser?.validate(validation, openui))
+            startCheck(id, frame, null)
         }
+        return finishCheck(shown)
+    }
+
+    @McpTool
+    @McpDescription(
+        "Changes statements of a frame of a My Air canvas folder in place, instead of showing the whole document again: for a board " +
+            "you move, add or remove elements one statement at a time. patch is OpenUI Lang statements: one with an existing name " +
+            "replaces it, a new name is added, name = null deletes it, and statements root no longer reaches are dropped (so removing an " +
+            "element from its parent's list removes it). expect is the frame's rev from my_air_canvas_show, my_air_canvas_get or the last " +
+            "patch; when the frame changed since, the patch is refused and the error gives the current rev and document. The patched " +
+            "frame keeps its id, title and form state, and is checked like a shown one. Returns what my_air_canvas_show returns, " +
+            "with the new rev, plus set (the statements the patch set) and removed (the statements gone).",
+    )
+    suspend fun my_air_canvas_patch(
+        @McpDescription("The canvas folder's id or path, as for my_air_canvas_show.") folder: String,
+        @McpDescription("The frame's id, such as C3.") frame: String,
+        @McpDescription("OpenUI Lang statements, one per line: name = expression.") patch: String,
+        @McpDescription("The frame's rev the patch is based on.") expect: String,
+    ): String {
+        val shown = withCanvas(folder) { service, id ->
+            var merge: OpenUiMerge? = null
+            val canvas = service.update(id) { c -> patchFrame(c, frame, patch, expect).let { (patched, m) -> merge = m; patched } }
+            startCheck(id, canvas.frame(frame), merge)
+        }
+        return finishCheck(shown)
+    }
+
+    /** Has a canvas page of this IDE start checking [frame]'s document; call on the EDT. */
+    private fun startCheck(id: String, frame: Frame, merge: OpenUiMerge?): Shown {
+        val validation = UUID.randomUUID().toString()
+        val browser = CanvasRenderers.getInstance().validator(id)
+        return Shown(id, ClaudeSessionsService.getInstance().folders.pathOf(id), frame, merge, browser?.let { it to validation }, browser?.validate(validation, frame.openui))
+    }
+
+    /** Waits for the check [startCheck] started, at most [VALIDATION_MS], and returns the tool's answer. */
+    private suspend fun finishCheck(shown: Shown): String {
         val check = shown.answer?.let { answer ->
             try {
                 withTimeoutOrNull(VALIDATION_MS) { answer.await() }?.let(CanvasCheck::of) ?: CanvasCheck.unchecked(CanvasCheck.TIMEOUT)
@@ -70,7 +106,7 @@ class CanvasMcpToolset : McpToolset {
                 shown.browser?.let { (b, v) -> withContext(NonCancellable + Dispatchers.EDT) { b.forget(v) } }
             }
         } ?: CanvasCheck.unchecked(CanvasCheck.NO_PAGE)
-        return canvasShowJson(shown.id, shown.path, shown.frame, check)
+        return canvasShowJson(shown.id, shown.path, shown.frame, check, shown.merge)
     }
 
     @McpTool
@@ -105,7 +141,7 @@ class CanvasMcpToolset : McpToolset {
     suspend fun my_air_canvas_language(): String = canvasLanguage()
 
     private class Shown(
-        val id: String, val path: String, val frame: Frame,
+        val id: String, val path: String, val frame: Frame, val merge: OpenUiMerge?,
         /** The page checking the frame and the id of its check. */
         val browser: Pair<CanvasBrowser, String>?, val answer: CompletableDeferred<CanvasMessage.Validated>?,
     )

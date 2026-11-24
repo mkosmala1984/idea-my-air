@@ -28,6 +28,10 @@ fun canvasRules(): String = """
     - A Board's answer is in boards: every element's rectangle in grid units, as the boxes resolved, and its problems
       (overlap, overflow, anchors that do not resolve, edges through other elements...). Check the rectangles against what you meant
       and fix every problem; a height marked estimated is a default, since nothing is measured, so give h where the size matters.
+    - my_air_canvas_patch(folder, frame, patch, expect) changes a frame in place by statements: a statement of an existing name
+      replaces it, a new name is added, name = null deletes it, and statements root no longer reaches are dropped. expect is the
+      frame's rev from the last show, get or patch; a stale rev is refused with the current document. Patch a board you are
+      building instead of showing it again, so it keeps its frame and what the user did on it, and read its answer as a show's.
     - my_air_canvas_get(folder) lists the frames and gives the newest frame's document and its form state; my_air_canvas_apply(folder, changes)
       removes frames, retitles them or clears the canvas. my_air_canvas_language() returns these rules and the OpenUI reference again.
     - The OpenUI reference below describes the language of the openui argument only. Your replies in the terminal stay ordinary text;
@@ -48,7 +52,7 @@ const val CANVAS_MANAGER_FIRST_MESSAGE =
  * by id, which a rename keeps, how clicks from the canvas arrive, then [canvasRules] and the OpenUI reference.
  */
 fun canvasManagerPrompt(folderId: String, canvas: Canvas): String = """
-    |You manage My Air canvas folder $folderId. Pass folder '$folderId' to my_air_canvas_show, my_air_canvas_get and my_air_canvas_apply.
+    |You manage My Air canvas folder $folderId. Pass folder '$folderId' to my_air_canvas_show, my_air_canvas_patch, my_air_canvas_get and my_air_canvas_apply.
     |It holds ${canvas.frames.size} frames now${canvas.newest?.let { ", the newest ${it.id}" } ?: ""}; my_air_canvas_get gives the current ones.
     |Answer the user in the terminal and show results worth looking at on the canvas with my_air_canvas_show.
     |Other sessions may show frames on this canvas too; my_air_canvas_get names each frame's author session when it is known.

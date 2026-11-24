@@ -42,7 +42,11 @@ class CanvasJsonTest {
             listOf("b"), listOf("c"),
         )
         val o = json(canvasShowJson("c1", "rtm/Canvas: flaky", frame, CanvasCheck.of(answer)))
-        assertEquals(listOf("folder", "path", "frame", "stored", "validated", "ok", "errors", "unresolved", "orphaned", "boards", "note"), o.keySet().toList())
+        assertEquals(listOf("folder", "path", "frame", "rev", "stored", "validated", "ok", "errors", "unresolved", "orphaned", "boards", "note"), o.keySet().toList())
+        assertEquals(dev.myair.canvas.openUiRev(frame.openui), o["rev"].asString)
+        val patched = json(canvasShowJson("c1", "p", frame, CanvasCheck.of(answer), dev.myair.canvas.OpenUiMerge("x", listOf("a"), listOf("b"))))
+        assertEquals(listOf("folder", "path", "frame", "rev", "set", "removed", "stored"), patched.keySet().take(7))
+        assertEquals(listOf("b"), patched["removed"].asJsonArray.map { it.asString })
         assertEquals("c1", o["folder"].asString)
         assertEquals("C3", o["frame"].asString)
         assertTrue(o["stored"].asBoolean)
@@ -93,7 +97,7 @@ class CanvasJsonTest {
         assertEquals("default", o["manager"].asJsonObject["profile"].asString)
         val frames = o["frames"].asJsonArray.map { it.asJsonObject }
         assertEquals(listOf("C1", "C4"), frames.map { it["id"].asString })
-        assertEquals(setOf("id", "title", "created", "author"), frames[0].keySet())
+        assertEquals(setOf("id", "rev", "title", "created", "author"), frames[0].keySet())
         assertEquals("2026-11-23T10:15:00Z", frames[0]["created"].asString)
         assertEquals("s2", frames[1]["author"].asString)
         assertEquals("root = Stack([a])", o["newest"].asJsonObject["openui"].asString)

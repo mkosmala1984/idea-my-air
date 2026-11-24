@@ -10,7 +10,8 @@ Canvas folders: the application service that reads and writes `~/.my-air/canvase
   - `@Service(APP) class CanvasService`, with `canvases`, `onDiskIds`, `canvas(folderId)`, `file(folderId)`, `subscribe(parent, listener)`, `update(folderId, op)`, `create(folderId, canvas)`, `moveManagers(switched)` and `refresh()`.
   - `class CanvasServiceStartup` (a `postStartupActivity` in `plugin.xml`).
   - Pure: `canvasesInStructure(all, structure)`, `shownFrames(sessions)`, `authorsDue(canvases, shows)`.
-- `CanvasChanges.kt`: `managedCanvasFolder(canvases, sessionId)`, `addFrame(canvas, title, openui, now)`, `setState(canvas, frame, state)`, `setAuthor(canvas, frame, session)`, `learnAuthors(canvas, folderId, shows)`, and `object CanvasChanges` with `apply(canvas, changes)` (ops `remove_frame`, `set_title`, `clear`).
+- `CanvasChanges.kt`: `managedCanvasFolder(canvases, sessionId)`, `addFrame(canvas, title, openui, now)`, `setState(canvas, frame, state)`, `setAuthor(canvas, frame, session)`, `learnAuthors(canvas, folderId, shows)`, `patchFrame(canvas, frame, patch, expect)`, and `object CanvasChanges` with `apply(canvas, changes)` (ops `remove_frame`, `set_title`, `clear`).
+- `OpenUiMerge.kt`: `mergeOpenUi(existing, patch)` (a port of lang-core's `mergeStatements`) giving `data class OpenUiMerge(text, set, removed)`, `openUiStatements(src)` with `data class OpenUiStatement(name, text)`, and `openUiRev(openui)`.
 - `CanvasPrompts.kt`: `openUiPrompt` (resource `/canvas/system-prompt.txt`), `canvasRules()`, `canvasManagerPrompt(folderId, canvas)`, `canvasLanguage()` (what `my_air_canvas_language` returns) and `CANVAS_MANAGER_FIRST_MESSAGE`.
 
 ## Invariants
@@ -19,6 +20,7 @@ Canvas folders: the application service that reads and writes `~/.my-air/canvase
 - `canvases` holds only folders of the structure; a `canvas.json` that cannot be read is a failed `Result`, never skipped. `onDiskIds` holds every `canvas.json` on disk, readable or not: what the placement rules (`folders/KindPlacement.kt`) know as canvas folders.
 - Frame ids are `C<next>` and `next` is never lowered, also by `clear`, so a click on an old frame never reaches a new one. `addFrame` and `CanvasFiles.write` keep the newest 50 frames.
 - `CanvasChanges.apply` is all or none; an unknown op or field fails naming the change (1-based) and the key.
+- `mergeOpenUi` must merge as lang-core does: `OpenUiMergeTest` runs the cases of `canvas-web/src/merge/merge-cases.json`, which `cases.mjs` writes with lang-core itself and `merge.test.ts` keeps current. A patch is refused unless `expect` is the frame's current `openUiRev`, so a change made in between is never overwritten.
 - An author once set is kept (`setAuthor`); authors are learned only for frames without one, from `ClaudeSession.shownFrames` of the same folder.
 - The manager prompt goes in a file (`--append-system-prompt-file`): it spans lines and holds the 36k-character OpenUI prompt. `CanvasPromptsTest` checks that it names every `CanvasMcpToolset` tool.
 

@@ -48,10 +48,11 @@ The tree's menus follow the same rules where they can tell in advance: New Plan.
 
 ## The MCP tools
 
-`CanvasMcpToolset` (`mcp/`, registered in `my-air-mcp.xml`) has four tools. Each but the last names the canvas by its folder id or its path, as the review tools do; a folder that is not a canvas, or a canvas that cannot be read, fails with a message naming it. The tools do not know which session calls them, so any session may write to any canvas.
+`CanvasMcpToolset` (`mcp/`, registered in `my-air-mcp.xml`) has five tools. Each but the last names the canvas by its folder id or its path, as the review tools do; a folder that is not a canvas, or a canvas that cannot be read, fails with a message naming it. The tools do not know which session calls them, so any session may write to any canvas.
 
-- `my_air_canvas_show(folder, openui, title?)` stores a new frame, then has a canvas page check it and returns `{folder, path, frame, stored, validated, ok, errors, unresolved, orphaned, boards, note}`. Each error has `code`, `message`, `statementId`, `component`, `path`, `hint` and `severity` (`error` or `warning`).
-- `my_air_canvas_get(folder)` returns the manager, the frames (id, title, created, author) and the newest frame whole (`openui` and `state`).
+- `my_air_canvas_show(folder, openui, title?)` stores a new frame, then has a canvas page check it and returns `{folder, path, frame, rev, stored, validated, ok, errors, unresolved, orphaned, boards, note}`. Each error has `code`, `message`, `statementId`, `component`, `path`, `hint` and `severity` (`error` or `warning`).
+- `my_air_canvas_patch(folder, frame, patch, expect)` changes a frame's document in place by statements, as lang-core's `mergeStatements` does (`canvas/OpenUiMerge.kt`, a port so it works without a page): a statement of an existing name replaces it, a new one is appended, `name = null` deletes it, and statements `root` no longer reaches are dropped. `expect` is the frame's `rev` (a 12-hex SHA-256 prefix of its document, `openUiRev`), which `show`, `get` and `patch` return; any other rev is refused with the current rev and document. The frame keeps its id, title and state; the tab re-pushes it when it is the one shown, since its text changed. The patched document is checked like a shown one, and the answer is `show`'s plus `set` and `removed`.
+- `my_air_canvas_get(folder)` returns the manager, the frames (id, rev, title, created, author) and the newest frame whole (`rev`, `openui` and `state`).
 - `my_air_canvas_apply(folder, changes)` applies `remove_frame {id}`, `set_title {id, title}` and `clear {}`, all or none. An unknown op or field fails naming it.
 - `my_air_canvas_language()` returns My Air's canvas rules followed by the OpenUI reference of the canvas library (`resources/canvas/system-prompt.txt`, about 9k tokens). The show tool's description tells a session that is not the manager to read it first.
 

@@ -15,7 +15,7 @@ class CanvasPromptsTest {
 
     @Test
     fun `the manager prompt names every canvas tool and the folder, and holds the OpenUI prompt`() {
-        assertEquals(setOf("my_air_canvas_show", "my_air_canvas_get", "my_air_canvas_apply", "my_air_canvas_language"), tools)
+        assertEquals(setOf("my_air_canvas_show", "my_air_canvas_patch", "my_air_canvas_get", "my_air_canvas_apply", "my_air_canvas_language"), tools)
         tools.forEach { assertContains(prompt, it) }
         assertContains(prompt, "folder 'f1'")
         assertContains(prompt, "[canvas <folder> · <frame>]")

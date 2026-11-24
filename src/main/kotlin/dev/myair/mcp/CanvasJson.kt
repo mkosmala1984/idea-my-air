@@ -7,6 +7,8 @@ import com.google.gson.JsonObject
 import dev.myair.canvasview.CanvasBoard
 import dev.myair.canvasview.CanvasError
 import dev.myair.canvasview.CanvasMessage
+import dev.myair.canvas.OpenUiMerge
+import dev.myair.canvas.openUiRev
 import dev.myair.folders.SessionFolders
 import dev.myair.store.Canvas
 import dev.myair.store.Frame
@@ -101,12 +103,20 @@ private fun errorJson(e: CanvasError) = JsonObject().apply {
     addProperty("severity", if (e.warning) "warning" else "error")
 }
 
-/** What `my_air_canvas_show` returns: the folder (id and path), the new [frame]'s id and [check]. */
-fun canvasShowJson(folderId: String, path: String, frame: Frame, check: CanvasCheck): String = gson.toJson(
+/**
+ * What `my_air_canvas_show` returns: the folder (id and path), the new [frame]'s id and revision, and [check]; for
+ * `my_air_canvas_patch` also the statements the [merge] set and removed.
+ */
+fun canvasShowJson(folderId: String, path: String, frame: Frame, check: CanvasCheck, merge: OpenUiMerge? = null): String = gson.toJson(
     JsonObject().apply {
         addProperty("folder", folderId)
         addProperty("path", path)
         addProperty("frame", frame.id)
+        addProperty("rev", openUiRev(frame.openui))
+        if (merge != null) {
+            add("set", strings(merge.set))
+            add("removed", strings(merge.removed))
+        }
         addProperty("stored", true)
         addProperty("validated", check.validated)
         addProperty("ok", check.ok)
@@ -135,6 +145,7 @@ fun canvasGetJson(folderId: String, path: String, canvas: Canvas): String = gson
             canvas.frames.forEach { f ->
                 a.add(JsonObject().apply {
                     addProperty("id", f.id)
+                    addProperty("rev", openUiRev(f.openui))
                     addProperty("title", f.title)
                     addProperty("created", f.created.toString())
                     addProperty("author", f.author)
@@ -144,6 +155,7 @@ fun canvasGetJson(folderId: String, path: String, canvas: Canvas): String = gson
         add("newest", canvas.newest?.let { f ->
             JsonObject().apply {
                 addProperty("id", f.id)
+                addProperty("rev", openUiRev(f.openui))
                 addProperty("title", f.title)
                 addProperty("openui", f.openui)
                 add("state", f.state ?: JsonNull.INSTANCE)

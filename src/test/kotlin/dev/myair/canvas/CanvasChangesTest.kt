@@ -84,4 +84,27 @@ class CanvasChangesTest {
         val structure = SessionFolders().createFolder(null, "f1", "Canvas: a").createFolder("f1", "f3", "x")
         assertEquals(setOf("f1", "f3"), canvasesInStructure(all, structure).keys)
     }
+
+    @Test
+    fun `a patch changes the frame in place, keeping its id, title and state, against its current revision`() {
+        val state = JsonObject().apply { addProperty("x", 1) }
+        val canvas = setState(two, "C1", state)
+        val doc = "root = Stack([t])\nt = TextContent(\"hi\")"
+        val (patched, merge) = patchFrame(canvas, "C1", doc, openUiRev("root = Stack([])"))
+        val f = patched.frame("C1")
+        assertEquals(doc, f.openui)
+        assertEquals("First", f.title)
+        assertEquals(state, f.state)
+        assertEquals(listOf("C1", "C2"), patched.frames.map { it.id })
+        assertEquals(3, patched.next)
+        assertEquals(listOf("root", "t"), merge.set)
+    }
+
+    @Test
+    fun `a patch against a stale revision is refused with the current one and the document`() {
+        val e = assertThrows<IllegalArgumentException> { patchFrame(two, "C2", "root = Stack([])", "000000000000") }
+        assertContains(e.message!!, "frame C2 is at rev ${openUiRev("root = Stack([a])")}, not 000000000000")
+        assertContains(e.message!!, "root = Stack([a])")
+        assertEquals("no frame 'C9'", assertThrows<IllegalArgumentException> { patchFrame(two, "C9", "root = Stack([])", "x") }.message)
+    }
 }

@@ -1,0 +1,68 @@
+[
+  {
+    "name": "replaces a statement in place and appends a new one",
+    "existing": "root = Stack([a, b])\na = TextContent(\"A\")\nb = TextContent(\"B\")",
+    "patch": "b = TextContent(\"B2\")\nc = TextContent(\"C\")\nroot = Stack([a, b, c])",
+    "merged": "root = Stack([a, b, c])\na = TextContent(\"A\")\nb = TextContent(\"B2\")\nc = TextContent(\"C\")"
+  },
+  {
+    "name": "drops statements root no longer reaches, transitively",
+    "existing": "root = Stack([card])\ncard = Card([h, t])\nh = CardHeader(\"H\")\nt = Table([Col(\"x\", xs)])\nxs = [1, 2]",
+    "patch": "card = Card([h])",
+    "merged": "root = Stack([card])\ncard = Card([h])\nh = CardHeader(\"H\")"
+  },
+  {
+    "name": "deletes with null",
+    "existing": "root = Stack([a, b])\na = TextContent(\"A\")\nb = TextContent(\"B\")",
+    "patch": "root = Stack([a])\nb = null",
+    "merged": "root = Stack([a])\na = TextContent(\"A\")"
+  },
+  {
+    "name": "keeps state variables though nothing references them",
+    "existing": "$tab = \"one\"\nroot = Stack([a])\na = TextContent(\"A\")",
+    "patch": "a = TextContent(\"A2\")",
+    "merged": "$tab = \"one\"\nroot = Stack([a])\na = TextContent(\"A2\")"
+  },
+  {
+    "name": "object keys, members, calls and actions are no references",
+    "existing": "root = Stack([b])\nb = Board([n, m])\nn = Note(\"n\", {x: 0, y: 0})\nm = Note(\"m\", {rightOf: \"n\", gap: 2})\nx = TextContent(\"never\")\nrows = [1]\ny = Button(\"go\", @ToAssistant(\"hi\"))",
+    "patch": "m = Note(\"m\", {below: \"n\", gap: rows.length})",
+    "merged": "root = Stack([b])\nb = Board([n, m])\nn = Note(\"n\", {x: 0, y: 0})\nm = Note(\"m\", {below: \"n\", gap: rows.length})\nrows = [1]"
+  },
+  {
+    "name": "strings with brackets, quotes and comments do not split statements",
+    "existing": "root = Stack([a, b]) // the root\na = TextContent(\"a ( [ { \\\" b = x\")\n# a comment\nb = CodeBlock('js', 'it\\'s ] }')",
+    "patch": "a = TextContent(\"A, \\n with ] inside\")",
+    "merged": "root = Stack([a, b]) // the root\na = TextContent(\"A, \\n with ] inside\")\nb = CodeBlock('js', 'it\\'s ] }')"
+  },
+  {
+    "name": "a string runs on across a real line break",
+    "existing": "root = Stack([a])\na = TextContent(\"A\")",
+    "patch": "a = TextContent(\"one\nb = two\")",
+    "merged": "root = Stack([a])\na = TextContent(\"one\nb = two\")"
+  },
+  {
+    "name": "a statement spans lines inside brackets",
+    "existing": "root = Stack([\n  a,\n  b\n])\na = TextContent(\"A\")\nb = TextContent(\"B\")",
+    "patch": "b = TextContent(\"B2\")",
+    "merged": "root = Stack([\n  a,\n  b\n])\na = TextContent(\"A\")\nb = TextContent(\"B2\")"
+  },
+  {
+    "name": "a ternary continued on a line starting with ?",
+    "existing": "root = Stack([v])\nv = $tab == \"one\"\n  ? one\n  : two\none = TextContent(\"1\")\ntwo = TextContent(\"2\")\n$tab = \"one\"",
+    "patch": "two = TextContent(\"II\")",
+    "merged": "root = Stack([v])\nv = $tab == \"one\"\n  ? one\n  : two\none = TextContent(\"1\")\ntwo = TextContent(\"II\")\n$tab = \"one\""
+  },
+  {
+    "name": "references inside object values and ternaries count",
+    "existing": "root = Stack([b])\nb = Board([n])\nn = Note(\"n\", {x: 0, y: k})\nk = 3",
+    "patch": "n = Note(\"n\", {x: flag ? k : 1, y: 0})\nflag = true",
+    "merged": "root = Stack([b])\nb = Board([n])\nn = Note(\"n\", {x: flag ? k : 1, y: 0})\nk = 3\nflag = true"
+  },
+  {
+    "name": "a patch in a code fence",
+    "existing": "root = Stack([a])\na = TextContent(\"A\")",
+    "patch": "```\na = TextContent(\"fenced\")\n```",
+    "merged": "root = Stack([a])\na = TextContent(\"fenced\")"
+  }
+]
