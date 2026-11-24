@@ -65,39 +65,6 @@ fun onDisk(all: Map<String, Result<BranchReview>>): List<BranchReview> = all.val
 fun inStructure(all: Map<String, Result<BranchReview>>, structure: SessionFolders): Map<String, Result<BranchReview>> =
     all.filterKeys { structure.find(it) != null }
 
-/** Whether folder [id] is or lies in a review folder of [reviews], which [SessionFolders] does not know. */
-fun inReview(structure: SessionFolders, reviews: Set<String>, id: String) = structure.ancestry(id).any { it.id in reviews }
-
-/** Folder [folder] lies where the review rules forbid, inside [holder]. */
-private data class Misplaced(val folder: String, val holder: String)
-
-/** A plan folder that is or lies in a review folder, and a review folder that lies in a review or plan folder. */
-private fun misplaced(s: SessionFolders, reviews: Set<String>) = s.all().mapNotNull { f ->
-    when {
-        f.plan != null -> s.ancestry(f.id).firstOrNull { it.id in reviews }
-        f.id in reviews -> s.ancestry(f.id).dropLast(1).lastOrNull { it.id in reviews || it.plan != null }
-        else -> null
-    }?.let { Misplaced(f.id, it.id) }
-}
-
-/**
- * Why [after] places a folder against the review rules where [before] did not, else null: a review folder holds no plan,
- * whether a change adds one, creates one inside or moves one in, and lies in no review folder nor plan folder. Only
- * placements new in [after] count, so a structure made before a rule existed does not block unrelated writes.
- */
-fun placementProblem(before: SessionFolders, after: SessionFolders, reviews: Set<String>): String? {
-    val old = misplaced(before, reviews).toSet()
-    val m = misplaced(after, reviews).firstOrNull { it !in old } ?: return null
-    val (folder, holder) = after.pathOf(m.folder) to after.pathOf(m.holder)
-    return if (checkNotNull(after.find(m.folder)).plan != null) "'$folder' would be a plan in review folder '$holder', which holds no plan"
-    else "review folder '$folder' would lie in ${if (m.holder in reviews) "review" else "plan"} folder '$holder'"
-}
-
-/** Throws with [placementProblem]'s message; every structure write runs it ([ClaudeSessionsService.updateFolders]). */
-fun refuseReviewPlacement(before: SessionFolders, after: SessionFolders, reviews: Set<String>) {
-    placementProblem(before, after, reviews)?.let { throw IllegalArgumentException(it) }
-}
-
 /** The plan [review] is linked to, while its folder still has one. */
 fun linkedPlan(review: BranchReview, structure: SessionFolders): Plan? = review.plan?.let(structure::find)?.plan
 
@@ -195,7 +162,7 @@ class ReviewService : Disposable {
     /** Every review on disk that could be read, folders gone from the structure included ([onDisk]). */
     val readable get() = onDisk(all)
 
-    /** The folder ids of every `review.json` on disk, readable or not: what [refuseReviewPlacement] knows as review folders. */
+    /** The folder ids of every `review.json` on disk, readable or not: what [dev.myair.folders.refuseKindPlacement] knows as review folders. */
     val onDiskIds: Set<String> get() = all.keys
 
     /** The job of each registry entry that runs one, to its status: what [runStatus] and the mirror read. */

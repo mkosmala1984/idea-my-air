@@ -34,6 +34,8 @@ fun appendedSystemPrompt(briefs: Boolean, filing: Boolean): String = listOfNotNu
         "merged findings and questions; my_air_review_apply changes the summary, chapters, PR number, finding states (only on " +
         "the user's word) and questions; my_air_review_report records a reviewer run's findings and questions, called once at " +
         "the end by the reviewer the run started.",
+    "A canvas folder (kind canvas in my_air_folders_get) shows rich content next to its manager's terminal; any session " +
+        "may show a frame there with my_air_canvas_show, after reading my_air_canvas_language, which explains how.",
     if (!briefs) null else "Call the my_air_set_brief tool once you understand the user's first request, and again whenever the " +
         "goal changes or a task starts or finishes.",
     if (!filing) null else "File and title this session through my_air_set_brief without asking: give title (at most " +

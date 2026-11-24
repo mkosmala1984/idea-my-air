@@ -19,6 +19,7 @@ import dev.myair.actions.declineProjectMcpServers
 import dev.myair.actions.dirName
 import dev.myair.actions.parseBranches
 import dev.myair.actions.popupPoint
+import dev.myair.canvas.CanvasService
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.SessionFolders
 import dev.myair.review.ReviewService
@@ -37,15 +38,16 @@ import kotlin.io.path.isDirectory
 data class ReviewPlace(val parent: String?, val plan: String?)
 
 /**
- * A review started from [place]: into it, or beside the review folder of [reviews] it is or lies in, as review folders
- * do not nest; then beside the plan folder that place is or lies in, linked to it, since a plan folder holds no review.
+ * A review started from [place]: into it, or beside the outermost review folder of [reviews] or canvas folder of
+ * [canvases] it is or lies in, as a review lies in neither; then beside the plan folder that place is or lies in, linked
+ * to it, since a plan folder holds no review.
  */
-fun reviewParent(structure: SessionFolders, reviews: Set<String>, place: String?): ReviewPlace {
+fun reviewParent(structure: SessionFolders, reviews: Set<String>, place: String?, canvases: Set<String> = emptySet()): ReviewPlace {
     if (place == null) return ReviewPlace(null, null)
     require(structure.find(place) != null) { "folder $place is gone" }
     fun parentOf(id: String) = structure.ancestry(id).dropLast(1).lastOrNull()?.id
-    val review = structure.ancestry(place).firstOrNull { it.id in reviews }
-    val outside = if (review == null) place else parentOf(review.id)
+    val holder = structure.ancestry(place).firstOrNull { it.id in reviews || it.id in canvases }
+    val outside = if (holder == null) place else parentOf(holder.id)
     val plan = outside?.let(structure::planFolderAt) ?: return ReviewPlace(outside, null)
     return ReviewPlace(parentOf(plan.id), plan.id)
 }
@@ -106,12 +108,13 @@ fun startReview(project: Project, branch: String, dirHint: Path, place: String?,
     background(project, "Preparing review of $branch", { reviewWorkTree(dirHint, branch, setting).let { Triple(it, Git.baseOf(it), Git.mainCheckout(it)) } }) { (dir, base, main) ->
         val service = ClaudeSessionsService.getInstance()
         val reviews = ReviewService.getInstance().reviews.keys
-        val target = reviewParent(service.folders, reviews, place)
+        val canvases = CanvasService.getInstance().canvases.keys
+        val target = reviewParent(service.folders, reviews, place, canvases)
         val id = UUID.randomUUID().toString()
         val manager = PlanManager(UUID.randomUUID().toString(), dir, main, profile.name)
         ReviewService.getInstance().create(id, BranchReview(branch, base, dir, pr, target.plan, manager, null, emptyList(), emptyList(), emptyList(), emptyList(), emptyMap()))
         service.updateFolders(ChangeSource.UI) { structure ->
-            check(reviewParent(structure, reviews, place) == target) { "the place of the review of $branch changed meanwhile" }
+            check(reviewParent(structure, reviews, place, canvases) == target) { "the place of the review of $branch changed meanwhile" }
             structure.createFolder(target.parent, id, reviewFolderName(structure, target.parent, branch)).assign(manager.session, id)
         }
         ReviewOpener.open(project, id)
@@ -137,7 +140,7 @@ class NewReviewAction(private val start: () -> ReviewStart?, private val enabled
         val start = checkNotNull(start()) { "the row the menu was opened on is gone" }
         fun picked(branch: String) {
             val pr = Messages.showInputDialog(project, "Pull request number of $branch, empty for none:", "New Review", null, "", PrValidator) ?: return
-            val profile = chooseProfile(project) ?: return
+            val profile = chooseProfile(project, "New Review", "Profile the review's manager runs in:") ?: return
             startReview(project, branch, start.dir, start.place, prNumber(pr), profile)
         }
         if (start.branch != null) return picked(start.branch)
@@ -152,12 +155,15 @@ class NewReviewAction(private val start: () -> ReviewStart?, private val enabled
     }
 }
 
-/** The profile a review's manager runs in, asked only when profiles besides `default` are listed; null when cancelled. */
-private fun chooseProfile(project: Project): Profile? {
+/**
+ * The profile a new review's or canvas's manager runs in, asked in a dialog titled [title] with [message] only when
+ * profiles besides `default` are listed, `default` preselected; null when cancelled.
+ */
+fun chooseProfile(project: Project, title: String, message: String): Profile? {
     val all = ProfileStore.getInstance().all()
     if (all.size == 1) return all.single()
     val labels = all.map { profileLabel(it.name) }.toTypedArray()
-    return all.getOrNull(Messages.showChooseDialog(project, "Profile the review's manager runs in:", "New Review", null, labels, profileLabel(DEFAULT_PROFILE)))
+    return all.getOrNull(Messages.showChooseDialog(project, message, title, null, labels, profileLabel(DEFAULT_PROFILE)))
 }
 
 private object PrValidator : InputValidator {

@@ -40,6 +40,10 @@ import com.intellij.openapi.application.ApplicationManager
 import dev.myair.planview.PlanOpener
 import dev.myair.actions.Git
 import dev.myair.actions.NewSessionInDirAction
+import dev.myair.canvas.CanvasService
+import dev.myair.canvasview.CanvasOpener
+import dev.myair.canvasview.NewCanvasAction
+import dev.myair.editor.CANVAS_ICON
 import dev.myair.review.ReviewService
 import dev.myair.reviewview.NewReviewAction
 import dev.myair.reviewview.ReviewOpener
@@ -285,6 +289,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         val planActions = listOf(
             FolderAction("Open Plan", AllIcons.Nodes.Target, on { editing.selectedPlanFolder() != null }, { true }) { PlanOpener.open(project, editing.selectedPlanFolder()!!.id) },
             FolderAction("Open Review", AllIcons.Actions.Preview, on { it is Folder && it.id in ReviewService.getInstance().reviews }, { true }) { ReviewOpener.open(project, editing.selectedFolder()!!.id) },
+            FolderAction("Open Canvas", CANVAS_ICON, on { it is Folder && it.id in CanvasService.getInstance().canvases }, { true }) { CanvasOpener.open(project, editing.selectedFolder()!!.id) },
             FolderAction("New Plan...", AllIcons.Nodes.Target, ::foldersMode, { canEditFolders() && editing.canNewPlan() }, editing::newPlan),
             FolderAction("Make Folder a Plan", null, on { it is Folder && editing.canAddPlan() }, ::canEditFolders, editing::addPlan),
             FolderAction("Remove Plan", null, on { it is Folder && it.plan != null }, { canEditFolders() && editing.canRemovePlan() }, editing::removePlan),
@@ -310,6 +315,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 NewSessionInDirAction("New Claude Session", false, selectedDir, { tree.selectionPaths?.singleOrNull()?.let(::nodeProject) }, editing::selectedPlanStart) { editing.selectedFolder()?.id },
                 NewSessionInDirAction("New Claude Session in Worktree...", true, { selectedDir().takeUnless { selectedItem() is WorktreeRow } }, selectedDir, editing::selectedPlanStart) { editing.selectedFolder()?.id },
                 NewReviewAction({ tree.selectionPaths?.singleOrNull()?.let { reviewStart(it, service.folders) { s -> service.heads[s.workDir]?.branch } } }) { service.foldersError == null },
+                NewCanvasAction({ tree.selectionPath?.let(::targetFolder) }, ::foldersMode, ::canEditFolders),
                 openInIdeaAction(selectedOpenDir), openInTerminalAction(selectedOpenDir), Separator.getInstance(),
                 pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree), TurnIntoPlanAction(inTree),
                 Separator.getInstance(), newFolder, rename, delete, Separator.getInstance(), *planActions.toTypedArray(),
@@ -433,6 +439,8 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         }
         // A review folder's row paints its blocker count, which a triage in the review tab changes alone.
         ReviewService.getInstance().subscribe(toolWindow.disposable) { tree.repaint() }
+        // A folder's row has the canvas icon once its canvas.json is read, which may land after the structure.
+        CanvasService.getInstance().subscribe(toolWindow.disposable) { tree.repaint() }
         renderPinned()
         render()
         ActiveSession.getInstance(project).subscribe(toolWindow.disposable, ::activeChanged)

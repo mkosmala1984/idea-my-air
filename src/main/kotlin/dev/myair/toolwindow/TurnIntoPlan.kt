@@ -18,8 +18,10 @@ import dev.myair.editor.planPrompt
 import dev.myair.editor.turnIntoPlanMessage
 import dev.myair.MyAirSettings
 import dev.myair.review.ReviewService
-import dev.myair.review.inReview
+import dev.myair.folders.inReviewOrCanvas
 import dev.myair.review.managedReviewFolder
+import dev.myair.canvas.CanvasService
+import dev.myair.canvas.managedCanvasFolder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.PlanManager
 import dev.myair.tabs.SessionHosts
@@ -27,13 +29,15 @@ import java.util.UUID
 
 /**
  * Whether [session] may become a plan's manager where it shows (`placeOf`, the top level when nowhere): not in a plan, as
- * plans do not nest, nor in a review folder ([inReview]), and not while it manages a review. Only enables the action:
- * [ClaudeSessionsService.updateFolders] refuses a plan in a review folder whoever writes it.
+ * plans do not nest, nor in a review or canvas folder ([inReviewOrCanvas]), and not while it manages a review or a canvas. Only
+ * enables the action: [ClaudeSessionsService.updateFolders] refuses a plan in a review or canvas folder whoever writes it.
  */
 private fun canTurn(folders: SessionFolders, session: ClaudeSession): Boolean {
     val reviews = ReviewService.getInstance().reviews
+    val canvases = CanvasService.getInstance().canvases
     val place = folders.placeOf(session)
-    return (place == null || folders.planFolderAt(place) == null && !inReview(folders, reviews.keys, place)) && managedReviewFolder(reviews, session.id) == null
+    return (place == null || folders.planFolderAt(place) == null && !inReviewOrCanvas(folders, reviews.keys, canvases.keys, place)) &&
+        managedReviewFolder(reviews, session.id) == null && managedCanvasFolder(canvases, session.id) == null
 }
 
 /**
@@ -55,7 +59,7 @@ class TurnIntoPlanAction(private val selected: () -> List<ClaudeSession>) :
         val project = e.project!!
         val session = selected().single()
         val service = ClaudeSessionsService.getInstance()
-        check(canTurn(service.folders, session)) { "session ${session.id} lies in a plan or review, or manages a review" }
+        check(canTurn(service.folders, session)) { "session ${session.id} lies in a plan, review or canvas, or manages a review or canvas" }
         val parentId = service.folders.placeOf(session)
         val name = askFolderName(project, "Turn into Plan", session.title, parentId, null) ?: return
         val tab = SessionHosts.findTab(session.id)?.takeIf { it.file is ClaudeSessionVirtualFile }

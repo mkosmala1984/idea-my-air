@@ -2,7 +2,7 @@
 
 ## Overview
 
-The My Air tools offered to agents through the IDE's MCP server. They cover finding sessions, starting a session, reading and changing folders, plans, plan managers, undo snapshots, session briefs and reviews. Three toolsets are registered in `src/main/resources/META-INF/my-air-mcp.xml`, which `plugin.xml` loads through an optional `<depends>` on `com.intellij.mcpServer`. Without the MCP server the rest of the plugin still works. The pure parts (paging and time bounds, preset merging, JSON output) are kept apart from the toolsets so they can be tested.
+The My Air tools offered to agents through the IDE's MCP server. They cover finding sessions, starting a session, reading and changing folders, plans, plan managers, undo snapshots, session briefs, reviews and canvases. Four toolsets are registered in `src/main/resources/META-INF/my-air-mcp.xml`, which `plugin.xml` loads through an optional `<depends>` on `com.intellij.mcpServer`. Without the MCP server the rest of the plugin still works. The pure parts (paging and time bounds, preset merging, JSON output) are kept apart from the toolsets so they can be tested.
 
 ## Interface
 
@@ -22,6 +22,12 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - `my_air_review_get(folder)`
   - `my_air_review_apply(folder, changes)`
   - `my_air_review_report(folder, run, commit, findings, questions)`
+- `CanvasMcpToolset.kt`, `class CanvasMcpToolset : McpToolset`, each tool but the last naming the canvas folder by its id, else its path (`withCanvas`):
+  - `my_air_canvas_show(folder, openui, title)`
+  - `my_air_canvas_get(folder)`
+  - `my_air_canvas_apply(folder, changes)`
+  - `my_air_canvas_language()`
+- `CanvasJson.kt`: `resolveCanvasFolder(structure, canvases, folder)`, `data class CanvasCheck(validated, ok, errors, unresolved, orphaned, note)` with `CanvasCheck.of(validated)`, `CanvasCheck.unchecked(note)` and the notes `NO_PAGE`, `TIMEOUT`, `CLOSED`, `INVALID`, `WARNINGS`; `canvasShowJson(folderId, path, frame, check)`, `canvasGetJson(folderId, path, canvas)`.
 - `SessionSearch.kt`:
   - `data class SessionPage(total, offset, sessions, snippets)`
   - `fun findSessions(...)`: a `query` also matches a session found in `content`, the conversation index's answer for it (`SessionIndex.search`, run by the tool off the EDT); `snippets` (and `match` in the JSON) give the text around the hit of each session on the page
@@ -34,7 +40,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
 - `McpJson.kt`, the shapes of the tool results:
   - `startedJson`
   - `SessionPage.toJson`, adding `profile` for a session of another profile than `default`
-  - `SessionFolders.treeJson`
+  - `SessionFolders.treeJson(reviews, canvases)`: `kind` `review` or `canvas` on those folders only
   - `StructureHistory.toJson`
   - `managerSetJson`
   - `SessionFolders.planJson`
@@ -43,7 +49,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
 ## Invariants
 
 - Class names in `my-air-mcp.xml` are resolved only at runtime. Renaming or moving a toolset requires updating that file.
-- All three toolsets set `isExperimental() = false`, since an experimental toolset may be hidden.
+- All four toolsets set `isExperimental() = false`, since an experimental toolset may be hidden.
 - `BriefMcpToolset.isEnabled()` follows `MyAirSettings.briefs`. `folder` and `title` are refused unless `MyAirSettings.fileSessions` is set.
 - `FoldersMcpToolset` reads and changes the state of `ClaudeSessionsService` on the EDT (`onEdt`, `withFolders`), where it lives. `my_air_sessions_find` searches the conversation index on `Dispatchers.IO` first; `my_air_session_start` checks directories and builds the arguments outside the EDT and runs git on `Dispatchers.IO`.
   - `withFolders` reports `foldersError` instead of working on an unreadable `structure.json`.
@@ -75,11 +81,12 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - for a worktree, runs `git` on `Dispatchers.IO` (`Git.repo`, `createWorktree`), which creates a worktree and possibly a branch, then records the base (`rememberBase`);
   - opens a new session tab in the calling project (`ClaudeSessionOpener.startNew`), and so starts a `claude` process.
 - `my_air_review_apply` stores a changed base as `branch.<branch>.myAirBase` on `Dispatchers.IO` (`storeBase`, refused with its reason), then writes `review.json` (`ReviewService.update`), then calls `ActiveSession.baseStored()`.
+- `my_air_canvas_show` writes `canvas.json` (`CanvasService.update` with `addFrame`) first, so the frame is stored whatever the check says, also an invalid one; then it has a canvas page of this IDE (`CanvasRenderers.validator`) parse the document, waiting at most 5 s off the EDT. Without a page, on the timeout or when the page's tab closes first, the result says `validated: false` with a `note`. `my_air_canvas_apply` writes `canvas.json` through `CanvasService.update` (`CanvasChanges.apply`, all or none). The canvas tools do not know their caller; any session may write to any canvas.
 - `my_air_review_report` refuses a `commit` that is not 7 to 40 lowercase hex characters, then writes `review.json` (`ReviewService.update`).
 - `my_air_plan_set_manager`:
   - files the session in the plan folder (`updateFolders(ChangeSource.MCP)`) and stores it in `~/.my-air/plan-managers.json` (`PlanFiles.adopt`), which the folder history does not cover;
   - detaches the previous manager's process (`SessionTerminals.detach`), rebinds every open plan tab of the plan in this IDE (`PlanEditor.showManager`), opens the plan tab in the calling project, sends a running session `planPrompt(manager = true)` (without a process, it goes after `--` as the first prompt of the manager's next start) and closes its own tab.
-- The read tools have no side effects: `my_air_sessions_find`, `my_air_folders_get`, `my_air_plan_get`, `my_air_history_list` and `my_air_review_get`. `my_air_history_list` parses each snapshot file; `my_air_review_get` runs git.
+- The read tools have no side effects: `my_air_sessions_find`, `my_air_folders_get`, `my_air_plan_get`, `my_air_history_list`, `my_air_review_get`, `my_air_canvas_get` and `my_air_canvas_language`. `my_air_history_list` parses each snapshot file; `my_air_review_get` runs git.
 
 ## Verification
 

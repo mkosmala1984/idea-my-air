@@ -26,12 +26,17 @@ The user's folder tree of Folders mode and the plans of plan folders, as one imm
 - `PlanChanges.kt`
   - `object PlanChanges`, with `apply(structure, folderId, changes, today)`.
   - Ops: `set_description`, `add_milestone`, `add_task`, `set_constraints`, `add_decision`, `add_requirement`, `add_evidence`, `set_review`, `add_blocker`, `update`, `move`, `delete`.
+- `KindPlacement.kt`: `placementProblem(before, after, reviews, canvases)`, `refuseKindPlacement(before, after, reviews, canvases)` and `inReviewOrCanvas(structure, reviews, canvases, id)` (what the tree's menus disable plan items with), the rules for review and canvas folders, whose ids `SessionFolders` does not know (see Invariants).
 - `StructureStore.kt`
   - `enum ChangeSource`: `UI`, `AUTO`, `MCP`, `BRIEF`, `RESTORE`, written as a lowercase `label`.
   - `class StructureStore(file, history)`, with `read()` and `@Synchronized update(source, op)`.
 - `StructureHistory.kt`: `data class Snapshot(name, taken, source)` and `class StructureHistory(dir, keep = 20, clock)`, with `snapshot`, `list` (newest first) and `read`.
 
 ## Invariants
+
+### Folder kinds (`KindPlacement.kt`)
+
+A review folder holds no plan and lies in no review or plan folder. A canvas folder holds no plan, review or canvas folder and lies in no review folder; it may lie in a plan folder. Only placements new in a write count, so a structure made before a rule existed does not block unrelated writes. `ClaudeSessionsService.updateFolders` runs `refuseKindPlacement` on every structure write, and the tree's drop runs `placementProblem`; the tree's menus disable New Plan..., Make Folder a Plan and Turn into Plan... where `inReviewOrCanvas` holds.
 
 ### Structure (`SessionFolders.init`)
 

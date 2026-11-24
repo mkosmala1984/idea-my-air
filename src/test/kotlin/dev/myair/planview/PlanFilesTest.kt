@@ -67,11 +67,14 @@ class PlanFilesTest {
 
     private val managers = PlanManagers().set("p", PlanManager("old", cwd, cwd)).set("q", PlanManager("other", cwd, cwd))
     private fun live(job: String? = null) = LiveSession(7, "cli", SessionStatus.IDLE, null, Instant.EPOCH, cwd, Instant.EPOCH, job)
-    private fun refusal(session: String = "s", known: Boolean = true, live: LiveSession? = null, runsHere: Boolean = false, starting: Boolean = false, review: String? = null) =
-        managerRefusal(managers, "p", session, known, live, runsHere, starting, review) { "plans/$it" }
+    private fun refusal(session: String = "s", known: Boolean = true, live: LiveSession? = null, runsHere: Boolean = false, starting: Boolean = false, review: String? = null, canvas: String? = null) =
+        managerRefusal(managers, "p", session, known, live, runsHere, starting, review, canvas) { "plans/$it" }
 
     @Test fun `a review's manager is refused naming the review`() =
         assertEquals("session s manages the review 'rtm/Review: x'", refusal(live = live(), runsHere = true, review = "rtm/Review: x"))
+
+    @Test fun `a canvas's manager is refused naming the canvas`() =
+        assertEquals("session s manages the canvas 'rtm/Canvas: x'", refusal(live = live(), runsHere = true, canvas = "rtm/Canvas: x"))
 
     @Test fun `a known session not running anywhere may manage a plan`() = assertNull(refusal())
 

@@ -24,6 +24,8 @@ import dev.myair.folders.PlanChanges
 import dev.myair.folders.SessionFolders
 import dev.myair.review.ReviewService
 import dev.myair.review.managedReviewFolder
+import dev.myair.canvas.CanvasService
+import dev.myair.canvas.managedCanvasFolder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.planview.PlanEditor
 import dev.myair.planview.PlanFiles
@@ -149,14 +151,16 @@ class FoldersMcpToolset : McpToolset {
 
     @McpTool
     @McpDescription(
-        "The user's folder tree in their order:each folder's path, the directories bound to it (empty for most), plan (for a " +
+        "The user's folder tree in their order:each folder's path, kind (review on a review folder, read it with " +
+            "my_air_review_get; canvas on a canvas folder, whose tab shows the frames my_air_canvas_show adds, read " +
+            "my_air_canvas_language before showing one; absent on other folders), the directories bound to it (empty for most), plan (for a " +
             "plan folder how many of its tasks are done, else null; read it with my_air_plan_get), workdir (where new sessions " +
             "started from it or a subfolder run, unless a nearer folder has one or a bound directory; it holds no sessions; " +
             "else null), the ids of sessions the user filed " +
             "directly in it (sessions whose brief names it show there too but are not listed), and its subfolders. A bound folder also holds every session run in a bound directory or a directory " +
             "below it (worktrees included) not filed in another folder; the most specific binding wins.",
     )
-    suspend fun my_air_folders_get(): String = withFolders { _, folders -> folders.treeJson() }
+    suspend fun my_air_folders_get(): String = withFolders { _, folders -> treeJson(folders) }
 
     @McpTool
     @McpDescription(
@@ -185,7 +189,7 @@ class FoldersMcpToolset : McpToolset {
         val scanned = service.sessions.map { it.id }.toSet()
         val projects = service.sessions.map { it.cwd.toString() }.toSet()
         service.updateFolders(ChangeSource.MCP) { FolderChanges.apply(it, changes, scanned, projects) }
-        service.folders.treeJson()
+        treeJson(service.folders)
     }
 
     @McpTool
@@ -268,7 +272,8 @@ class FoldersMcpToolset : McpToolset {
             val scanned = service.sessions.firstOrNull { it.id == session }
             val refusal = managerRefusal(
                 files.store.read(), folder.id, session, scanned != null || running != null, service.live[session],
-                running != null, running != null && terminals.starting(running), managedReviewFolder(ReviewService.getInstance().reviews, session)?.let(folders::pathOf), folders::pathOf,
+                running != null, running != null && terminals.starting(running), managedReviewFolder(ReviewService.getInstance().reviews, session)?.let(folders::pathOf),
+                managedCanvasFolder(CanvasService.getInstance().canvases, session)?.let(folders::pathOf), folders::pathOf,
             )
             require(refusal == null) { refusal!! }
             val manager = PlanManager(session, running?.cwd ?: scanned!!.cwd, running?.project ?: scanned!!.project, running?.profile?.name ?: scanned!!.profile)
@@ -310,8 +315,12 @@ class FoldersMcpToolset : McpToolset {
             throw IllegalArgumentException("snapshot '$name' is not a valid structure: ${e.message}", e)
         }
         service.updateFolders(ChangeSource.RESTORE) { it.restore(restored) }
-        service.folders.treeJson()
+        treeJson(service.folders)
     }
+
+    /** The folder tree of [folders] with its review and canvas folders marked; on the EDT, where both services keep their state. */
+    private fun treeJson(folders: SessionFolders) =
+        folders.treeJson(ReviewService.getInstance().reviews.keys, CanvasService.getInstance().canvases.keys)
 
     /** The plan folders of [dir], or an error telling the agent how one is made. */
     private fun planFolders(folders: SessionFolders, dir: String): List<Folder> = folders.planFoldersOf(Path.of(dir)).ifEmpty {

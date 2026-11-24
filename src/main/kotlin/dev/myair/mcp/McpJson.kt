@@ -42,16 +42,23 @@ fun SessionPage.toJson(structure: SessionFolders, zone: ZoneId): String = gson.t
 /**
  * The folder tree in the user's order, each folder by path with the ids of the sessions filed directly in it, the
  * directories bound to it, whose sessions filed nowhere else it holds too, and for a plan folder its tasks' progress.
+ * A folder of [reviews] or [canvases] (folder ids, which [SessionFolders] does not know) has `kind` `review` or
+ * `canvas` after its path; other folders have no `kind`.
  */
-fun SessionFolders.treeJson(): String {
-    fun node(folder: Folder, prefix: String): Map<String, Any?> = linkedMapOf(
-        "path" to prefix + folder.name,
-        "dirs" to folder.dirs,
-        "workdir" to folder.workdir,
-        "plan" to folder.plan?.let { "${progress(it.tasks())} tasks done" },
-        "sessions" to folder.items.map { it.id },
-        "folders" to folder.folders.map { node(it, "$prefix${folder.name}/") },
-    )
+fun SessionFolders.treeJson(reviews: Set<String> = emptySet(), canvases: Set<String> = emptySet()): String {
+    fun kind(folder: Folder) = when (folder.id) {
+        in reviews -> "review"
+        in canvases -> "canvas"
+        else -> null
+    }
+    fun node(folder: Folder, prefix: String): Map<String, Any?> = linkedMapOf<String, Any?>("path" to prefix + folder.name).apply {
+        kind(folder)?.let { put("kind", it) }
+        put("dirs", folder.dirs)
+        put("workdir", folder.workdir)
+        put("plan", folder.plan?.let { "${progress(it.tasks())} tasks done" })
+        put("sessions", folder.items.map { it.id })
+        put("folders", folder.folders.map { node(it, "$prefix${folder.name}/") })
+    }
     return gson.toJson(folders.map { node(it, "") })
 }
 

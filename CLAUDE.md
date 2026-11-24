@@ -40,7 +40,7 @@ All state is read from files `claude` writes; the plugin never talks to a `claud
 
 ## How the pieces fit
 
-Packages under `dev.myair`, by feature: `claude` (reading `claude`'s files: `ClaudeSession`, scanner, registry, watcher), `store` (files in `~/.my-air` and `writeAtomically`), `folders` (folder model, `structure.json` store and history, MCP change lists), `mcp` (the toolset and its queries and JSON), `service` (`ClaudeSessionsService`, the taskbar board, tab re-targeting), `editor` (session tabs and `ClaudeSessionOpener`), `tabs` (finding tabs and windows, cross-IDE sync), `actions` (menu actions, worktrees, `Git`), `toolwindow` (the Claude Sessions panel), `prompt` (the new-session panel of the empty editor area), `planview` (the plan tab), `review` and `reviewview` (review folders and their tab), `schedule` (scheduled tasks), `dashboard`, `search`, `branchdiff`. Each package has a `README.md` with its own notes. Tests sit in the package of what they test. Classes named in `plugin.xml` and `my-air-mcp.xml` are found at runtime only, so a move must update them.
+Packages under `dev.myair`, by feature: `claude` (reading `claude`'s files: `ClaudeSession`, scanner, registry, watcher), `store` (files in `~/.my-air` and `writeAtomically`), `folders` (folder model, `structure.json` store and history, MCP change lists), `mcp` (the toolset and its queries and JSON), `service` (`ClaudeSessionsService`, the taskbar board, tab re-targeting), `editor` (session tabs and `ClaudeSessionOpener`), `tabs` (finding tabs and windows, cross-IDE sync), `actions` (menu actions, worktrees, `Git`), `toolwindow` (the Claude Sessions panel), `prompt` (the new-session panel of the empty editor area), `planview` (the plan tab), `review` and `reviewview` (review folders and their tab), `canvas` and `canvasview` (canvas folders and their webview), `schedule` (scheduled tasks), `dashboard`, `search`, `branchdiff`. Each package has a `README.md` with its own notes. Tests sit in the package of what they test. Classes named in `plugin.xml` and `my-air-mcp.xml` are found at runtime only, so a move must update them.
 
 `ClaudeHomeWatcher` feeds `ClaudeSessionsService` (application service), which refreshes on file events plus every 60 s, holds the session list and live statuses, re-targets open tabs by pid (`retarget`) and notifies the tool-window panels.
 
@@ -53,6 +53,7 @@ Feature internals live in `docs/internals/`; read the one for the area you are c
 | Session tree and pinned list, Session Context, Branch Diff integration | [session-ui.md](docs/internals/session-ui.md) |
 | Plan folders (`structure.json` v3-5), plan tab, plan managers | [plans.md](docs/internals/plans.md) |
 | Review folders, reviewers, `my_air_review_*` tools | [reviews.md](docs/internals/reviews.md) |
+| Canvas folders: `canvas.json`, `CanvasService`, placement rules, `my_air_canvas_*` tools and the render check, the canvas tab, its manager and clicks, New Canvas... and the tree | [canvases.md](docs/internals/canvases.md) |
 | Sessions dashboard, scheduled tasks | [dashboard-and-schedule.md](docs/internals/dashboard-and-schedule.md) |
 | `taskbar/` WPF app and `board.json` | [taskbar.md](docs/internals/taskbar.md) |
 | Decompiled JetBrains Air reference | [air-plugin-analysis.md](docs/air-plugin-analysis.md) |

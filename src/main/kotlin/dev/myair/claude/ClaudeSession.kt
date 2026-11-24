@@ -32,6 +32,8 @@ data class ClaudeSession(
     val transcript: Path? = null,
     /** The name of the profile ([dev.myair.store.Profile]) whose directory holds the session. */
     val profile: String = DEFAULT_PROFILE,
+    /** The canvas frames the main conversation added with `my_air_canvas_show`, in call order: how a frame learns its author. */
+    val shownFrames: List<ShownFrame> = emptyList(),
 ) {
     /**
      * Case-insensitive substring match on the title, the cwd, [startBranch] or [branch], the branch checked out where it
@@ -60,6 +62,9 @@ fun mcpServers(tools: Collection<String>): List<String> = tools
     .map { name -> name.split("__", limit = 3).also { check(it.size == 3 && it[0] == "mcp") { "not an MCP tool: $name" } } }
     .groupBy({ it[1] }, { it[2] })
     .filterValues { !AUTH_TOOLS.containsAll(it) }.keys.sorted()
+
+/** Frame [frame] of the canvas folder [folder] (an id), as the result of a `my_air_canvas_show` call names it. */
+data class ShownFrame(val folder: String, val frame: String)
 
 /** An artifact as its latest publish named it; [path] is the local file published. */
 data class Artifact(val id: String, val title: String, val url: String, val path: Path)

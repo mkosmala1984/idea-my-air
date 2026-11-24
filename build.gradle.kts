@@ -23,6 +23,9 @@ dependencies {
         bundledPlugin("org.jetbrains.plugins.terminal")
         bundledModule("intellij.terminal.frontend")
         bundledPlugin("com.intellij.mcpServer")
+        // JCEF moved into the bundled plugin "Web Browser (JCEF)" (com.intellij.modules.jcef); the canvas tab uses it.
+        bundledModule("intellij.platform.ui.jcef")
+        bundledModule("intellij.libraries.jcef")
         bundledModule("intellij.platform.vcs.impl")
         bundledModule("intellij.platform.vcs.core")
         bundledPlugin("com.intellij.platform.vcs")
@@ -50,4 +53,6 @@ tasks.test {
     useJUnitPlatform()
     // ClaudePrintTest removes an inherited CLAUDE_CONFIG_DIR from a child's environment, so the test JVM must have one.
     environment("CLAUDE_CONFIG_DIR", "E:/inherited-claude-config")
+    // CanvasProtocolTest reads the contract it shares with canvas-web's tests from there (tests run in the project dir).
+    inputs.file("canvas-web/src/protocol.json")
 }

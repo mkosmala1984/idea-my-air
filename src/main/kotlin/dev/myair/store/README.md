@@ -4,7 +4,7 @@
 
 The files My Air owns under `~/.my-air`, shared by every IDE running the plugin and by the taskbar app: tab lists and
 focus requests, pins, seen marks, presets, profiles (`profiles.json`), plan managers, reviews
-(`reviews/<folderId>/review.json`), reviewer profiles (`review-profiles.json`) and system prompt files. Each store but
+(`reviews/<folderId>/review.json`), canvases (`canvases/<folderId>/canvas.json`), reviewer profiles (`review-profiles.json`) and system prompt files. Each store but
 `TabStore` parses strictly (`TabStore` reads its files with plain `Gson.fromJson`), and each writes through
 `writeAtomically`, so concurrent readers never see half a file.
 
@@ -40,6 +40,10 @@ focus requests, pins, seen marks, presets, profiles (`profiles.json`), plan mana
   `nextId(prefix)`, `toJson()`, `parseReview(text, source)`; internal `Keys`, the strict key reader `ReviewProfiles.kt`
   shares. `ReviewFiles(root)`: `file`, `readAll()`, `exists`, `read`, `write` of `<root>/<folderId>/review.json`
   (`~/.my-air/reviews`).
+- `Canvas(manager, next, frames)` with `frame(id)` and `newest`, `Frame(id, title, openui, created, author, state)` (`Canvases.kt`);
+  `CANVAS_FORMAT` (1), `MAX_FRAMES` (50), `pruneFrames(canvas, max)`, `toJson()`, `parseCanvas(text, source)`.
+  `CanvasFiles(root)`: `file`, `readAll()`, `exists`, `read`, `write` (prunes, returns what it wrote) of
+  `<root>/<folderId>/canvas.json` (`~/.my-air/canvases`).
 - `Reviewer`, `ReviewProfile`, `parseReviewProfiles(text, source)` (`ReviewProfiles.kt`). `ReviewProfileStore(file)`:
   `read(): Result`, `ReviewProfileStore.INSTANCE` (`~/.my-air/review-profiles.json`).
 
@@ -51,7 +55,8 @@ focus requests, pins, seen marks, presets, profiles (`profiles.json`), plan mana
   `sessions`/`dismissed`/`settled`; `parsePresets` only `presets` at the root and `PRESET_KEYS` per preset;
   `PlanManagers.parse` exactly `session`/`cwd`/`project`, optionally `profile` (`toJson` writes it only when not
   `default`); `parseProfiles` exactly `version` (1) and `profiles` at the root and `name`/`dir` per entry;
-  `parseReview` its `format` (1) and an explicit key set per object (`Keys`); `parseReviewProfiles` only `profiles` at
+  `parseReview` its `format` (1) and an explicit key set per object (`Keys`); `parseCanvas` its `format` first (a newer
+  one throws saying so, before any key it may bring), then an explicit key set per object, `state` an object or null; `parseReviewProfiles` only `profiles` at
   the root, `name`/`reviewers` per profile and `name`/`prompt`, optionally `model`/`effort`/`profile`, per reviewer.
 - Profile names are not blank, not `default` in any case, and unique; directories are absolute, unique, hold no quote
   and are not the default directory. `ProfileStore.write` checks what it writes the same way.
@@ -73,8 +78,8 @@ focus requests, pins, seen marks, presets, profiles (`profiles.json`), plan mana
 - `PinStore.update` and `PlanManagerStore.update` are `@Synchronized` and write only when the value changed.
 - `PresetStore.read` and `ReviewProfileStore.read` parse again only when the file's modification time or size
   changed; a parse failure is returned as a failed `Result`, a missing review profiles file as none.
-  `ProfileStore.all()` is cached the same way but throws on a broken file. `ReviewFiles.readAll` keeps a broken
-  `review.json` as a failed `Result`.
+  `ProfileStore.all()` is cached the same way but throws on a broken file. `ReviewFiles.readAll` and `CanvasFiles.readAll` keep a broken
+  `review.json` or `canvas.json` as a failed `Result`. A canvas keeps at most `MAX_FRAMES` frames, the newest; `next` is never lowered.
 - `SeenStore.read` skips names with a dot (temp files); session ids have none.
 - `TabStore` ignores and deletes the tab file of an IDE whose pid no longer has the recorded start time; a file
   removed between listing and reading is skipped.
@@ -83,7 +88,7 @@ focus requests, pins, seen marks, presets, profiles (`profiles.json`), plan mana
 ## Side Effects
 
 - Creates and writes `~/.my-air/ides/<pid>.json`, `requests/<pid>/*.json`, `pins.json`, `seen/<id>`, `presets.json`,
-  `profiles.json`, `plan-managers.json`, `reviews/<folderId>/review.json` and prompt files; deletes stale IDE files, drained requests and stale prompt files.
+  `profiles.json`, `plan-managers.json`, `reviews/<folderId>/review.json`, `canvases/<folderId>/canvas.json` and prompt files; deletes stale IDE files, drained requests and stale prompt files.
 - `createProfileDirs` creates a profile's `projects/` and `sessions/`.
 - `copyFromDefault` creates files in a new profile's directory and, on failure, deletes everything under it.
 - `TabStore.receiveRequests` starts a daemon thread with a `WatchService` on its inbox; the returned `Closeable` stops it.

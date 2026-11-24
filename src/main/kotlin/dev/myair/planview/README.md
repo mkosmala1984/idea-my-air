@@ -2,11 +2,11 @@
 
 ## Overview
 
-The plan tab. A plan folder opens as an editor tab, with the plan on the left (`PlanPanel`) and the terminal of its manager session on the right (a `dev.myair.editor.SessionPane`). The tab's file is a `PlanVirtualFile` under the `myair-plan://<folderId>` file system, so the platform saves it with the open tabs and restores it on startup. The package also tells the rest of the plugin which session a plan or review tab shows (`sessionFileOf`, `shownSessionFiles`, `tabFileOf`).
+The plan tab. A plan folder opens as an editor tab, with the plan on the left (`PlanPanel`) and the terminal of its manager session on the right (a `dev.myair.editor.SessionPane`). The tab's file is a `PlanVirtualFile` under the `myair-plan://<folderId>` file system, so the platform saves it with the open tabs and restores it on startup. The package also tells the rest of the plugin which session a plan, review or canvas tab shows (`sessionFileOf`, `shownSessionFiles`, `tabFileOf`).
 
 ## Interface
 
-- `FolderTabs.kt`, shared by plan and review tabs: `abstract class FolderTabFile(folderId, name)`, `abstract class FolderTabFileSystem(protocol, fileOf)`, `fun parseFolderTabPath(path)` and `class FolderTabs<F>(create)`, with `file`, `manager`, `running`, `profileToCheck(folderId, profile)`, `setManager`, `managerFile`, `forgetManager`, `tabOf`, `openHere<E>(project, folderId)` and `editors<E>(folderId)`; `fun managerProfileRefusal(name, profiles)`: why a manager cannot start in that profile (unlisted, no My Air MCP server per `managerToolsRefusal`, or a file that cannot be read), null when it can.
+- `FolderTabs.kt`, shared by plan, review and canvas tabs: `abstract class FolderTabFile(folderId, name)`, `abstract class FolderTabFileSystem(protocol, fileOf)`, `fun parseFolderTabPath(path)` and `class FolderTabs<F>(create)`, with `file`, `manager`, `running`, `profileToCheck(folderId, profile)`, `setManager`, `managerFile`, `forgetManager`, `tabOf`, `openHere<E>(project, folderId)` and `editors<E>(folderId)`; `fun managerProfileRefusal(name, profiles)`: why a manager cannot start in that profile (unlisted, no My Air MCP server per `managerToolsRefusal`, or a file that cannot be read), null when it can.
 - `ManagerTabEditor.kt`: `abstract class ManagerTabEditor : FileEditor, SessionPaneHost`, a folder's content beside its manager's terminal, which exposes `pane`, `gone` and `showManager()`.
 - `PlanEditor.kt`: `class PlanEditorProvider` (type id `myair-plan`, `HIDE_DEFAULT_EDITOR`) and `class PlanEditor : ManagerTabEditor`.
 - `PlanFiles.kt`:
@@ -14,7 +14,7 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
   - `class PlanFileSystem` (`PROTOCOL = "myair-plan"`).
   - `fun managerStart(existing, newId, cwd, project, profile, hasTranscript)`, `hasTranscript` taking the session id and profile name.
   - `fun hasManagerTranscript(sessionId, profile)`.
-  - `fun managerRefusal(managers, folderId, sessionId, known, live, runsHere, starting, review, pathOf)`: why a session cannot become a plan's manager, null when it can.
+  - `fun managerRefusal(managers, folderId, sessionId, known, live, runsHere, starting, review, canvas, pathOf)`: why a session cannot become a plan's manager, null when it can.
   - `@Service(APP) class PlanFiles`, with `store`, `file(folderId)`, `manager(folderId)`, `profileToCheck(folderId)`, `startManager(folder, structure, ideProject)`, `adopt(folderId, manager, running, firstArgs)`, `tabs`, `planOf(file)` and `forgetManager(folderId)`.
 - `PlanOpener.kt`: `object PlanOpener`, with `open(project, folderId)`, `openHere(project, folderId)` and `editors(folderId)`.
 - `NewPlan.kt`: `fun startAsPlan(project, name, sessionProject, cwd, id, args, profile)`: a new plan folder (`planParentFor`) managed by a new session of `profile`.
@@ -62,7 +62,7 @@ The plan tab. A plan folder opens as an editor tab, with the plan on the left (`
 - `PlanEdit.current` returns null once its item is gone. `PlanPanel` then drops that open edit.
 - `PlanPanel.render` rebuilds only when what it shows changes: the plan, the open edit, session ids, and per session the title, live status, unread mark and short age. It keeps the open edit's text component, so the text, caret and focus survive.
 - `inlineField` and `inlineArea` bind Enter, Ctrl+Enter and Esc through `registerCustomShortcutSet`, so Esc does not reach the editor.
-- `sessionFileOf` returns the manager of a plan tab only while its folder still `hasPlan`, and of a review tab while its folder exists. `tabFileOf` gives a manager's plan or review tab.
+- `sessionFileOf` returns the manager of a plan tab only while its folder still `hasPlan`, and of a review or canvas tab while its folder exists. `tabFileOf` gives a manager's plan, review or canvas tab.
 
 ## Side Effects
 

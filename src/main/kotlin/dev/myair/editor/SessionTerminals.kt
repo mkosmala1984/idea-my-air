@@ -24,6 +24,7 @@ import com.intellij.notification.NotificationType
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.planview.PlanFiles
 import dev.myair.reviewview.ReviewTabs
+import dev.myair.canvasview.CanvasTabs
 import dev.myair.store.Homes
 import dev.myair.store.ProfileStore
 import dev.myair.store.addedProfileEnv
@@ -224,9 +225,9 @@ class SessionTerminals(private val scope: CoroutineScope) : Disposable {
         file.job = job
         // claude refuses or forks a `--resume` of a session a job runs; `attach` opens the job itself, with its own prompt.
         val managed = PlanFiles.getInstance().planOf(file)?.folderId
-        // A review's manager gets its review's prompt, whatever plan task its brief names; claude reads the file again after a
-        // compaction, so it lives with the process.
-        val prompt = if (job != null) null else ReviewTabs.getInstance().managerPrompt(file)
+        // A review's or canvas's manager gets its folder's prompt, whatever plan task its brief names; claude reads the file
+        // again after a compaction, so it lives with the process.
+        val prompt = if (job != null) null else ReviewTabs.getInstance().managerPrompt(file) ?: CanvasTabs.getInstance().managerPrompt(file)
             ?: sessionPlan(folders, file.sessionId, service.sessions.firstOrNull { it.id == file.sessionId }, file.planStart, managed)
                 ?.let { (folder, task) -> planPrompt(folders, folder, task, settings.briefs, manager = managed != null) }
         val promptFile = prompt?.let { PromptFiles.write(Homes.myAir.resolve("prompts"), it) }

@@ -13,7 +13,7 @@ import dev.myair.folders.PlanTask
 import dev.myair.folders.SessionFolders
 import dev.myair.folders.startFolder
 import dev.myair.review.blockerCount
-import dev.myair.review.placementProblem
+import dev.myair.folders.placementProblem
 import dev.myair.reviewview.ReviewStart
 import dev.myair.store.BranchReview
 import java.nio.file.Path
@@ -270,13 +270,13 @@ class Drop(val change: (SessionFolders) -> SessionFolders, val path: TreePath, v
  * one it is dropped in front of or after the last; a task into a milestone of its plan, before the task it is dropped in
  * front of or last. A session whose brief names a task stays under it, so it does not move, and no session drops onto a
  * milestone or task, which only a brief puts it under. A plan folder does not go into another, nor a folder where the
- * review folders of [reviews] forbid it ([placementProblem]). [childIndex] is JTree's: -1 drops onto the node, otherwise between its children.
+ * review folders of [reviews] and canvas folders of [canvases] forbid it ([placementProblem]). [childIndex] is JTree's: -1 drops onto the node, otherwise between its children.
  * Sessions land in the folder of whatever they are dropped on or into, and that folder is what the drop shows; under
  * [UnfiledSessions] they stay there ([SessionFolders.unfile]), whatever their project or brief say. A folder goes into a folder or the top level, before the folder it is dropped in front of, or after the last one;
  * the drop shows that spot, not the pointer's, since [RecentSessions] always comes before the folders and [UnfiledSessions] after them. Nothing drops on or into [RecentSessions] or a [WorktreesGroup]. A project
  * lands the same way, as a new folder named after its directory and bound to it.
  */
-fun dropChange(structure: SessionFolders, reviews: Set<String>, dragged: List<Any>, path: TreePath, childIndex: Int): Drop? {
+fun dropChange(structure: SessionFolders, reviews: Set<String>, dragged: List<Any>, path: TreePath, childIndex: Int, canvases: Set<String> = emptySet()): Drop? {
     val target = path.lastPathComponent as DefaultMutableTreeNode
     // Recent sessions and worktrees are views of the others: nothing is filed into them.
     if (path.path.any { (it as DefaultMutableTreeNode).userObject.let { item -> item == RecentSessions || item is WorktreesGroup } }) return null
@@ -301,7 +301,7 @@ fun dropChange(structure: SessionFolders, reviews: Set<String>, dragged: List<An
         is Folder -> {
             val current = structure.find(moved.id) ?: return null
             if (current.subtree().any { it.id == parentId } || structure.nameTaken(parentId, moved.name, except = moved.id) || !structure.canHold(parentId, current) ||
-                placementProblem(structure, structure.moveFolder(moved.id, parentId, 0), reviews) != null) return null
+                placementProblem(structure, structure.moveFolder(moved.id, parentId, 0), reviews, canvases) != null) return null
             { index -> { it.moveFolder(moved.id, parentId, index) } }
         }
         else -> {

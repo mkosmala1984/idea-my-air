@@ -6,11 +6,12 @@ This package reads the files that `claude` and Claude Desktop write. It covers s
 
 ## Interface
 
-- `ClaudeSession` (`ClaudeSession.kt`): one session as read from its transcript. Fields: id, cwd, title, `lastMessage`, changed files, the first prompts, `brief`, `project`, `desktop`, `addedDirs`, `model`, `effort`, `artifacts`, `background`, `skills`, `mcpServers`, `workDir`, `startBranch`, `continuedIn`, `lastBranch` (the branch at the latest message), `asks` (the agent's latest text ends with `?` and no human prompt followed), `transcript` (the file read) and `profile` (the profile whose directory holds it; set by `service/ProfileReads.kt`, `default` from the scanner).
+- `ClaudeSession` (`ClaudeSession.kt`): one session as read from its transcript. Fields: id, cwd, title, `lastMessage`, changed files, the first prompts, `brief`, `project`, `desktop`, `addedDirs`, `model`, `effort`, `artifacts`, `background`, `skills`, `mcpServers`, `workDir`, `startBranch`, `continuedIn`, `lastBranch` (the branch at the latest message), `asks` (the agent's latest text ends with `?` and no human prompt followed), `transcript` (the file read), `shownFrames` (the canvas frames the main conversation added with `my_air_canvas_show`, `ShownFrame(folder, frame)`, read from each call's result, an error result or one that is not that JSON skipped) and `profile` (the profile whose directory holds it; set by `service/ProfileReads.kt`, `default` from the scanner).
   - `matches(query, branch)`: every word of the query must match, case-insensitively, the title, the cwd, `startBranch`, `branch` or the `profile` unless it is `default`.
   - `isWithin(days, now)`: whether the last message falls within the given number of days.
   - `toString()` returns the id.
 - `queryWords(query)` (`ClaudeSession.kt`): the words of a search query, split on spaces, as `matches` and `search/SessionIndex` take them.
+- `ShownFrame(folder, frame)` (`ClaudeSession.kt`): a frame of a canvas folder (by id) that a session showed; `dev.myair.canvas.learnAuthors` turns these into frame authors.
 - `Artifact`, `BackgroundTask` (with `Kind`, `End`, `Status`, `Usage`, `Agents`) (`ClaudeSession.kt`): artifacts and background tasks found in a transcript.
 - `mcpServers(tools)` (`ClaudeSession.kt`): the sorted server names taken from `mcp__<server>__<tool>` names. A server whose only tools are `authenticate`/`complete_authentication` is left out.
 - `Path.isAtOrUnder(dir)` (`ClaudeSession.kt`): a text comparison, equal to `dir` or below `dir` plus the separator.

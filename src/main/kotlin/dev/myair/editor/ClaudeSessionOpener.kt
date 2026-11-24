@@ -13,6 +13,9 @@ import dev.myair.planview.managedPlanFolder
 import dev.myair.review.ReviewService
 import dev.myair.review.managedReviewFolder
 import dev.myair.reviewview.ReviewOpener
+import dev.myair.canvas.CanvasService
+import dev.myair.canvas.managedCanvasFolder
+import dev.myair.canvasview.CanvasOpener
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.NEW_SESSION_TITLE
 import dev.myair.store.Profile
@@ -44,11 +47,13 @@ object ClaudeSessionOpener {
         if (tab != null) return SessionHosts.focus(tab)
         if (TabsSync.getInstance().focusElsewhere(session.id)) return
         val service = ClaudeSessionsService.getInstance()
-        // A manager has no tab of its own: its plan's or review's tab shows its terminal.
+        // A manager has no tab of its own: its plan's, review's or canvas's tab shows its terminal.
         val planFolder = managedPlanFolder(PlanFiles.getInstance().store.read(), service.folders, session.id)
         if (planFolder != null) return PlanOpener.open(project, planFolder)
         val reviewFolder = managedReviewFolder(ReviewService.getInstance().reviews, session.id)
         if (reviewFolder != null) return ReviewOpener.open(project, reviewFolder)
+        val canvasFolder = managedCanvasFolder(CanvasService.getInstance().canvases, session.id)
+        if (canvasFolder != null) return CanvasOpener.open(project, canvasFolder)
         val live = service.live[session.id]
         // A background job runs without a window of its own; the tab attaches to it rather than starting a second process.
         if (live != null && live.job == null) {

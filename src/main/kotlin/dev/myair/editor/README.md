@@ -2,7 +2,7 @@
 
 ## Overview
 
-This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `myair-session://<id>?cwd=…&project=…`, plus `&profile=…` for a non-default profile) opens a `ClaudeSessionEditor`: a `SessionHeader` above a `SessionPane`. The pane shows a terminal that `SessionTerminals` (an application service) runs apart from the tab. `SessionTerminals` builds the `claude` command line: the system prompt, the prompt file (a review manager's or a plan's) and the brief-reminder hook. It decides when a process detaches, retires or ends, and asks before a close interrupts one. `ClaudeSessionOpener` is the single entry point for opening or starting a session. The package also holds tab icons, tab colours and tooltips.
+This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `myair-session://<id>?cwd=…&project=…`, plus `&profile=…` for a non-default profile) opens a `ClaudeSessionEditor`: a `SessionHeader` above a `SessionPane`. The pane shows a terminal that `SessionTerminals` (an application service) runs apart from the tab. `SessionTerminals` builds the `claude` command line: the system prompt, the prompt file (a review or canvas manager's, or a plan's) and the brief-reminder hook. It decides when a process detaches, retires or ends, and asks before a close interrupts one. `ClaudeSessionOpener` is the single entry point for opening or starting a session. The package also holds tab icons, tab colours and tooltips.
 
 ## Interface
 
@@ -10,7 +10,7 @@ This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `m
   - `ClaudeSessionOpener.open(project, session, switchToWindow)` (`ClaudeSessionOpener.kt`). It goes through these steps in order:
     1. it focuses an existing tab in this IDE (`SessionHosts.findTab`);
     2. it focuses a tab in another IDE (`TabsSync.focusElsewhere`);
-    3. it opens the plan tab when the session is a plan's manager (`PlanOpener`), else the review tab when it is a review's manager (`managedReviewFolder`, `ReviewOpener`);
+    3. it opens the plan tab when the session is a plan's manager (`PlanOpener`), else the review tab when it is a review's manager (`managedReviewFolder`, `ReviewOpener`), else the canvas tab when it is a canvas's manager (`managedCanvasFolder`, `CanvasOpener`);
     4. it warns when the session runs elsewhere other than as a background job (`RunningElsewhere`);
     5. it refuses a session whose `cwd` is gone ("Cannot Resume Session");
     6. it opens a new tab with `--resume <id>` in the session's profile.
@@ -43,7 +43,7 @@ This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `m
 - Tab marks: `TabMark`, `tabMark(...)` and `tabTooltip(title, sessionProject, worktree, profile)` (`TabMark.kt`).
 - Icons and colours (`SessionIcons.kt`):
   - `sessionIcon(status, unread)`, `projectIcon(dir, name, size)` and `projectColor(dir, onRead)`;
-  - the icon constants `CLAUDE_ICON`, `NEW_SESSION_ICON`, `NEW_SESSION_HERE_ICON`, `CONTINUE_SESSION_ICON`, `OFFLINE_SESSION_ICON`, `UNREAD_SESSION_ICON`, `NEEDS_INPUT_ICON`, `REVIEW_ICON` and `WORKING_ICON` (an `AnimatedIcon` of the 8 internal `WORKING_FRAMES` at 100 ms);
+  - the icon constants `CLAUDE_ICON`, `NEW_SESSION_ICON`, `NEW_SESSION_HERE_ICON`, `CONTINUE_SESSION_ICON`, `OFFLINE_SESSION_ICON`, `UNREAD_SESSION_ICON`, `NEEDS_INPUT_ICON`, `REVIEW_ICON`, `CANVAS_ICON` (the platform's `AllIcons.Toolwindows.WebToolWindow`) and `WORKING_ICON` (an `AnimatedIcon` of the 8 internal `WORKING_FRAMES` at 100 ms);
   - the colours `UNREAD_BLUE`, `NEEDS_INPUT_AMBER` and `CLAUDE_ORANGE`.
 - `plugin.xml` registrations:
   - `projectCloseHandler` `ProjectCloseConfirmation`;
@@ -84,7 +84,7 @@ This package covers session tabs. A tab file (`ClaudeSessionVirtualFile`, URL `m
   - The terminal uses the Ghostty emulator and `NON_SHELL` process type, runs in the file's `cwd`, and sets `CLAUDE_CODE_NO_FLICKER=1` and `CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL=true`.
   - The command is one of:
     - `claude attach <jobId>` for a session that a job runs;
-    - `claude --append-system-prompt <appendedSystemPrompt>`, then `--settings ~/.my-air/hooks/brief-reminder.json` when briefs are on, then `--append-system-prompt-file <~/.my-air/prompts/…>` for a review's manager (`ReviewTabs.managerPrompt`), else for a session in a plan, then the file's `claudeArgs`.
+    - `claude --append-system-prompt <appendedSystemPrompt>`, then `--settings ~/.my-air/hooks/brief-reminder.json` when briefs are on, then `--append-system-prompt-file <~/.my-air/prompts/…>` for a review's manager (`ReviewTabs.managerPrompt`), else for a canvas's manager (`CanvasTabs.managerPrompt`), else for a session in a plan, then the file's `claudeArgs`.
   - A coroutine waits for the session state `Terminated`, then calls `ended` on the EDT.
 - The prompt file is written through `PromptFiles.write`. It is deleted on `close`, and when the process ends by itself.
 - `writeBriefReminderSettings` writes `<dir>/brief-reminder.json` atomically. The hook starts `powershell -EncodedCommand` on every prompt and reads the transcript.

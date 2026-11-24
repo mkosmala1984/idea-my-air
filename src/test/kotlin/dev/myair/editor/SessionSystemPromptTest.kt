@@ -47,6 +47,8 @@ class SessionSystemPromptTest {
         assertEquals(setOf("my_air_review_get", "my_air_review_apply", "my_air_review_report"), reviewTools)
         val tools = folderTools + reviewTools
         settings.forEach { (briefs, filing) -> tools.forEach { assertTrue(it in appendedSystemPrompt(briefs, filing), it) } }
+        // Ordinary sessions get no OpenUI reference, only where to read it.
+        settings.forEach { (briefs, filing) -> listOf("my_air_canvas_show", "my_air_canvas_language").forEach { assertTrue(it in appendedSystemPrompt(briefs, filing), it) } }
     }
 
     @Test

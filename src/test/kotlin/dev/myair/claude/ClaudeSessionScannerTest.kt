@@ -490,6 +490,26 @@ class ClaudeSessionScannerTest {
     private fun result(id: String, error: Boolean = false, text: String = "ok", array: Boolean = false) =
         user("""[{"tool_use_id":"$id","type":"tool_result","content":${if (array) """[{"type":"text","text":"$text"}]""" else "\"$text\""}${if (error) ""","is_error":true""" else ""}}]""")
 
+    private fun canvasCall(id: String, server: String = "idea") =
+        assistant("""{"type":"tool_use","id":"$id","name":"mcp__${server}__my_air_canvas_show","input":{"folder":"Canvas: a","openui":"root = Stack([])"}}""")
+
+    private fun canvasResult(folder: String, frame: String) = """{\"folder\": \"$folder\", \"path\": \"Canvas: a\", \"frame\": \"$frame\", \"stored\": true}"""
+
+    @Test
+    fun `the frames a session showed on canvases are read from the results of the show tool`() {
+        val file = write("s1",
+            user("\"prompt\""),
+            canvasCall("t1"), result("t1", text = canvasResult("f1", "C1"), array = true),
+            canvasCall("t2", server = "my-ide"), result("t2", text = canvasResult("f1", "C2")),
+            canvasCall("t3"), result("t3", text = "no canvas folder", error = true),
+            canvasCall("t4"), result("t4", text = "not json"),
+        )
+        val first = ClaudeSessionScanner.read(file, ClaudeSessionScanner.Transcript.EMPTY)
+        assertEquals(listOf(ShownFrame("f1", "C1"), ShownFrame("f1", "C2")), first.toSession(file)!!.shownFrames)
+        file.appendText(canvasCall("t5") + "\n" + result("t5", text = canvasResult("f2", "C7")) + "\n")
+        assertEquals(listOf("C1", "C2", "C7"), ClaudeSessionScanner.read(file, first).toSession(file)!!.shownFrames.map { it.frame })
+    }
+
     @Test
     fun `the brief's folder is read from the result in either content shape`() {
         val s = parse(write("s1",

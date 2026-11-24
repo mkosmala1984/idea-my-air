@@ -39,8 +39,8 @@ other files are pure functions the service and the UI call, kept here so plain J
   `updatePins` write, so a read from before a change cannot undo it.
 - A refresh exception is logged as an IDE error (`thisLogger().error`) and drops that refresh; a broken `structure.json`
   sets `foldersError` instead of hiding the sessions, and `updateFolders` throws (`check`) while it is set.
-- `updateFolders` also throws when its result places a plan or review folder where a review folder forbids it
-  (`refuseReviewPlacement` over `ReviewService.onDiskIds`).
+- `updateFolders` also throws when its result places a plan, review or canvas folder where the kind rules forbid it
+  (`refuseKindPlacement` over `ReviewService.onDiskIds` and `CanvasService.onDiskIds`).
 - `mergeSessions` and `mergeLive` throw on one id in two profiles, naming both directories; `requireProfileDirs` throws
   when a profile lacks `projects/` or `sessions/`. `profileHome` throws for an unlisted name.
 - The readers are rebuilt on the refresh thread when `ProfileStore.all()` changed, the old ones closed first.
@@ -74,7 +74,7 @@ other files are pure functions the service and the UI call, kept here so plain J
 - Starts `ScheduledRuns` in `init`.
 - Ends idle detached terminals on every refresh (`SessionTerminals.retireIdle`), holding `ScheduledRuns.held(unread)`.
 - Mutates open tab files (`sessionId`, `title`, `status`, `unread`, `mark`) and repaints their tabs
-  (`updateFilePresentation`); carries folder filing, plan managers and review managers (`ReviewService.moveManagers`, after `carryOver`) over to a
+  (`updateFilePresentation`); carries folder filing, plan managers and review and canvas managers (`ReviewService.moveManagers`, then `CanvasService.moveManagers`, after `carryOver`) over to a
   switched session id.
 
 ## Verification

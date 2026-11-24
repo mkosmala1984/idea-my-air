@@ -1,5 +1,6 @@
 package dev.myair.editor
 
+import com.intellij.icons.AllIcons
 import com.intellij.ide.ProjectIconPalette
 import com.intellij.ide.RecentProjectIconHelper
 import com.intellij.openapi.application.ApplicationManager
@@ -72,6 +73,9 @@ val NEEDS_INPUT_ICON: Icon = IconLoader.getIcon("/icons/needsInput.svg", Session
 
 /** A review folder: an eye. */
 val REVIEW_ICON: Icon = IconLoader.getIcon("/icons/review.svg", SessionStatus::class.java)
+
+/** A canvas folder and its tab: the platform's web icon, distinct from a plan's target and a review's eye. */
+val CANVAS_ICON: Icon get() = AllIcons.Toolwindows.WebToolWindow
 
 /** Claude's orange, as [WORKING_ICON] paints its rays. */
 val CLAUDE_ORANGE = Color(0xD97757)

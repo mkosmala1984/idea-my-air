@@ -3,5 +3,6 @@
     <mcpToolset implementation="dev.myair.mcp.FoldersMcpToolset"/>
     <mcpToolset implementation="dev.myair.mcp.BriefMcpToolset"/>
     <mcpToolset implementation="dev.myair.mcp.ReviewMcpToolset"/>
+    <mcpToolset implementation="dev.myair.mcp.CanvasMcpToolset"/>
   </extensions>
 </idea-plugin>

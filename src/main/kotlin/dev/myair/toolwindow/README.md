@@ -13,7 +13,7 @@ Entry points (named in `plugin.xml`, found at runtime only):
 
 Claude Sessions panel:
 
-- `SessionsPanel` (`SessionsPanel.kt`): pinned list (`TrailerList`, `PinnedRenderer`), tree (`DropLineTree`, `SessionRenderer`), toolbar (This Work Tree a toggle of its own), search with its Search in Conversations toggle, and View Options (Folders mode, Show All Sessions, single click, follow active tab, max age, Sessions in Recent (`RecentCountOption`), `Density`, Increase/Decrease/Reset Font Size, Refresh).
+- `SessionsPanel` (`SessionsPanel.kt`): the tree's menu (New Review... and New Canvas... from `reviewview` and `canvasview`; Open Plan, Open Review and Open Canvas on such folders), pinned list (`TrailerList`, `PinnedRenderer`), tree (`DropLineTree`, `SessionRenderer`), toolbar (This Work Tree a toggle of its own), search with its Search in Conversations toggle, and View Options (Folders mode, Show All Sessions, single click, follow active tab, max age, Sessions in Recent (`RecentCountOption`), `Density`, Increase/Decrease/Reset Font Size, Refresh).
 - Tree model (`SessionTree.kt`):
   - Builders: `projectsTree`, `foldersTree`.
   - Row types: `ChangedFile`, `WorkDirRow`, `AddedDir`, `BranchRow`, `BriefGroup`, `BriefGoal`, `BriefTaskRow`, `AgentsGroup`, `AgentRow`, `FilesGroup`, `MilestoneRow`, `PlanTaskRow`, `NoTask`, `UnfiledSessions`, `RecentSessions` (first in Folders mode; `RECENT_COUNT` = 10 by default, View Options offers `RECENT_COUNTS`), `WorktreesGroup`, `WorktreeRow`.
@@ -50,15 +50,16 @@ Session Context panel:
 - Drops (`dropChange`):
   - Refused into `RecentSessions` and `WorktreesGroup`, which are views only.
   - A session is refused on the root, under a `MilestoneRow` or `PlanTaskRow`, and when any dragged session has a task.
-  - A folder is refused when the target is inside the folder itself, when its name is already taken under the target, when the target cannot hold it (`canHold`), or when the move puts a plan in a review folder or a review folder in a review or plan folder (`placementProblem` over the `reviews` passed in, the ids of every `review.json` on disk).
+  - A folder is refused when the target is inside the folder itself, when its name is already taken under the target, when the target cannot hold it (`canHold`), or when the move breaks a kind rule: a plan in a review or canvas folder, a review folder in a review, plan or canvas folder, a canvas folder in a review or canvas folder (`placementProblem` over the `reviews` and `canvases` passed in, the ids of every `review.json` and `canvas.json` on disk).
   - A folder or project is refused on any target but a `Folder` or the root.
   - A project is refused when it is bound to a folder already (`projectFolder`) or its name is taken under the target.
   - A milestone or task moves only within its own plan; a milestone dropped onto a row rather than between rows is refused.
   - A drop under `UnfiledSessions` unfiles the session.
 - `FolderDrop` drags either sessions alone or exactly one folder, project, milestone or task. It refuses every drop while `canEdit()` is false (not in Folders mode, or `foldersError` is set).
-- Plans do not nest (`canNewPlan`). Folder names must not be blank, must contain no `/` and must be unique among siblings (`askFolderName`). A directory bound to one folder cannot be bound to another (`bindDirectory`).
-- A milestone with open tasks cannot be deleted (`deleteMilestone`). Remove Plan is enabled only for a plan with no milestones, constraints, decisions, requirements or review (`canRemovePlan`, `Plan.removable`). Delete and Remove Plan first ask whether to interrupt a plan or review manager this IDE runs that is working (`managersConfirmed`).
-- Turn into Plan is enabled only for a session that shows outside any plan or review folder and manages no review (`canTurn`), nor a plan (`PlanManagerStore`).
+- Plans do not nest, and none is made in a review or canvas folder (`canNewPlan`, `canAddPlan`, Turn into Plan's `canTurn`, all through `inReviewOrCanvas`). Folder names must not be blank, must contain no `/` and must be unique among siblings (`askFolderName`). A directory bound to one folder cannot be bound to another (`bindDirectory`).
+- A milestone with open tasks cannot be deleted (`deleteMilestone`). Remove Plan is enabled only for a plan with no milestones, constraints, decisions, requirements or review (`canRemovePlan`, `Plan.removable`). Delete and Remove Plan first ask whether to interrupt a plan, review or canvas manager this IDE runs that is working (`managersConfirmed`).
+- Turn into Plan is enabled only for a session that shows outside any plan, review or canvas folder and manages no review or canvas (`canTurn`), nor a plan (`PlanManagerStore`).
+- A folder of `CanvasService.onDiskIds` has `CANVAS_ICON` (after the plan and review icons), repainted on every `CanvasService` change; Open Canvas opens its tab (`CanvasOpener.open`). A double-click or Enter on it toggles it, as on a review folder.
 - Unexpected input fails loudly:
   - `folderSummary` throws on an unknown node type.
   - `insertLine` throws on a drop into a collapsed or hidden parent.

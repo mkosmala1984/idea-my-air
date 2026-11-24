@@ -136,6 +136,20 @@ class SessionTreeTest {
     }
 
     @Test
+    fun `a folder drop that puts a canvas in a canvas or review, or a plan in a canvas, is refused, a canvas into a plan is not`() {
+        val s = SessionFolders().createFolder(null, "c", "Canvas: a").createFolder(null, "c2", "Canvas: b").createFolder(null, "r", "Review: a")
+            .createFolder(null, "p", "plan", plan = Plan())
+        val root = foldersTree(s, emptyList(), NO_BRANCH, NO_WORKTREES, null)
+        fun row(id: String) = TreePath(arrayOf(root, root.children().toList().first { ((it as DefaultMutableTreeNode).userObject as? Folder)?.id == id }))
+        fun drop(id: String, onto: String) = dropChange(s, setOf("r"), listOf(s.find(id)!!), row(onto), -1, canvases = setOf("c", "c2"))
+        assertNull(drop("c2", "c"))
+        assertNull(drop("c", "r"))
+        assertNull(drop("p", "c"))
+        assertNull(drop("r", "c"))
+        assertEquals(listOf("c"), drop("c", "p")!!.change(s).children("p").map { it.id })
+    }
+
+    @Test
     fun `a folder drop shows where the folder lands, not where the pointer is`() {
         val root = foldersTree(structure, sessions, NO_BRANCH, NO_WORKTREES, null)
         val rtm = TreePath(arrayOf(root, root.getChildAt(1)))

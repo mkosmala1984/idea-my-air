@@ -17,6 +17,8 @@ import dev.myair.claude.LiveSession
 import dev.myair.claude.SessionStatus
 import dev.myair.claude.TaskStatus
 import dev.myair.editor.REVIEW_ICON
+import dev.myair.editor.CANVAS_ICON
+import dev.myair.canvas.CanvasService
 import dev.myair.editor.projectIcon
 import dev.myair.editor.sessionIcon
 import dev.myair.folders.Folder
@@ -135,6 +137,8 @@ class SessionRenderer(
                 icon = when {
                     item.plan != null -> d.grow(AllIcons.Nodes.Target)
                     reviewBlockers(item, ReviewService.getInstance().reviews) != null -> d.grow(REVIEW_ICON)
+                    // The ids on disk: a row is a folder of the structure already, and they need no filtering per paint.
+                    item.id in CanvasService.getInstance().onDiskIds -> d.grow(CANVAS_ICON)
                     item.dirs.isNotEmpty() -> projectIcon(Path.of(item.dirs.first()), item.name, d.iconSize)
                     else -> d.grow(AllIcons.Nodes.Folder)
                 }

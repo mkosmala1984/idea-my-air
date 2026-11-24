@@ -22,8 +22,10 @@ import dev.myair.editor.SessionTerminals
 import dev.myair.editor.confirmed
 import dev.myair.planview.PlanFiles
 import dev.myair.review.ReviewService
-import dev.myair.review.inReview
+import dev.myair.folders.inReviewOrCanvas
+import dev.myair.canvas.CanvasService
 import dev.myair.reviewview.ReviewTabs
+import dev.myair.canvasview.CanvasTabs
 import dev.myair.service.ClaudeSessionsService
 import java.nio.file.Path
 import java.util.UUID
@@ -70,10 +72,11 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
         update { it.createFolder(parentId, UUID.randomUUID().toString(), name, plan = Plan()) }
     }
 
-    /** Outside every plan folder, since plans do not nest, and every review folder, which holds no plan. */
-    fun canNewPlan() = tree.selectionPath?.let(::targetFolder)?.let { service.folders.planFolderAt(it) == null && !inReview(it) } ?: true
+    /** Outside every plan folder, since plans do not nest, and every review and canvas folder, which holds no plan. */
+    fun canNewPlan() = tree.selectionPath?.let(::targetFolder)?.let { service.folders.planFolderAt(it) == null && !inReviewOrCanvas(it) } ?: true
 
-    private fun inReview(id: String) = inReview(service.folders, ReviewService.getInstance().reviews.keys, id)
+    private fun inReviewOrCanvas(id: String) =
+        inReviewOrCanvas(service.folders, ReviewService.getInstance().reviews.keys, CanvasService.getInstance().canvases.keys, id)
 
     /** Renames the selected folder, milestone or task. */
     fun rename() {
@@ -112,7 +115,7 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
 
     fun addPlan() = update { it.addPlan(selectedFolder()!!.id) }
 
-    fun canAddPlan() = selectedFolder()?.let { service.folders.canAddPlan(it.id) && !inReview(it.id) } == true
+    fun canAddPlan() = selectedFolder()?.let { service.folders.canAddPlan(it.id) && !inReviewOrCanvas(it.id) } == true
 
     fun removePlan() {
         val folder = selectedFolder()!!
@@ -120,13 +123,14 @@ class FolderEditing(private val project: Project, private val tree: JTree, priva
     }
 
     /**
-     * Whether [closing] may end the managers of this IDE that the plans and reviews of [folders] have and that work now,
+     * Whether [closing] may end the managers of this IDE that the plans, reviews and canvases of [folders] have and that work now,
      * asking when one does.
      */
     private fun managersConfirmed(folders: Sequence<Folder>, closing: Closing): Boolean {
         val plans = PlanFiles.getInstance()
         val reviews = ReviewTabs.getInstance().tabs
-        val working = folders.flatMap { listOfNotNull(plans.manager(it.id)?.takeIf { _ -> it.plan != null }, reviews.manager(it.id)) }
+        val canvases = CanvasTabs.getInstance().tabs
+        val working = folders.flatMap { listOfNotNull(plans.manager(it.id)?.takeIf { _ -> it.plan != null }, reviews.manager(it.id), canvases.manager(it.id)) }
             .filter(SessionTerminals.getInstance()::wouldInterrupt)
         return confirmed(project, closing, working.map { it.title }.toList())
     }

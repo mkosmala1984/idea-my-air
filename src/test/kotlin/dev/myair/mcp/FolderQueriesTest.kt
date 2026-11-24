@@ -152,6 +152,16 @@ class FolderQueriesTest {
     }
 
     @Test
+    fun `the tree json marks review and canvas folders by kind, right after the path, and no other folder`() {
+        val kinds = structure.createFolder(null, "r", "Review: a").createFolder(null, "c", "Canvas: b")
+        val tree = JsonParser.parseString(kinds.treeJson(setOf("r"), setOf("c"))).asJsonArray.map { it.asJsonObject }
+        assertEquals(listOf("path", "kind"), tree.single { it["path"].asString == "Canvas: b" }.keySet().take(2))
+        assertEquals(mapOf("Review: a" to "review", "Canvas: b" to "canvas"), tree.filter { it.has("kind") }.associate { it["path"].asString to it["kind"].asString })
+        assertTrue(tree.single { it["path"].asString == "rtm" }.getAsJsonArray("folders").none { it.asJsonObject.has("kind") })
+        assertTrue(JsonParser.parseString(kinds.treeJson()).asJsonArray.none { it.asJsonObject.has("kind") })
+    }
+
+    @Test
     fun `the tree json names folders by path with the sessions filed directly in them`() {
         val tree = JsonParser.parseString(structure.treeJson()).asJsonArray
         val rtm = tree[0].asJsonObject

@@ -11,3 +11,4 @@ taskbar/bin/
 taskbar/obj/
 taskbar/tests/bin/
 taskbar/tests/obj/
+canvas-web/node_modules/

@@ -1,0 +1,37 @@
+# dev.myair.canvasview
+
+## Overview
+
+The canvas tab and New Canvas: a canvas folder opens as an editor tab, `myair-canvas://<folderId>`, with a JCEF webview that renders an agent's OpenUI Lang frames on the left (`CanvasPanel`) and the terminal of its manager session on the right, on the plan tab's shared `FolderTabs` and `ManagerTabEditor` (`dev.myair.planview`). The package also holds the page's protocol and the registry of live pages that check frames for `my_air_canvas_show`. The page is `src/main/resources/canvas/index.html`, one self-contained file built from `canvas-web/` (`npm run build`), next to the library's OpenUI system prompt `system-prompt.txt` (written by the same build, `scripts/prompt.mjs`) and `spike-sample.oui` (the page's default document in a plain browser, used by `canvas-web`'s tests). The model and `canvas.json` are in `dev.myair.store`; the service, operations and prompts in `dev.myair.canvas`. Design: `docs/designs/openui-canvas.md`; behaviour: `docs/internals/canvases.md`.
+
+## Interface
+
+- `CanvasFiles.kt`: `class CanvasVirtualFile(folderId)`, `class CanvasFileSystem` (`PROTOCOL = "myair-canvas"`), `canvasStartDir(structure, folderId)`, `canvasManagerStart(canvas, newId, cwd, hasTranscript)` and `@Service(APP) class CanvasTabs` with `tabs`, `startManager(folderId, ideProject)`, `profileToCheck(folderId)`, `canvasOf(file)` and `managerPrompt(file)`.
+- `NewCanvas.kt`: `canvasParent(structure, reviews, canvases, place)`, `canvasFolderName(structure, parent, name)`, `startCanvas(project, name, place, profile)` and `class NewCanvasAction(place, visible, enabled)` (New Canvas... on the tree's menu).
+- `CanvasEditor.kt`: `class CanvasEditorProvider` (type id `myair-canvas`, hides the default editor) and `class CanvasEditor(project, file) : ManagerTabEditor`.
+- `CanvasPanel.kt`: `class CanvasPanel(project, folderId, parent, send, roots)` with `show(result)`; `EMPTY_FRAME_ID`.
+- `CanvasView.kt`, pure: `selectedFrame(previousSelection, previousNewest, canvas)`, `canvasFileTarget(path, roots)`, `data class CanvasProblems(summary, lines)` and `canvasProblems(parsed, rendered, script)`.
+- `CanvasOpener.kt`: `object CanvasOpener` with `open(project, folderId)` and `openHere(project, folderId)`.
+- `CanvasTabsProviders.kt`: `class CanvasTabTitleProvider` and `class CanvasFileIconProvider` (`CANVAS_ICON`, defined in `dev.myair.editor`).
+- `CanvasBridge.kt`: `data class CanvasFrame(frame, openui, dark, state)`; the scripts `showScript(frame)`, `validateScript(id, openui)` and `connectScript(postBody)`; `data class CanvasError(code, message, statementId, component, path, hint, warning)`; `sealed interface CanvasMessage` (`Ready`, `Parsed`, `Validated`, `Errors`, `State`, `Action`, `ScriptError`) with `CanvasMessage.parse(json)`.
+- `CanvasActions.kt`: `sealed interface CanvasCommand` (`Send(text)`, `Browse(url)`, `OpenFile(path, line)`, `Copy(text)`, `Unknown(type)`) and `commandOf(action, folder, author)`, pure.
+- `CanvasBrowser.kt`: `class CanvasBrowser(parent, onMessage)` with `component`, `isLoaded`, `show(frame)`, `validate(id, openui)` (a `CompletableDeferred<CanvasMessage.Validated>`), `forget(id)` and `CanvasBrowser.dark()`.
+- `CanvasRenderers.kt`: `@Service(APP) class CanvasRenderers` with `register(browser, folderId, parent)` and `validator(folderId)`; pure `data class RendererSlot(browser, folder, loaded)` and `chooseValidator(slots, folderId)`.
+
+## Invariants
+
+- `plugin.xml` names `CanvasFileSystem` (key `myair-canvas`), `CanvasEditorProvider`, `CanvasFileIconProvider` (`order="first"`) and `CanvasTabTitleProvider`, and depends on the module `intellij.platform.ui.jcef` (the bundled plugin "Web Browser (JCEF)", `com.intellij.modules.jcef`).
+- `CanvasTabs.startManager` asserts the EDT. A new manager runs in `canvasStartDir` (the nearest working or bound directory of the folder and its ancestors), else in the IDE project's directory, which is also its project, in `default`'s profile; a stored one keeps its directories and profile. It is stored in `canvas.json` through `CanvasService.update` and filed in the canvas folder. While its session has no transcript it gets `CANVAS_MANAGER_FIRST_MESSAGE` after `--`. Its system prompt (`canvasManagerPrompt`, about 37k characters) goes through `--append-system-prompt-file` (`SessionTerminals` asks `ReviewTabs.managerPrompt`, then `CanvasTabs.managerPrompt`).
+- `startCanvas` writes `canvas.json`, its manager stored (a new session of the chosen profile in `canvasStartDir` of the parent, else the IDE project's directory, also its project), before the folder `Canvas: <name>`, and files the manager in that same folder write, which checks the place did not change; a failed write leaves an ignored `canvas.json`. A canvas is never started inside a review or canvas folder (`canvasParent` goes beside the outermost of them); a plan or plain folder holds it.
+- `CanvasPanel` registers its page with `CanvasRenderers` for its folder. It pushes a frame only when its id, text or the theme changed; the page keeps form state itself and posts it (`State`), which the panel stores in the frame (`setState`, skipped for a frame no longer kept). With no frame it pushes a short placeholder document under the id `EMPTY_FRAME_ID`, since the page's own default is the spike's sample.
+- A click on a frame goes through `commandOf` with the frame's author: `Send` only while the manager's process runs here and has started (else a balloon and nothing sent), `Browse` through `BrowserUtil`, `OpenFile` only to a file under the folder's start directory or the manager's cwd (`canvasFileTarget`, lexical; a relative path resolves against the first), its existence checked off the EDT, `Copy` to the clipboard, `Unknown` a balloon naming it.
+- The page and the plugin speak only through `window.myAir.show(json)`, `window.myAir.validate(json)`, `window.myAir.connect()` and `window.myAirPost(json)`. `canvas-web/src/protocol.ts` documents every message; `canvas-web/src/protocol.json` lists their names and the custom actions, and both `CanvasProtocolTest` (reading it from the project directory) and the page's `protocol.test.ts` check their side against it, so change all three together.
+- `CanvasMessage.parse` throws on a type or field it does not know, and `CanvasBrowser` logs that rather than throwing into CEF. Messages reach `onMessage` on the EDT.
+- The page already trims what reaches the plugin: an action carries `formName`/`formState` only when it came from a form, and `state` is debounced (300 ms) and posted only when it changed. `commandOf` does not check an `OpenFile` path; `CanvasPanel` does.
+- `validate` and `show` are queued until the page has loaded. A `Validated` message completes the pending `validate` of its id before it reaches `onMessage`; disposing the browser cancels every pending one. Call `validate`, `forget` and `CanvasRenderers` on the EDT.
+- Every canvas tab's page registers with `CanvasRenderers`; `chooseValidator` prefers a loaded page of the frame's canvas, then any loaded page, then any page. Every page has the same library, so any page checks any canvas's frame.
+- The page fetches nothing: its CSP is `default-src 'none'` with inline scripts and styles, and `CanvasBrowser` refuses every navigation the user starts in it.
+
+## Verification
+
+- `./gradlew test --tests 'dev.myair.canvasview.*'`; `npm test` in `canvas-web/` (type check, then vitest; it fails when the committed `system-prompt.txt` is not the generated one).

@@ -141,6 +141,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
     data class Transcript(
         val offset: Long, val conversation: Conversation, val messages: Messages, val environment: Environment,
         val artifacts: Map<String, Artifact>, val calls: Map<String, Call>, val background: Map<String, BackgroundTask>, val brief: Brief?,
+        val shownFrames: List<ShownFrame>,
     ) {
         internal fun next(line: Line): Transcript {
             val (pending, answers) = answered(calls.recorded(line), line)
@@ -150,6 +151,9 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 brief = answers.fold(brief) { brief, (call, item) ->
                     if (call == null || !BRIEF_TOOL.matches(call.tool) || item["is_error"]?.asBoolean == true) brief
                     else Brief.next(brief, call.tool, call.input) { resultText(item, line) }
+                },
+                shownFrames = shownFrames + answers.mapNotNull { (call, item, line) ->
+                    if (call == null || !CANVAS_SHOW_TOOL.matches(call.tool) || item["is_error"]?.asBoolean == true) null else shownFrame(resultText(item, line))
                 },
             )
         }
@@ -168,14 +172,14 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
                 mcpServers = mcpServers(env.mcpTools),
                 // A transcript without an environment snapshot comes from a `claude` that wrote none: it works where it started.
                 workDir = env.workDir?.let(Path::of) ?: cwd, startBranch = c.startBranch, continuedIn = c.continuedIn,
-                lastBranch = messages.branch, asks = messages.asks, transcript = file,
+                lastBranch = messages.branch, asks = messages.asks, transcript = file, shownFrames = shownFrames,
             )
         }
 
         companion object {
             val EMPTY = Transcript(
                 0, Conversation(null, null, null, null, emptyList(), emptyList(), null), Messages(null, null, null, null, false),
-                Environment(null, emptyList(), emptyList(), emptyList()), emptyMap(), emptyMap(), emptyMap(), null,
+                Environment(null, emptyList(), emptyList(), emptyList()), emptyMap(), emptyMap(), emptyMap(), null, emptyList(),
             )
         }
     }
@@ -299,12 +303,15 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         private val BRIEF_TOOL = Regex("mcp__[^\"]*__${Brief.SET_BRIEF}|${Brief.UPDATE_PLAN}")
         private const val TOOL_RESULT = "\"type\":\"tool_result\""
 
+        /** `my_air_canvas_show` (`dev.myair.mcp.CanvasMcpToolset`), matched by its suffix as [BRIEF_TOOL] is. */
+        private val CANVAS_SHOW_TOOL = Regex("mcp__[^\"]*__my_air_canvas_show")
+
         private const val MONITOR = "Monitor"
 
         /** Calls that may run in the background and name it only in their input; agents and workflows name it in their result. */
         private val SHELL_TOOLS = setOf("Bash", "PowerShell", MONITOR)
-        /** The calls kept until their result says what they did: [SHELL_TOOLS] and [BRIEF_TOOL]. */
-        private val KEPT_TOOL_USE = Regex("\"name\":\"(${SHELL_TOOLS.joinToString("|")}|${BRIEF_TOOL.pattern})\",\"input\"")
+        /** The calls kept until their result says what they did: [SHELL_TOOLS], [BRIEF_TOOL] and [CANVAS_SHOW_TOOL]. */
+        private val KEPT_TOOL_USE = Regex("\"name\":\"(${SHELL_TOOLS.joinToString("|")}|${BRIEF_TOOL.pattern}|${CANVAS_SHOW_TOOL.pattern})\",\"input\"")
         private const val ASYNC_LAUNCHED = "\"status\":\"async_launched\""
 
         /** The line `claude` writes when a notification is queued for the conversation, before the model reads it. */
@@ -342,6 +349,16 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
             return transcript.copy(offset = offset)
         }
 
+        /**
+         * The frame a `my_air_canvas_show` result names: its JSON's `folder` (the folder id) and `frame`. A text that is no
+         * such JSON is no frame: the tool's own output, so a My Air from before canvases or a tool of the same name elsewhere.
+         */
+        private fun shownFrame(text: String): ShownFrame? {
+            val o = runCatching { JsonParser.parseString(text) }.getOrNull()?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+            fun string(key: String) = o[key]?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+            return ShownFrame(string("folder") ?: return null, string("frame") ?: return null)
+        }
+
         /** The text of a `tool_result` [item]: its `content` string, or the one text block an MCP tool's result holds. */
         private fun resultText(item: JsonObject, line: Line): String {
             val content = item["content"]
@@ -353,7 +370,7 @@ class ClaudeSessionScanner(private val projectsDir: Path, private val saved: Sav
         /** [this] with the shell, monitor, brief and plan calls of [line], when it is an assistant message of the main conversation. */
         private fun Map<String, Call>.recorded(line: Line): Map<String, Call> {
             if (ASSISTANT !in line || !KEPT_TOOL_USE.containsMatchIn(line.text) || !line.main) return this
-            return this + toolUses(line.json).filter { it["name"].asString.let { name -> name in SHELL_TOOLS || BRIEF_TOOL.matches(name) } }
+            return this + toolUses(line.json).filter { it["name"].asString.let { name -> name in SHELL_TOOLS || BRIEF_TOOL.matches(name) || CANVAS_SHOW_TOOL.matches(name) } }
                 .map { it["id"].asString to Call(it["name"].asString, it.getAsJsonObject("input")) }
         }
 
