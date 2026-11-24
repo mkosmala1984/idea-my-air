@@ -79,13 +79,16 @@ object Git {
     /** The root of the main checkout, also when [dir] is inside a linked worktree. */
     fun mainRoot(dir: Path): Path = Path.of(run(dir, "rev-parse", "--path-format=absolute", "--git-common-dir").trim()).parent
 
+    /** The names of the remotes of the repository of [root]. */
+    fun remotes(root: Path): List<String> = run(root, "remote").lines().filter { it.isNotEmpty() }
+
     fun repo(dir: Path): GitRepo {
         check(dir.isDirectory()) { "$dir is not a directory." }
         val root = mainRoot(dir)
         val local = parseBranches(run(root, "for-each-ref", "--format=%(refname)", "refs/heads"))
         val remote = parseBranches(run(root, "for-each-ref", "--format=%(refname)", "refs/remotes"))
         val originHead = run(root, "for-each-ref", "--format=%(symref:short)", "refs/remotes/origin/HEAD").trim().ifEmpty { null }
-        return GitRepo(root, local + remote, defaultBranch(run(root, "remote").lines().filter { it.isNotEmpty() }, originHead, local))
+        return GitRepo(root, local + remote, defaultBranch(remotes(root), originHead, local))
     }
 
     /**
@@ -348,7 +351,7 @@ object Git {
      */
     fun addWorktree(mainRoot: Path, path: Path, pick: String, fallback: String, inUse: (Path) -> Boolean) {
         val isLocal = isBranch(mainRoot, pick)
-        val local = if (isLocal) pick else pick.removePrefix(run(mainRoot, "remote").lines().filter { it.isNotEmpty() }.single { pick.startsWith("$it/") } + "/")
+        val local = if (isLocal) pick else pick.removePrefix(remotes(mainRoot).single { pick.startsWith("$it/") } + "/")
         val worktrees = worktrees(mainRoot)
         val holder = worktrees.indexOfFirst { it.branch == local }
         if (holder != -1) {
@@ -359,6 +362,20 @@ object Git {
         }
         if (isBranch(mainRoot, local)) run(mainRoot, "worktree", "add", path.toString(), local)
         else run(mainRoot, "worktree", "add", "--track", "-b", local, path.toString(), pick)
+    }
+
+    /**
+     * Removes the linked worktree [tree] of [mainRoot]. Throws, removing nothing, when it is the main checkout, locked,
+     * has a directory of [inUse], or has a modified, staged or untracked file; there is no force and no fallback.
+     */
+    fun removeWorktree(mainRoot: Path, tree: Worktree, inUse: (Path) -> Boolean) {
+        val all = worktrees(mainRoot)
+        check(tree in all) { "${tree.path} is not a worktree of $mainRoot." }
+        check(tree != all.first()) { "${tree.path} is the main checkout." }
+        check(!tree.locked) { "${tree.path} is locked." }
+        check(!inUse(tree.path)) { "A session is running in ${tree.path}." }
+        check(isClean(tree.path)) { "${tree.path} has uncommitted changes." }
+        run(mainRoot, "worktree", "remove", tree.path.toString())
     }
 
     /** The worktrees of the repository of [mainRoot], the main checkout first, after pruning those whose directory is gone (which still hold their branch until pruned). */

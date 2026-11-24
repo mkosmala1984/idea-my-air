@@ -188,6 +188,35 @@ class GitTest {
     }
 
     @Test
+    fun `removeWorktree removes a clean idle linked worktree`() {
+        val repo = init("plain")
+        git(repo, "branch", "topic")
+        val tree = dir.resolve("wt").also { git(repo, "worktree", "add", it.toString(), "topic") }
+        Git.removeWorktree(repo, Git.worktrees(repo).single { it.branch == "topic" }, idle)
+        assertEquals(false, tree.toFile().exists())
+        assertEquals(listOf("main", "topic"), branches(repo))
+    }
+
+    @Test
+    fun `removeWorktree refuses the main checkout, a locked, a busy and a dirty tree and removes nothing`() {
+        val repo = init("plain")
+        for (name in listOf("locked", "busy", "dirty", "staged")) git(repo, "branch", name)
+        git(repo, "worktree", "add", "--lock", dir.resolve("locked").toString(), "locked")
+        val busy = dir.resolve("busy").also { git(repo, "worktree", "add", it.toString(), "busy") }
+        val dirty = dir.resolve("dirty").also { git(repo, "worktree", "add", it.toString(), "dirty") }
+        dirty.resolve("new.txt").writeText("x")
+        val staged = dir.resolve("staged").also { git(repo, "worktree", "add", it.toString(), "staged") }
+        staged.resolve("a.txt").writeText("x")
+        git(staged, "add", "a.txt")
+        val before = Git.worktrees(repo)
+        for ((branch, reason) in listOf("main" to "main checkout", "locked" to "locked", "busy" to "session is running", "dirty" to "uncommitted", "staged" to "uncommitted")) {
+            val error = assertThrows<IllegalStateException> { Git.removeWorktree(repo, before.single { it.branch == branch }, { it == busy }) }
+            assertContains(error.message!!, reason)
+        }
+        assertEquals(before, Git.worktrees(repo))
+    }
+
+    @Test
     fun `a branch without a stored base has none, and a set one survives a rename`() {
         val repo = init("plain")
         git(repo, "branch", "topic")

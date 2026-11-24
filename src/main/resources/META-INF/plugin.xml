@@ -74,6 +74,11 @@
             description="Create a worktree on a new branch off a chosen branch and start claude in it in an editor tab">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
+    <action id="dev.myair.FindBranch" class="dev.myair.actions.FindBranchAction"
+            text="Find Claude Session Branch and Worktree..." icon="AllIcons.Actions.Find"
+            description="Find the branches and worktrees a pasted text names, then start claude in one, in a new worktree or in a recreated one">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
     <action id="dev.myair.NewSessionWithPrompt" class="dev.myair.prompt.NewSessionWithPromptAction"
             text="New Claude Session with Prompt..." icon="AllIcons.Actions.Edit"
             description="Type the first message and pick a configuration, then start claude in an editor tab">

@@ -36,6 +36,8 @@ there by class name, so moving or renaming one means updating that file too.
   - `uncommitted(root)`: absolute paths of the files differing from HEAD, untracked ones included.
   - `show(root, commit, path)`: file bytes at a commit.
   - `addWorktree(mainRoot, path, pick, fallback, inUse)`, `addBranchWorktree(mainRoot, path, branch, base)`.
+  - `removeWorktree(mainRoot, tree, inUse)`: removes a linked worktree; throws, removing nothing, for the main checkout, a locked tree, one with a directory in use and one with uncommitted changes (no force, no fallback).
+  - `remotes(root)`: the remote names.
   - `setBase(dir, branch, base)` / `storedBase(dir, branch)`: config key `branch.<branch>.myAirBase`.
   - `includedFiles(mainRoot)`: gitignored untracked files matching `.worktreeinclude`.
   - `internal headerPath(line)`: the path of a `---`/`+++` diff header, null for `/dev/null`.
@@ -55,6 +57,7 @@ there by class name, so moving or renaming one means updating that file too.
 
 - `NewClaudeSessionAction`: a new session in the project (`ClaudeSessionOpener.startNew`).
 - `NewSessionInDirAction(text, inWorktree, dir, home, plan, folder)`: a session started from a tree row, in the row's directory, plan task and folder.
+- `FindBranchAction` (`FindBranchAction.kt`, Tools menu): a popup on the clipboard text listing the branches it names (`findBranches`) with their worktrees; Start Here (the worktree exists, the main checkout too), New Worktree (none; `createWorktree`) and Recreate Worktree (`Git.removeWorktree`, then `createWorktree`; a refused removal shows its reason and changes nothing). `BranchSearch.kt` holds `findBranches(text, branches, remotes, worktrees)` and `BranchMatch(name, ref, worktree, main)`, without IDE dependencies.
 - `NewClaudeSessionInWorktreeAction`, and the helpers it uses:
   - `startInWorktree(project, dir, base, args, where, plan, branch, askBranch, folderId, open)`: `open(cwd, id, args)` starts the session once the worktree is made, by default in a session tab.
   - `createWorktree(repo, base, branch, id, running): Path`: the popup-free core, used off the EDT.
