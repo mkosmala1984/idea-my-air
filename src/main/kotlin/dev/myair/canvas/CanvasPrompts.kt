@@ -25,6 +25,9 @@ fun canvasRules(): String = """
     - Read the answer of my_air_canvas_show: when validated is true and ok is false, or errors are listed, fix the document and show it again in the same turn.
       unresolved names references you never defined, orphaned statements that root does not reach (they do not show).
       When validated is false, no canvas tab is open in this IDE and the frame was stored unchecked: write it carefully, nothing will tell you about mistakes.
+    - A Board's answer is in boards: every element's rectangle in grid units, as the boxes resolved, and its problems
+      (overlap, overflow, anchors that do not resolve, edges through other elements...). Check the rectangles against what you meant
+      and fix every problem; a height marked estimated is a default, since nothing is measured, so give h where the size matters.
     - my_air_canvas_get(folder) lists the frames and gives the newest frame's document and its form state; my_air_canvas_apply(folder, changes)
       removes frames, retitles them or clears the canvas. my_air_canvas_language() returns these rules and the OpenUI reference again.
     - The OpenUI reference below describes the language of the openui argument only. Your replies in the terminal stay ordinary text;

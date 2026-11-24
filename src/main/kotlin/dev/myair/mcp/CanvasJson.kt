@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
+import dev.myair.canvasview.CanvasBoard
 import dev.myair.canvasview.CanvasError
 import dev.myair.canvasview.CanvasMessage
 import dev.myair.folders.SessionFolders
@@ -22,32 +23,73 @@ fun resolveCanvasFolder(structure: SessionFolders, canvases: Set<String>, folder
     return found.id
 }
 
-/** How the check of a shown frame went: [validated] when a canvas page parsed it, [ok] its verdict then (null otherwise), and why not or what follows in [note]. */
+/**
+ * How the check of a shown frame went: [validated] when a canvas page parsed it, [ok] its verdict then (null otherwise),
+ * the geometry of its [boards], and why not or what follows in [note].
+ */
 data class CanvasCheck(
     val validated: Boolean, val ok: Boolean?, val errors: List<CanvasError>, val unresolved: List<String>, val orphaned: List<String>, val note: String?,
+    val boards: List<CanvasBoard> = emptyList(),
 ) {
     companion object {
         const val NO_PAGE = "no canvas tab is open in this IDE, the frame was stored unchecked"
         const val TIMEOUT = "the canvas page did not answer within 5 s, the frame was stored unchecked"
         const val CLOSED = "the canvas tab closed before it answered, the frame was stored unchecked"
-        const val INVALID = "the document has errors and was stored as it is, so the canvas shows what it can of it: fix the errors and show the frame again"
+        const val INVALID = "the document or a board's layout has errors and was stored as it is, so the canvas shows what it can of it: " +
+            "fix the errors (and the error problems of boards) and show the frame again"
         const val WARNINGS = "the document renders, with warnings"
 
         fun unchecked(note: String) = CanvasCheck(false, null, emptyList(), emptyList(), emptyList(), note)
 
-        /** The page's answer: invalid ([CanvasMessage.Validated.ok] false) is a document without root or with an error that is not a warning. */
+        /**
+         * The page's answer: invalid ([CanvasMessage.Validated.ok] false) is a document without root, with an error that
+         * is not a warning, or with a board problem that is an error.
+         */
         fun of(answer: CanvasMessage.Validated) = CanvasCheck(
             true, answer.ok, answer.errors, answer.unresolved, answer.orphaned,
             when {
                 !answer.ok -> INVALID
-                answer.errors.isNotEmpty() -> WARNINGS
+                answer.errors.isNotEmpty() || answer.boards.any { it.problems.isNotEmpty() } -> WARNINGS
                 else -> null
             },
+            answer.boards,
         )
     }
 }
 
 private fun strings(list: List<String>) = JsonArray().also { a -> list.forEach(a::add) }
+
+private fun boardJson(b: CanvasBoard) = JsonObject().apply {
+    addProperty("board", b.board)
+    addProperty("unit", b.unit)
+    add("elements", JsonArray().also { a ->
+        b.elements.forEach { e ->
+            a.add(JsonObject().apply {
+                addProperty("id", e.id)
+                addProperty("kind", e.kind)
+                addProperty("parent", e.parent)
+                addProperty("x", e.x)
+                addProperty("y", e.y)
+                addProperty("w", e.w)
+                addProperty("h", e.h)
+                addProperty("estimated", e.estimated)
+            })
+        }
+    })
+    add("edges", JsonArray().also { a ->
+        b.edges.forEach { e -> a.add(JsonObject().apply { addProperty("id", e.id); addProperty("from", e.from); addProperty("to", e.to) }) }
+    })
+    add("problems", JsonArray().also { a ->
+        b.problems.forEach { p ->
+            a.add(JsonObject().apply {
+                addProperty("severity", if (p.error) "error" else "warning")
+                addProperty("code", p.code)
+                add("ids", strings(p.ids))
+                addProperty("message", p.message)
+            })
+        }
+    })
+}
 
 private fun errorJson(e: CanvasError) = JsonObject().apply {
     addProperty("code", e.code)
@@ -71,6 +113,7 @@ fun canvasShowJson(folderId: String, path: String, frame: Frame, check: CanvasCh
         add("errors", JsonArray().also { a -> check.errors.forEach { a.add(errorJson(it)) } })
         add("unresolved", strings(check.unresolved))
         add("orphaned", strings(check.orphaned))
+        add("boards", JsonArray().also { a -> check.boards.forEach { a.add(boardJson(it)) } })
         addProperty("note", check.note)
     },
 )

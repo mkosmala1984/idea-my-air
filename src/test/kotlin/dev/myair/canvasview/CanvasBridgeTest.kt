@@ -50,8 +50,31 @@ class CanvasBridgeTest {
             CanvasMessage.Validated("v1", true, listOf(CanvasError("no-root", "No root", hint = "Add root", warning = true)), emptyList(), listOf("a")),
             CanvasMessage.parse(
                 """{"type":"validated","id":"v1","ok":true,"errors":[{"code":"no-root","message":"No root","hint":"Add root","severity":"warning"}],
-                  "unresolved":[],"orphaned":["a"]}""",
+                  "unresolved":[],"orphaned":["a"],"boards":[]}""",
             ),
+        )
+    }
+
+    @Test
+    fun `validated carries each board's geometry and problems`() {
+        val answer = CanvasMessage.parse(
+            """{"type":"validated","id":"v","ok":false,"errors":[],"unresolved":[],"orphaned":[],"boards":[{"board":"b","unit":24,
+              "elements":[{"id":"g","kind":"shape","parent":null,"x":0,"y":-2,"w":10,"h":6,"estimated":false},
+                          {"id":"n","kind":"note","parent":"g","x":1,"y":0,"w":8,"h":4,"estimated":true}],
+              "edges":[{"id":"e","from":"g","to":"n"}],
+              "problems":[{"severity":"error","code":"anchor-unknown","ids":["n","ghost"],"message":"m"},
+                          {"severity":"warning","code":"overlap","ids":["a","b"],"message":"o"}]}]}""",
+        ) as CanvasMessage.Validated
+        assertEquals(
+            listOf(
+                CanvasBoard(
+                    "b", 24,
+                    listOf(BoardElement("g", "shape", null, 0, -2, 10, 6, false), BoardElement("n", "note", "g", 1, 0, 8, 4, true)),
+                    listOf(BoardEdge("e", "g", "n")),
+                    listOf(BoardProblem(true, "anchor-unknown", listOf("n", "ghost"), "m"), BoardProblem(false, "overlap", listOf("a", "b"), "o")),
+                ),
+            ),
+            answer.boards,
         )
     }
 
@@ -67,7 +90,12 @@ class CanvasBridgeTest {
             """{"type":"zoom"}""",
             """{"type":"state","frame":"C1"}""",
             """{"type":"parsed","frame":"C1","ms":1,"ok":true,"orphaned":[],"errors":[]}""",
-            """{"type":"validated","id":"v","ok":"yes","errors":[],"unresolved":[],"orphaned":[]}""",
+            """{"type":"validated","id":"v","ok":"yes","errors":[],"unresolved":[],"orphaned":[],"boards":[]}""",
+            """{"type":"validated","id":"v","ok":true,"errors":[],"unresolved":[],"orphaned":[]}""",
+            """{"type":"validated","id":"v","ok":true,"errors":[],"unresolved":[],"orphaned":[],"boards":[{"board":"b","unit":24,"elements":[],"edges":[],
+              "problems":[{"severity":"fatal","code":"x","ids":[],"message":"m"}]}]}""",
+            """{"type":"validated","id":"v","ok":true,"errors":[],"unresolved":[],"orphaned":[],"boards":[{"board":"b","unit":24,
+              "elements":[{"id":"a","kind":"circle","parent":null,"x":0,"y":0,"w":1,"h":1,"estimated":false}],"edges":[],"problems":[]}]}""",
             """{"type":"errors","frame":"C1","errors":[{"code":"x"}]}""",
             """{"type":"errors","frame":"C1","errors":[{"code":"x","message":"m","severity":"fatal"}]}""",
             """{"type":"action","frame":"C1","event":{"type":"open_url","params":{"url":"https://x.dev"}}}""",

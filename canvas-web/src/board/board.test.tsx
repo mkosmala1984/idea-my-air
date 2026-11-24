@@ -28,7 +28,7 @@ describe("the board sample", () => {
   it("lays out with no problems from the parse alone, as the agent's check would", () => {
     const spec = boardSpec(findBoard(result.root)!.props.items as unknown[]);
     expect(spec.problems).toEqual([]);
-    const geometry = report(spec.elements, spec.edges, solve(spec.elements, spec.edges), 24, spec.problems);
+    const geometry = report("board", spec.elements, spec.edges, solve(spec.elements, spec.edges), 24, spec.problems);
     expect(geometry.problems).toEqual([]);
     const at = (id: string) => geometry.elements.find((e) => e.id === id);
     // Migrator: a row of three 6x3 shapes with gap 2, padding 1, a header row: 24x6, centred on the 5-high source.

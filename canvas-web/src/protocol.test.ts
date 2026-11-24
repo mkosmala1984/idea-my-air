@@ -64,7 +64,41 @@ describe("validate", () => {
   });
 
   it("answers a good document with ok true and nothing else", () => {
-    expect(validateDocument("v3", 'root = Stack([FileRef("a.kt", 3)])')).toEqual({ type: "validated", id: "v3", ok: true, errors: [], unresolved: [], orphaned: [] });
+    expect(validateDocument("v3", 'root = Stack([FileRef("a.kt", 3)])')).toEqual({ type: "validated", id: "v3", ok: true, errors: [], unresolved: [], orphaned: [], boards: [] });
+  });
+
+  it("reports every board's geometry in grid units, heights without h marked estimated", () => {
+    const answer = validateDocument("v4", `root = Stack([b])
+b = Board([a, n, e], 20)
+a = Shape("rect", "A", {x: 0, y: 0, w: 4, h: 2})
+n = Note("hi", {rightOf: "a", gap: 2})
+e = Edge("a", "n")`);
+    expect(answer.ok).toBe(true);
+    expect(answer.boards).toEqual([{
+      board: "b",
+      unit: 20,
+      elements: [
+        { id: "a", kind: "shape", parent: null, x: 0, y: 0, w: 4, h: 2, estimated: false },
+        { id: "n", kind: "note", parent: null, x: 6, y: 0, w: 8, h: 4, estimated: true },
+      ],
+      edges: [{ id: "e", from: "a", to: "n" }],
+      problems: [],
+    }]);
+  });
+
+  it("answers ok false for a board problem that is an error, ok true for a warning", () => {
+    const broken = validateDocument("v5", `root = Stack([b])
+b = Board([n])
+n = Note("hi", {below: "ghost"})`);
+    expect(broken.ok).toBe(false);
+    expect(broken.errors).toEqual([]);
+    expect(broken.boards[0].problems.map((p) => [p.severity, p.code, p.ids])).toEqual([["error", "anchor-unknown", ["n", "ghost"]]]);
+    const overlapping = validateDocument("v6", `root = Stack([b])
+b = Board([n, m])
+n = Note("n", {x: 0, y: 0})
+m = Note("m", {x: 2, y: 2})`);
+    expect(overlapping.ok).toBe(true);
+    expect(overlapping.boards[0].problems.map((p) => p.code)).toEqual(["overlap"]);
   });
 });
 

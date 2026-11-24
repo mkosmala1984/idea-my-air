@@ -1,7 +1,7 @@
 // A Board's parsed items (OpenUI element nodes) as the solver's specs. Pure, so a parse result is enough: the report
 // can be computed without rendering.
 import type { ElementNode } from "@openuidev/react-lang";
-import type { Box, ContainerLayout, EdgeSpec, ElementKind, ElementSpec, Problem } from "./layout";
+import { boardReports, type BoardReport, type Box, type ContainerLayout, type EdgeSpec, type ElementKind, type ElementSpec, type Problem } from "./layout";
 
 const KINDS: Record<string, ElementKind> = { Shape: "shape", Note: "note", Frame: "frame" };
 
@@ -64,4 +64,22 @@ export function boardSpec(items: unknown[]): BoardSpec {
   };
   collect(items, out.elements);
   return out;
+}
+
+/** Every Board in a parsed tree, in document order: its statement name, items and unit. */
+export function boardsIn(node: unknown, found: { board: string; items: unknown[]; unit?: number }[] = []) {
+  if (Array.isArray(node)) {
+    for (const n of node) boardsIn(n, found);
+  } else if (isElement(node)) {
+    if (node.typeName === "Board") {
+      found.push({ board: node.statementId ?? "board", items: (node.props.items as unknown[] | undefined) ?? [], unit: node.props.unit as number | undefined });
+    }
+    for (const v of Object.values(node.props)) boardsIn(v, found);
+  }
+  return found;
+}
+
+/** The geometry report of every Board under [root] (a parse result's root), as the `validated` answer carries it. */
+export function checkBoards(root: unknown): BoardReport[] {
+  return boardReports(boardsIn(root).map((b) => ({ board: b.board, spec: boardSpec(b.items), unit: b.unit })));
 }

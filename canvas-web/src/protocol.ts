@@ -4,11 +4,14 @@
 //
 // Plugin -> page, through executeJavaScript, each with one JSON string argument (or none):
 //   window.myAir.show(ShowCall)         renders a frame, replacing the one shown
-//   window.myAir.validate(ValidateCall) parses a document WITHOUT rendering it and posts `validated`
+//   window.myAir.validate(ValidateCall) parses a document WITHOUT rendering it and posts `validated`, with the
+//                                       geometry of every Board in it (board/layout.ts, nothing measured)
 //   window.myAir.connect()              the plugin has injected window.myAirPost; queued messages go out now
 //
 // Page -> plugin, through window.myAirPost(json) (a JBCefJSQuery), one PageMessage each. Messages posted before
 // connect() wait in a queue.
+
+import type { BoardReport } from "./board/layout";
 
 /** `window.myAir.show`: frame [frame]'s OpenUI Lang text, its saved form state, in the IDE's theme. */
 export type ShowCall = { frame: string; openui: string; state?: Record<string, unknown> | null; dark: boolean };
@@ -43,8 +46,8 @@ export type PageMessage =
   | { type: "ready"; ms: number }
   /** [frame] parsed: [ok] when it has a root; [orphaned] statements are unreachable, [unresolved] references undefined. */
   | { type: "parsed"; frame: string; ms: number; ok: boolean; orphaned: string[]; unresolved: string[]; errors: WireError[] }
-  /** The answer to `validate` [id]; [ok] when it has a root and no error (warnings allowed). */
-  | { type: "validated"; id: string; ok: boolean; errors: WireError[]; unresolved: string[]; orphaned: string[] }
+  /** The answer to `validate` [id]; [ok] when it has a root, no error and no board problem that is an error (warnings allowed). */
+  | { type: "validated"; id: string; ok: boolean; errors: WireError[]; unresolved: string[]; orphaned: string[]; boards: WireBoard[] }
   /** The renderer's errors on [frame] (Renderer onError); [] once they are resolved. */
   | { type: "errors"; frame: string; errors: WireError[] }
   /** The form and `$variable` state of [frame] changed (debounced, and only when it differs from the last posted). */
@@ -53,6 +56,12 @@ export type PageMessage =
   | { type: "action"; frame: string; event: WireAction }
   /** An uncaught script error in the page. */
   | { type: "js-error"; message: string };
+
+/**
+ * A Board's geometry as the solver computed it (board/layout.ts `BoardReport`): elements in grid units with their
+ * parent and whether the height is `estimated`, the edges, and the problems (code, ids, message), errors and warnings.
+ */
+export type WireBoard = BoardReport;
 
 export type MessageType = PageMessage["type"];
 

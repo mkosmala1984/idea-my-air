@@ -60,8 +60,13 @@ export interface Solved {
   /** Rectangles relative to the parent's top-left corner (the board's origin at the top level). */
   local: Map<string, Rect>;
   parent: Map<string, string | null>;
+  /** Elements whose height is a guess: no h, and no measured height (a check without a page measures nothing). */
+  estimated: Set<string>;
   problems: Problem[];
 }
+
+/** Pixels per grid unit when a Board gives no unit. */
+export const DEFAULT_UNIT = 24;
 
 /** A container's padding on every side, in grid units. */
 export const PADDING = 1;
@@ -80,7 +85,7 @@ export type Measured = ReadonlyMap<string, number>;
 const ANCHORS = ["rightOf", "leftOf", "below", "above"] as const;
 
 export function solve(elements: ElementSpec[], edges: EdgeSpec[], measured: Measured = new Map()): Solved {
-  const out: Solved = { absolute: new Map(), local: new Map(), parent: new Map(), problems: [] };
+  const out: Solved = { absolute: new Map(), local: new Map(), parent: new Map(), estimated: new Set(), problems: [] };
   const problem = (severity: Problem["severity"], code: string, ids: string[], message: string) =>
     out.problems.push({ severity, code, ids, message });
 
@@ -205,11 +210,13 @@ export function solve(elements: ElementSpec[], edges: EdgeSpec[], measured: Meas
       const s = { w: b.w ?? need.w, h: b.h ?? need.h };
       if (s.w < need.w || s.h < need.h)
         problem("warning", "overflow", [el.id], `${el.id} is ${s.w}x${s.h} but its children need ${need.w}x${need.h}.`);
+      if (b.h == null && el.children.some((c) => out.estimated.has(c.id))) out.estimated.add(el.id);
       size.set(el.id, s);
     } else {
       const fallback = DEFAULT_SIZE[el.kind];
       const need = measured.get(el.id);
       const s = { w: b.w ?? fallback.w, h: b.h ?? need ?? fallback.h };
+      if (b.h == null && need == null) out.estimated.add(el.id);
       if (need != null && need > s.h)
         problem("warning", "overflow", [el.id], `${el.id}'s content needs a height of ${need} but its box is ${s.h}.`);
       size.set(el.id, s);
@@ -290,21 +297,30 @@ export function segmentCrosses(a: { x: number; y: number }, b: { x: number; y: n
 
 /** What the agent reads back: every element's rectangle in grid units, the edges and the problems. */
 export interface BoardReport {
+  /** The Board's statement name. */
+  board: string;
   unit: number;
-  elements: { id: string; kind: ElementKind; parent: string | null; x: number; y: number; w: number; h: number }[];
+  /** estimated: the height is a default, not the content's (no h given and nothing measured). */
+  elements: { id: string; kind: ElementKind; parent: string | null; x: number; y: number; w: number; h: number; estimated: boolean }[];
   edges: EdgeSpec[];
   problems: Problem[];
 }
 
-export function report(elements: ElementSpec[], edges: EdgeSpec[], solved: Solved, unit: number, extra: Problem[] = []): BoardReport {
+export function report(board: string, elements: ElementSpec[], edges: EdgeSpec[], solved: Solved, unit: number, extra: Problem[] = []): BoardReport {
   const list: BoardReport["elements"] = [];
   const walk = (els: ElementSpec[]) => {
     for (const el of els) {
       const r = solved.absolute.get(el.id)!;
-      list.push({ id: el.id, kind: el.kind, parent: solved.parent.get(el.id) ?? null, ...r });
+      list.push({ id: el.id, kind: el.kind, parent: solved.parent.get(el.id) ?? null, ...r, estimated: solved.estimated.has(el.id) });
       walk(el.children);
     }
   };
   walk(elements);
-  return { unit, elements: list, edges, problems: [...extra, ...solved.problems] };
+  return { board, unit, elements: list, edges, problems: [...extra, ...solved.problems] };
+}
+
+/** The reports of every Board in a parsed document, from the parse alone: nothing is measured, see `estimated`. */
+export function boardReports(boards: { board: string; spec: { elements: ElementSpec[]; edges: EdgeSpec[]; problems: Problem[] }; unit?: number }[]): BoardReport[] {
+  return boards.map(({ board, spec, unit }) =>
+    report(board, spec.elements, spec.edges, solve(spec.elements, spec.edges), unit ?? DEFAULT_UNIT, spec.problems));
 }

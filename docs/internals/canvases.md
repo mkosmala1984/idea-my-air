@@ -50,7 +50,7 @@ The tree's menus follow the same rules where they can tell in advance: New Plan.
 
 `CanvasMcpToolset` (`mcp/`, registered in `my-air-mcp.xml`) has four tools. Each but the last names the canvas by its folder id or its path, as the review tools do; a folder that is not a canvas, or a canvas that cannot be read, fails with a message naming it. The tools do not know which session calls them, so any session may write to any canvas.
 
-- `my_air_canvas_show(folder, openui, title?)` stores a new frame, then has a canvas page check it and returns `{folder, path, frame, stored, validated, ok, errors, unresolved, orphaned, note}`. Each error has `code`, `message`, `statementId`, `component`, `path`, `hint` and `severity` (`error` or `warning`).
+- `my_air_canvas_show(folder, openui, title?)` stores a new frame, then has a canvas page check it and returns `{folder, path, frame, stored, validated, ok, errors, unresolved, orphaned, boards, note}`. Each error has `code`, `message`, `statementId`, `component`, `path`, `hint` and `severity` (`error` or `warning`).
 - `my_air_canvas_get(folder)` returns the manager, the frames (id, title, created, author) and the newest frame whole (`openui` and `state`).
 - `my_air_canvas_apply(folder, changes)` applies `remove_frame {id}`, `set_title {id, title}` and `clear {}`, all or none. An unknown op or field fails naming it.
 - `my_air_canvas_language()` returns My Air's canvas rules followed by the OpenUI reference of the canvas library (`resources/canvas/system-prompt.txt`, about 9k tokens). The show tool's description tells a session that is not the manager to read it first.
@@ -61,7 +61,7 @@ The MCP server runs in the IDE, but it has no page of its own. Every canvas tab'
 
 The page parses the document without rendering it (`window.myAir.validate`) and answers `validated`. The tool waits up to 5 s off the EDT. It then reports:
 
-- `validated: true`, with `ok` true when the document has a root and no error (warnings allowed), and the errors, unresolved references and orphaned statements;
+- `validated: true`, with `ok` true when the document has a root, no error and no board problem that is an error (warnings allowed), and the errors, unresolved references, orphaned statements and `boards`: each Board's geometry from the document alone (see Board below);
 - `validated: false`, `ok: null`, and a `note`, when no canvas page is open in this IDE, when the page did not answer within 5 s, or when its tab closed first.
 
 The frame is stored before the check and stays stored whatever the check says, also when the document is invalid. The user then sees what came (the renderer shows what it can), and the note asks the agent to fix the errors and show the frame again. Storing only valid frames would hide a failure from the user, and the check is not always available anyway.
@@ -106,6 +106,7 @@ A click on a frame goes through `commandOf` with the frame's author:
 
 - Board reads its items as OpenUI element nodes, not rendered components: an element's statement name is its id, its `box` holds whole grid units (`unit` px each, default 24) as `{x, y}` or one sibling anchor (`rightOf`, `leftOf`, `below`, `above`, with `gap` and `align`), plus optional `w` and `h`. Only a Frame's `content` goes through OpenUI's `renderNode`.
 - `layout.ts` (`solve`, pure) turns the specs into rectangles: anchors resolved in any order, containers (`Shape` with children) laid out `free`, `row`, `column` or `grid` with padding and a header row, sized to fit unless `w`/`h` are given, leaves without `h` sized from the height the page measured. It reports problems with codes: `no-position`, `anchor-unknown`, `anchor-not-sibling`, `anchor-cycle`, `anchor-conflict`, `position-ignored`, `overlap`, `overflow`, `outside-container`, `edge-unknown`, `edge-self`, `edge-crosses`; `spec.ts` adds `inline-element` and `not-a-board-element`.
-- The page keeps the latest report per board in `window.myAirBoards` and shows it behind a "Geometry" button. Positions the user drags to stay on the page; they are neither stored nor in the report.
+- The render check (`validateDocument`) computes every Board's report from the parse alone (`checkBoards`): `board` (its statement name), `unit`, `elements` (id, kind, parent, x, y, w, h in grid units, `estimated` when the height is a default since nothing is measured), `edges` and `problems` (severity, code, ids, message). It rides in `validated` as `boards` (`CanvasBoard` on the Kotlin side, parsed strictly) and `my_air_canvas_show` returns it; a board error makes `ok` false, a board warning gives the `WARNINGS` note. The canvas rules tell agents to compare the rectangles with what they meant and fix every problem.
+- The page also keeps the latest report per board, with measured heights, in `window.myAirBoards` and shows it behind a "Geometry" button. Positions the user drags to stay on the page; they are neither stored nor in either report.
 - A Frame drags by its title only; its body is `nodrag nowheel nopan`, so forms and buttons inside keep working.
 - In a plain browser, `index.html#board` shows `board-sample.oui`.

@@ -2,6 +2,10 @@ package dev.myair.mcp
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import dev.myair.canvasview.BoardEdge
+import dev.myair.canvasview.BoardElement
+import dev.myair.canvasview.BoardProblem
+import dev.myair.canvasview.CanvasBoard
 import dev.myair.canvasview.CanvasError
 import dev.myair.canvasview.CanvasMessage
 import dev.myair.folders.SessionFolders
@@ -38,7 +42,7 @@ class CanvasJsonTest {
             listOf("b"), listOf("c"),
         )
         val o = json(canvasShowJson("c1", "rtm/Canvas: flaky", frame, CanvasCheck.of(answer)))
-        assertEquals(listOf("folder", "path", "frame", "stored", "validated", "ok", "errors", "unresolved", "orphaned", "note"), o.keySet().toList())
+        assertEquals(listOf("folder", "path", "frame", "stored", "validated", "ok", "errors", "unresolved", "orphaned", "boards", "note"), o.keySet().toList())
         assertEquals("c1", o["folder"].asString)
         assertEquals("C3", o["frame"].asString)
         assertTrue(o["stored"].asBoolean)
@@ -50,6 +54,26 @@ class CanvasJsonTest {
         assertEquals(CanvasCheck.INVALID, o["note"].asString)
         assertEquals(CanvasCheck.WARNINGS, CanvasCheck.of(answer.copy(ok = true)).note)
         assertEquals(null, CanvasCheck.of(answer.copy(ok = true, errors = emptyList())).note)
+    }
+
+    @Test
+    fun `the show result carries the boards' geometry, and a board warning alone makes the note say so`() {
+        val board = CanvasBoard(
+            "b", 24, listOf(BoardElement("n", "note", null, 2, 3, 8, 4, true)), listOf(BoardEdge("e", "n", "m")),
+            listOf(BoardProblem(false, "overlap", listOf("n", "m"), "n and m overlap.")),
+        )
+        val check = CanvasCheck.of(CanvasMessage.Validated("v", true, emptyList(), emptyList(), emptyList(), listOf(board)))
+        assertEquals(CanvasCheck.WARNINGS, check.note)
+        val b = json(canvasShowJson("c1", "p", frame, check))["boards"].asJsonArray.single().asJsonObject
+        assertEquals(listOf("board", "unit", "elements", "edges", "problems"), b.keySet().toList())
+        val e = b["elements"].asJsonArray.single().asJsonObject
+        assertEquals(listOf("id", "kind", "parent", "x", "y", "w", "h", "estimated"), e.keySet().toList())
+        assertTrue(e["parent"].isJsonNull)
+        assertEquals(listOf(2, 3, 8, 4), listOf("x", "y", "w", "h").map { e[it].asInt })
+        assertTrue(e["estimated"].asBoolean)
+        val p = b["problems"].asJsonArray.single().asJsonObject
+        assertEquals("warning", p["severity"].asString)
+        assertEquals(listOf("n", "m"), p["ids"].asJsonArray.map { it.asString })
     }
 
     @Test

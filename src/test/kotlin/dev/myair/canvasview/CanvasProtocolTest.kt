@@ -18,7 +18,7 @@ class CanvasProtocolTest {
     private val samples = mapOf(
         "ready" to """{"type":"ready","ms":3}""",
         "parsed" to """{"type":"parsed","frame":"C1","ms":4,"ok":true,"orphaned":[],"unresolved":[],"errors":[]}""",
-        "validated" to """{"type":"validated","id":"v","ok":true,"errors":[],"unresolved":[],"orphaned":[]}""",
+        "validated" to """{"type":"validated","id":"v","ok":true,"errors":[],"unresolved":[],"orphaned":[],"boards":[]}""",
         "errors" to """{"type":"errors","frame":"C1","errors":[]}""",
         "state" to """{"type":"state","frame":"C1","state":{}}""",
         "action" to """{"type":"action","frame":"C1","event":{"type":"open_url","params":{"url":"https://x.dev"},"humanFriendlyMessage":""}}""",

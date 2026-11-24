@@ -2,6 +2,7 @@
 // and the trimming and debouncing of what the renderer reports. No React here, so tests drive it directly.
 import { createParser, type ActionEvent, type OpenUIError, type ParseResult } from "@openuidev/react-lang";
 import { canvasLibrary } from "./library";
+import { checkBoards } from "./board/spec";
 import type { PageMessage, ShowCall, ValidateCall, WireAction, WireError } from "./protocol";
 
 declare global {
@@ -50,10 +51,13 @@ export function parseSummary(result: ParseResult | null) {
 /** Parses [openui] against canvasLibrary without rendering it: the `validated` answer to `validate` [id]. */
 export function validateDocument(id: string, openui: string): Extract<PageMessage, { type: "validated" }> {
   try {
-    const summary = parseSummary(parserOf().parse(openui));
-    return { type: "validated", id, ...summary, ok: summary.ok && summary.errors.every((e) => e.severity === "warning") };
+    const result = parserOf().parse(openui);
+    const summary = parseSummary(result);
+    const boards = checkBoards(result.root);
+    const clean = summary.errors.every((e) => e.severity === "warning") && boards.every((b) => b.problems.every((p) => p.severity === "warning"));
+    return { type: "validated", id, ...summary, ok: summary.ok && clean, boards };
   } catch (e) {
-    return { type: "validated", id, ok: false, errors: [{ code: "parse-exception", message: String(e) }], unresolved: [], orphaned: [] };
+    return { type: "validated", id, ok: false, errors: [{ code: "parse-exception", message: String(e) }], unresolved: [], orphaned: [], boards: [] };
   }
 }
 

@@ -43,6 +43,22 @@ data class CanvasError(
     val warning: Boolean = false,
 )
 
+/**
+ * A Board's geometry as the page's check computed it from the document alone (`WireBoard`, `canvas-web/src/board/layout.ts`):
+ * [board] is its statement name, positions and sizes are grid units of [unit] px.
+ */
+data class CanvasBoard(val board: String, val unit: Long, val elements: List<BoardElement>, val edges: List<BoardEdge>, val problems: List<BoardProblem>)
+
+/** An element on a board, its rectangle on the board; [estimated] when its height is a default, not its content's. */
+data class BoardElement(
+    val id: String, val kind: String, val parent: String?, val x: Long, val y: Long, val w: Long, val h: Long, val estimated: Boolean,
+)
+
+data class BoardEdge(val id: String, val from: String, val to: String)
+
+/** A layout problem, such as `anchor-unknown` or `overlap`; [ids] name the elements and edges it concerns. */
+data class BoardProblem(val error: Boolean, val code: String, val ids: List<String>, val message: String)
+
 /** A message the canvas page posts through `window.myAirPost` (`PageMessage` in `canvas-web/src/protocol.ts`). */
 sealed interface CanvasMessage {
     /** The page rendered for the first time, [ms] after its script started. */
@@ -56,9 +72,13 @@ sealed interface CanvasMessage {
         val frame: String, val ms: Long, val ok: Boolean, val orphaned: List<String>, val unresolved: List<String>, val errors: List<CanvasError>,
     ) : CanvasMessage
 
-    /** The answer to [validateScript] [id]: [ok] when the document has a root and no error (warnings allowed). */
+    /**
+     * The answer to [validateScript] [id]: [ok] when the document has a root, no error and no board problem that is an
+     * error (warnings allowed); [boards] the geometry of every Board in it.
+     */
     data class Validated(
         val id: String, val ok: Boolean, val errors: List<CanvasError>, val unresolved: List<String>, val orphaned: List<String>,
+        val boards: List<CanvasBoard> = emptyList(),
     ) : CanvasMessage
 
     /** The renderer's errors on [frame]; empty once they are resolved. */
@@ -87,7 +107,7 @@ sealed interface CanvasMessage {
             return when (val type = r.str("type")) {
                 "ready" -> Ready(r.long("ms"))
                 "parsed" -> Parsed(r.str("frame"), r.long("ms"), r.bool("ok"), r.strings("orphaned"), r.strings("unresolved"), r.errors("errors"))
-                "validated" -> Validated(r.str("id"), r.bool("ok"), r.errors("errors"), r.strings("unresolved"), r.strings("orphaned"))
+                "validated" -> Validated(r.str("id"), r.bool("ok"), r.errors("errors"), r.strings("unresolved"), r.strings("orphaned"), r.boards("boards"))
                 "errors" -> Errors(r.str("frame"), r.errors("errors"))
                 "state" -> State(r.str("frame"), r.obj("state"))
                 "action" -> Fields(r.obj("event"), json).let { e ->
@@ -116,6 +136,28 @@ private class Fields(private val o: JsonObject, private val json: String) {
     fun strings(key: String): List<String> = array(key).map {
         require(it.isJsonPrimitive && it.asJsonPrimitive.isString) { "canvas message with a bad $key: $json" }
         it.asString
+    }
+
+    private fun objects(key: String): List<Fields> = array(key).map {
+        require(it.isJsonObject) { "canvas message with a bad $key: $json" }
+        Fields(it.asJsonObject, json)
+    }
+
+    private fun oneOf(key: String, vararg values: String): String =
+        str(key).also { require(it in values) { "canvas message with $key '$it', not one of ${values.joinToString()}: $json" } }
+
+    fun boards(key: String): List<CanvasBoard> = objects(key).map { b ->
+        CanvasBoard(
+            b.str("board"), b.long("unit"),
+            b.objects("elements").map { e ->
+                BoardElement(
+                    e.str("id"), e.oneOf("kind", "shape", "note", "frame"), e.optStr("parent"),
+                    e.long("x"), e.long("y"), e.long("w"), e.long("h"), e.bool("estimated"),
+                )
+            },
+            b.objects("edges").map { e -> BoardEdge(e.str("id"), e.str("from"), e.str("to")) },
+            b.objects("problems").map { p -> BoardProblem(p.oneOf("severity", "error", "warning") == "error", p.str("code"), p.strings("ids"), p.str("message")) },
+        )
     }
 
     fun errors(key: String): List<CanvasError> = array(key).map {

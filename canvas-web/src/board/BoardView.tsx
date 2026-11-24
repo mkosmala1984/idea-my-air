@@ -16,7 +16,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import type { ElementNode } from "@openuidev/react-lang";
-import { report, solve, type BoardReport, type ElementSpec, type Rect } from "./layout";
+import { DEFAULT_UNIT, report, solve, type BoardReport, type ElementSpec, type Rect } from "./layout";
 import { boardSpec } from "./spec";
 
 /** Whether the page shows the dark theme; main.tsx provides it from the plugin's frame. */
@@ -29,7 +29,6 @@ declare global {
   }
 }
 
-export const DEFAULT_UNIT = 24;
 export const DEFAULT_HEIGHT = 560;
 
 type Measure = (id: string, px: number) => void;
@@ -162,7 +161,7 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
   const measured = useMemo(() => new Map(Object.entries(measuredPx).map(([id, px]) => [id, Math.ceil(px / unit)])), [measuredPx, unit]);
 
   const solved = useMemo(() => solve(spec.elements, spec.edges, measured), [spec, measured]);
-  const geometry = useMemo(() => report(spec.elements, spec.edges, solved, unit, spec.problems), [spec, solved, unit]);
+  const geometry = useMemo(() => report(statementId ?? "board", spec.elements, spec.edges, solved, unit, spec.problems), [statementId, spec, solved, unit]);
 
   // Positions the user dragged to, in pixels relative to the parent; the spike keeps them on the page only.
   const [dragged, setDragged] = useState<Record<string, { x: number; y: number }>>({});
