@@ -99,3 +99,13 @@ A click on a frame goes through `commandOf` with the frame's author:
 - `@OpenFile(path, line)` and `FileRef` open a file at its 1-based line, only under the folder's start directory or the manager's cwd (`canvasFileTarget`: a relative path resolves against the first, `..` is resolved lexically, links are not followed, and an absolute path must lie under one of them). The file's existence is checked off the EDT; a path outside, a missing file or no directory at all gives a balloon.
 - `@CopyToClipboard(text)` copies the text.
 - Any other action gives a balloon naming it.
+
+## Board (spike)
+
+`canvas-web/src/board/` adds a whiteboard to the canvas library: `Board(items, unit?, height?)` with `Shape`, `Note`, `Frame` and `Edge` items, drawn with React Flow (`@xyflow/react`). It is a spike: nothing on the plugin's side knows boards yet.
+
+- Board reads its items as OpenUI element nodes, not rendered components: an element's statement name is its id, its `box` holds whole grid units (`unit` px each, default 24) as `{x, y}` or one sibling anchor (`rightOf`, `leftOf`, `below`, `above`, with `gap` and `align`), plus optional `w` and `h`. Only a Frame's `content` goes through OpenUI's `renderNode`.
+- `layout.ts` (`solve`, pure) turns the specs into rectangles: anchors resolved in any order, containers (`Shape` with children) laid out `free`, `row`, `column` or `grid` with padding and a header row, sized to fit unless `w`/`h` are given, leaves without `h` sized from the height the page measured. It reports problems with codes: `no-position`, `anchor-unknown`, `anchor-not-sibling`, `anchor-cycle`, `anchor-conflict`, `position-ignored`, `overlap`, `overflow`, `outside-container`, `edge-unknown`, `edge-self`, `edge-crosses`; `spec.ts` adds `inline-element` and `not-a-board-element`.
+- The page keeps the latest report per board in `window.myAirBoards` and shows it behind a "Geometry" button. Positions the user drags to stay on the page; they are neither stored nor in the report.
+- A Frame drags by its title only; its body is `nodrag nowheel nopan`, so forms and buttons inside keep working.
+- In a plain browser, `index.html#board` shows `board-sample.oui`.

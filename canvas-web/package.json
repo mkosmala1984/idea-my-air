@@ -9,6 +9,7 @@
   "dependencies": {
     "@openuidev/react-lang": "1.1.1",
     "@openuidev/react-ui": "0.18.12",
+    "@xyflow/react": "12.12.1",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "zod": "4.1.12",

@@ -2,3 +2,6 @@
 import sample from "../../src/main/resources/canvas/spike-sample.oui?raw";
 
 export const SAMPLE: string = sample;
+
+/** The board spike's sample (src/board/board-sample.oui), shown in a plain browser when the URL ends with #board. */
+export { default as BOARD_SAMPLE } from "./board/board-sample.oui?raw";
