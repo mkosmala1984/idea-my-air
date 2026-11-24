@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { segmentCrosses, solve, type Box, type ElementSpec } from "./layout";
+import { movedBox, segmentCrosses, solve, type Box, type ElementSpec } from "./layout";
 
 const note = (id: string, box: Box): ElementSpec => ({ id, kind: "note", box, children: [] });
 const shape = (id: string, box: Box, children: ElementSpec[] = [], extra: Partial<ElementSpec> = {}): ElementSpec => ({
@@ -144,5 +144,17 @@ describe("edges", () => {
     expect(segmentCrosses({ x: -1, y: 0 }, { x: 5, y: 0 }, r)).toBe(false);
     expect(segmentCrosses({ x: -1, y: 5 }, { x: 5, y: 5 }, r)).toBe(false);
     expect(segmentCrosses({ x: 2, y: -3 }, { x: 2, y: -1 }, r)).toBe(false);
+  });
+});
+
+describe("movedBox", () => {
+  const plain = note("n", { rightOf: "a", w: 5 });
+  it("turns a top-level drop into grid units, keeping the box's own sizes", () => {
+    expect(movedBox({ x: 96, y: 48.4 }, 24, plain, null)).toEqual({ x: 4, y: 2, w: 5, h: null });
+  });
+  it("takes a container's padding and header row off", () => {
+    const parent = shape("g", { x: 0, y: 0 }, [plain], { label: "G" });
+    expect(movedBox({ x: 72, y: 72 }, 24, plain, parent)).toEqual({ x: 2, y: 1, w: 5, h: null });
+    expect(movedBox({ x: 72, y: 72 }, 24, plain, { ...parent, label: undefined })).toEqual({ x: 2, y: 2, w: 5, h: null });
   });
 });

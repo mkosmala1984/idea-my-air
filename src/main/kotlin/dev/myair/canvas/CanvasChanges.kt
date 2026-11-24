@@ -101,3 +101,10 @@ fun patchFrame(canvas: Canvas, frame: String, patch: String, expect: String): Pa
     val merge = mergeOpenUi(f.openui, patch)
     return canvas.edit(frame) { it.copy(openui = merge.text) } to merge
 }
+
+/**
+ * [canvas] with board element [element] of frame [frame] where the user dragged it ([moveBoardElement]), in place as a
+ * patch would be; no revision is checked, since the user's move is made on the frame as it is now.
+ */
+fun moveInFrame(canvas: Canvas, frame: String, element: String, x: Long, y: Long, w: Long?, h: Long?): Canvas =
+    canvas.edit(frame) { it.copy(openui = moveBoardElement(it.openui, element, x, y, w, h).text) }

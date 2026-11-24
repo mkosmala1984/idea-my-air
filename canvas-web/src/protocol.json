@@ -1,7 +1,7 @@
 {
   "comment": "The canvas page's contract with the plugin. protocol.test.ts (vitest) and CanvasProtocolTest.kt (Gradle, read from this path) both check their side against these literals; change both sides with it.",
   "pageCalls": ["show", "validate", "connect"],
-  "messages": ["ready", "parsed", "validated", "errors", "state", "action", "js-error"],
+  "messages": ["ready", "parsed", "validated", "errors", "state", "action", "move", "js-error"],
   "builtinActions": ["continue_conversation", "open_url"],
   "customActions": ["OpenFile", "CopyToClipboard"]
 }

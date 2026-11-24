@@ -29,6 +29,7 @@ import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.NamedColorUtil
 import com.intellij.util.ui.UIUtil
 import dev.myair.canvas.CanvasService
+import dev.myair.canvas.moveInFrame
 import dev.myair.canvas.setState
 import dev.myair.store.Canvas
 import dev.myair.store.Frame
@@ -174,6 +175,7 @@ class CanvasPanel(
             is CanvasMessage.ScriptError -> scriptErrors += message.message
             is CanvasMessage.State -> storeState(message)
             is CanvasMessage.Action -> act(message)
+            is CanvasMessage.Move -> move(message)
         }
         showProblems()
     }
@@ -186,6 +188,20 @@ class CanvasPanel(
         } catch (e: Exception) {
             // A canvas.json broken since the last read: the next read shows it as a failure.
             thisLogger().warn("Cannot store the state of frame ${message.frame} of canvas $folderId", e)
+        }
+    }
+
+    /** Writes where the user dragged a board element into its frame's document, so the agent and a reload see it. */
+    private fun move(message: CanvasMessage.Move) {
+        if (frames().none { it.id == message.frame }) return
+        try {
+            CanvasService.getInstance().update(folderId) { c ->
+                if (c.frames.any { it.id == message.frame }) moveInFrame(c, message.frame, message.element, message.x, message.y, message.w, message.h) else c
+            }
+        } catch (e: IllegalArgumentException) {
+            notify("The move of ${message.element} was not saved: ${e.message}")
+        } catch (e: Exception) {
+            thisLogger().warn("Cannot store the move of ${message.element} in frame ${message.frame} of canvas $folderId", e)
         }
     }
 

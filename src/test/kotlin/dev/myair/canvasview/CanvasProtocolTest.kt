@@ -22,6 +22,7 @@ class CanvasProtocolTest {
         "errors" to """{"type":"errors","frame":"C1","errors":[]}""",
         "state" to """{"type":"state","frame":"C1","state":{}}""",
         "action" to """{"type":"action","frame":"C1","event":{"type":"open_url","params":{"url":"https://x.dev"},"humanFriendlyMessage":""}}""",
+        "move" to """{"type":"move","frame":"C1","element":"n","x":3,"y":-1,"w":null,"h":4}""",
         "js-error" to """{"type":"js-error","message":"x"}""",
     )
 

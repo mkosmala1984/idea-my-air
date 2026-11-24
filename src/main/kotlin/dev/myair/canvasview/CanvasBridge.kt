@@ -96,6 +96,12 @@ sealed interface CanvasMessage {
         val frame: String, val type: String, val message: String, val params: JsonObject, val formName: String?, val formState: JsonObject?,
     ) : CanvasMessage
 
+    /**
+     * The user dragged board element [element] of [frame] to [x], [y] (grid units in its container's content area);
+     * [w] and [h] are the sizes its box gave, kept as they were (null when it had none).
+     */
+    data class Move(val frame: String, val element: String, val x: Long, val y: Long, val w: Long?, val h: Long?) : CanvasMessage
+
     /** An uncaught script error in the page. */
     data class ScriptError(val message: String) : CanvasMessage
 
@@ -113,6 +119,7 @@ sealed interface CanvasMessage {
                 "action" -> Fields(r.obj("event"), json).let { e ->
                     Action(r.str("frame"), e.str("type"), e.str("humanFriendlyMessage"), e.obj("params"), e.optStr("formName"), e.optObj("formState"))
                 }
+                "move" -> Move(r.str("frame"), r.str("element"), r.long("x"), r.long("y"), r.optLong("w"), r.optLong("h"))
                 "js-error" -> ScriptError(r.str("message"))
                 else -> throw IllegalArgumentException("unknown canvas message type $type: $json")
             }
@@ -129,6 +136,7 @@ private class Fields(private val o: JsonObject, private val json: String) {
     fun long(key: String): Long = primitive(key).also { require(it.isNumber) { "canvas message with a bad $key: $json" } }.asLong
     fun bool(key: String): Boolean = primitive(key).also { require(it.isBoolean) { "canvas message with a bad $key: $json" } }.asBoolean
     fun obj(key: String): JsonObject = get(key).also { require(it.isJsonObject) { "canvas message with a bad $key: $json" } }.asJsonObject
+    fun optLong(key: String): Long? = if (o.get(key)?.isJsonNull != false) null else long(key)
     fun optStr(key: String): String? = if (o.get(key)?.isJsonNull != false) null else str(key)
     fun optObj(key: String): JsonObject? = if (o.get(key)?.isJsonNull != false) null else obj(key)
 

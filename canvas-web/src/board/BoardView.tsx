@@ -16,11 +16,17 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import type { ElementNode } from "@openuidev/react-lang";
-import { DEFAULT_UNIT, report, solve, type BoardReport, type ElementSpec, type Rect } from "./layout";
+import { DEFAULT_UNIT, movedBox, report, solve, type BoardReport, type ElementSpec, type Rect } from "./layout";
 import { boardSpec } from "./spec";
 
 /** Whether the page shows the dark theme; main.tsx provides it from the plugin's frame. */
 export const DarkContext = createContext(false);
+
+/** Where the user dropped a board element, in grid units of its container's content area, with its box's own w and h. */
+export type BoardMove = { element: string; x: number; y: number; w: number | null; h: number | null };
+
+/** Receives every drop of a dragged element; main.tsx posts it to the plugin, which writes it into the document. */
+export const BoardMoveContext = createContext<(move: BoardMove) => void>(() => {});
 
 declare global {
   interface Window {
@@ -152,6 +158,7 @@ export interface BoardProps {
 
 export function BoardView({ props, renderNode, statementId }: { props: BoardProps; renderNode: (v: unknown) => ReactNode; statementId?: string }) {
   const dark = useContext(DarkContext);
+  const onMove = useContext(BoardMoveContext);
   const unit = props.unit ?? DEFAULT_UNIT;
   const spec = useMemo(() => boardSpec(props.items ?? []), [props.items]);
 
@@ -169,10 +176,27 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
     const moves = changes.flatMap((c) => (c.type === "position" && c.position ? [[c.id, c.position] as const] : []));
     if (moves.length > 0) setDragged((d) => ({ ...d, ...Object.fromEntries(moves) }));
   }, []);
+  // A changed layout places everything itself, the moves the user made included once the plugin wrote them. Keyed on
+  // the specs' text, not their identity: the renderer may hand over new item objects for an unchanged document.
+  const layoutKey = useMemo(() => JSON.stringify(spec.elements), [spec]);
+  useEffect(() => setDragged({}), [layoutKey]);
+
+  const parents = useMemo(() => {
+    const map = new Map<string, { el: ElementSpec; parent: ElementSpec | null }>();
+    const walk = (els: ElementSpec[], parent: ElementSpec | null) => els.forEach((el) => (map.set(el.id, { el, parent }), walk(el.children, el)));
+    walk(spec.elements, null);
+    return map;
+  }, [spec]);
+  const onNodeDragStop = useCallback((_: unknown, _node: Node, dropped: Node[]) => {
+    for (const n of dropped) {
+      const found = parents.get(n.id);
+      if (found) onMove({ element: n.id, ...movedBox(n.position, unit, found.el, found.parent) });
+    }
+  }, [parents, unit, onMove]);
 
   const nodes = useMemo(() => {
     const list: Node<ElementData>[] = [];
-    const walk = (els: ElementSpec[], parent?: string) => {
+    const walk = (els: ElementSpec[], parent?: ElementSpec) => {
       for (const el of els) {
         const r = solved.local.get(el.id)!;
         const autoHeight = el.children.length === 0 && el.box.h == null && el.kind !== "shape";
@@ -182,12 +206,14 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
           position: dragged[el.id] ?? { x: r.x * unit, y: r.y * unit },
           width: r.w * unit,
           height: r.h * unit,
-          parentId: parent,
+          parentId: parent?.id,
           extent: parent ? "parent" : undefined,
+          // A row, column or grid places its children itself; only free placement can be dragged.
+          draggable: !parent || (parent.layout ?? "free") === "free",
           dragHandle: el.kind === "frame" ? ".myair-board-drag" : undefined,
           data: { spec: el, node: spec.nodes.get(el.id)!, renderNode, measure, autoHeight },
         });
-        walk(el.children, el.id);
+        walk(el.children, el);
       }
     };
     walk(spec.elements);
@@ -233,6 +259,7 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
+        onNodeDragStop={onNodeDragStop}
         colorMode={dark ? "dark" : "light"}
         snapToGrid
         snapGrid={[unit, unit]}

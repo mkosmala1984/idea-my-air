@@ -15,6 +15,8 @@ export interface Box {
   gap?: number;
   /** Alignment with the anchor across the placing axis, default start. */
   align?: "start" | "center" | "end";
+  /** The user dragged it there: the solver ignores this, agents leave the element where it is unless asked. */
+  pinned?: boolean;
 }
 
 export type ElementKind = "shape" | "note" | "frame";
@@ -78,6 +80,15 @@ const DEFAULT_SIZE: Record<ElementKind, { w: number; h: number }> = {
   note: { w: 8, h: 4 },
   frame: { w: 16, h: 8 },
 };
+
+/**
+ * Where a dragged element lands, as its box's x and y: [px] is its top-left relative to its parent's top-left (the
+ * board's origin at the top level), so the parent's padding and header row come off. w and h are the box's own.
+ */
+export function movedBox(px: { x: number; y: number }, unit: number, el: ElementSpec, parent: ElementSpec | null) {
+  const offset = parent ? { x: PADDING, y: PADDING + (parent.label ? HEADER : 0) } : { x: 0, y: 0 };
+  return { x: Math.round(px.x / unit) - offset.x, y: Math.round(px.y / unit) - offset.y, w: el.box.w ?? null, h: el.box.h ?? null };
+}
 
 /** Elements that size themselves to their content: the height a leaf needs, in grid units, as the page measured it. */
 export type Measured = ReadonlyMap<string, number>;

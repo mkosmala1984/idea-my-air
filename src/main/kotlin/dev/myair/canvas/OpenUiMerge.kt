@@ -192,3 +192,56 @@ private fun refsOf(expr: List<Token>): Set<String> {
     }
     return refs
 }
+
+/** The positional argument that holds a board element's box, by component. */
+private val BOX_ARGUMENT = mapOf("Shape" to 2, "Note" to 1, "Frame" to 1)
+
+/**
+ * [openui] with board element [element] placed where the user dragged it: its box becomes `{x, y, w?, h?, pinned: true}`
+ * in grid units of its container's content area (an anchor gives way to the position), and statements only the old box
+ * used are dropped, as a patch would. Throws when [element] is no statement, or not a Shape, Note or Frame with a box.
+ */
+fun moveBoardElement(openui: String, element: String, x: Long, y: Long, w: Long?, h: Long?): OpenUiMerge {
+    val statement = requireNotNull(openUiStatements(openui).lastOrNull { it.name == element }) { "no statement '$element'" }
+    val src = statement.text
+    val tokens = tokenize(src)
+    // name = Component( ... ): the call starts at the third token.
+    val call = tokens.getOrNull(2)?.takeIf { it.t == T.IDENT && tokens.getOrNull(3)?.t == T.OPEN_PAREN }?.value
+    val index = requireNotNull(BOX_ARGUMENT[call]) { "'$element' is ${call ?: "no component"}, not a Shape, Note or Frame" }
+    // The spans of the call's arguments: from their first token to the comma or parenthesis that ends them.
+    val spans = ArrayList<IntRange>()
+    var depth = 0
+    var argStart = -1
+    for (k in 4 until tokens.size) {
+        val tok = tokens[k]
+        when (tok.t) {
+            T.OPEN_PAREN, T.OPEN_BRACKET, T.OPEN_BRACE -> {
+                if (depth == 0 && argStart < 0) argStart = tok.start
+                depth++
+            }
+            T.CLOSE_PAREN, T.CLOSE_BRACKET, T.CLOSE_BRACE -> {
+                if (depth == 0) {
+                    if (argStart >= 0) spans.add(argStart until tok.start)
+                    break
+                }
+                depth--
+            }
+            T.COMMA -> if (depth == 0) {
+                if (argStart >= 0) spans.add(argStart until tok.start)
+                argStart = -1
+            }
+            T.NEWLINE -> {}
+            else -> if (depth == 0 && argStart < 0) argStart = tok.start
+        }
+    }
+    val span = requireNotNull(spans.getOrNull(index)) { "'$element' has no box argument" }
+    val box = buildList {
+        add("x: $x")
+        add("y: $y")
+        w?.let { add("w: $it") }
+        h?.let { add("h: $it") }
+        add("pinned: true")
+    }.joinToString(", ", "{", "}")
+    val end = span.first + src.substring(span.first, span.last + 1).trimEnd().length
+    return mergeOpenUi(openui, src.substring(0, span.first) + box + src.substring(end))
+}

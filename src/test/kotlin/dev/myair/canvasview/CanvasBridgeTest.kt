@@ -56,6 +56,15 @@ class CanvasBridgeTest {
     }
 
     @Test
+    fun `a move names the frame and element, with the box's own sizes or null`() {
+        assertEquals(
+            CanvasMessage.Move("C2", "n", 3, -1, null, 4),
+            CanvasMessage.parse("""{"type":"move","frame":"C2","element":"n","x":3,"y":-1,"w":null,"h":4}"""),
+        )
+        assertFailsWith<IllegalArgumentException> { CanvasMessage.parse("""{"type":"move","frame":"C2","element":"n","x":3}""") }
+    }
+
+    @Test
     fun `validated carries each board's geometry and problems`() {
         val answer = CanvasMessage.parse(
             """{"type":"validated","id":"v","ok":false,"errors":[],"unresolved":[],"orphaned":[],"boards":[{"board":"b","unit":24,

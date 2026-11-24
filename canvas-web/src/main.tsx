@@ -9,7 +9,7 @@ import { installBridge, parseSummary, wireAction, wireErrors } from "./bridge";
 import { canvasLibrary } from "./library";
 import type { ShowCall } from "./protocol";
 import { BOARD_SAMPLE, SAMPLE } from "./sample";
-import { DarkContext } from "./board/BoardView";
+import { BoardMoveContext, DarkContext } from "./board/BoardView";
 
 const started = performance.now();
 const elapsed = () => Math.round(performance.now() - started);
@@ -25,6 +25,7 @@ function Canvas() {
   }, []);
   return (
     <DarkContext.Provider value={frame.dark}>
+    <BoardMoveContext.Provider value={(move) => bridge.post({ type: "move", frame: frame.frame, ...move })}>
     <ThemeProvider mode={frame.dark ? "dark" : "light"}>
       <div className="canvas">
         <Renderer
@@ -40,6 +41,7 @@ function Canvas() {
         />
       </div>
     </ThemeProvider>
+    </BoardMoveContext.Provider>
     </DarkContext.Provider>
   );
 }

@@ -54,6 +54,11 @@ export type PageMessage =
   | { type: "state"; frame: string; state: Record<string, unknown> }
   /** A click on [frame]. */
   | { type: "action"; frame: string; event: WireAction }
+  /**
+   * The user dragged board element [element] of [frame] to [x], [y]: grid units in its container's content area. [w]
+   * and [h] are its box's own sizes, kept (null when it had none). The plugin writes it into the document, pinned.
+   */
+  | { type: "move"; frame: string; element: string; x: number; y: number; w: number | null; h: number | null }
   /** An uncaught script error in the page. */
   | { type: "js-error"; message: string };
 
@@ -69,4 +74,4 @@ export type MessageType = PageMessage["type"];
 export const PAGE_CALLS = ["show", "validate", "connect"] as const;
 
 /** Every PageMessage type; must equal protocol.json's `messages`. */
-export const MESSAGE_TYPES: readonly MessageType[] = ["ready", "parsed", "validated", "errors", "state", "action", "js-error"];
+export const MESSAGE_TYPES: readonly MessageType[] = ["ready", "parsed", "validated", "errors", "state", "action", "move", "js-error"];
