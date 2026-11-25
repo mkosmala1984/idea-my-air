@@ -21,12 +21,23 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.io.path.createDirectories
+import kotlin.io.path.writeBytes
 import java.time.Instant
 import java.util.UUID
 
 /** How long `my_air_canvas_show` waits for a canvas page to check the frame. */
 private const val VALIDATION_MS = 5_000L
+
+/** How long a snapshot waits for the canvas tab to show and render the frame, and then for the picture. */
+private const val SNAPSHOT_WAIT_MS = 4_000L
+private const val SNAPSHOT_TAKE_MS = 3_000L
+
+/** How long the frame must have been rendered before its picture is taken: boards fit their view and measure notes. */
+private const val SNAPSHOT_SETTLE_MS = 700L
 
 /**
  * Lets any session show OpenUI Lang frames on a My Air canvas folder, read them and change the list. The tools do not
@@ -48,18 +59,21 @@ class CanvasMcpToolset : McpToolset {
             "path, hint, severity error or warning), unresolved (references never defined), orphaned (statements root does not reach, " +
             "which do not show), boards (each Board's geometry: board, unit, elements with id, kind, parent and x, y, w, h in grid units " +
             "and estimated when the height is a default because the page could not measure the content; edges; problems with severity, code, ids and message) " +
-            "and note. When ok is false, errors are listed or a board has problems, fix the document and show it again.",
+            "and note. When ok is false, errors are listed or a board has problems, fix the document and show it again. With snapshot " +
+            "true it also returns snapshot: the path of a PNG of the frame as the canvas tab shows it (Read it to see what the user " +
+            "sees), or null with snapshotNote saying why.",
     )
     suspend fun my_air_canvas_show(
         @McpDescription("The canvas folder's id, or its path, names joined by /, such as rtm/Canvas: flaky tests; an id is looked up first.") folder: String,
         @McpDescription("The whole OpenUI Lang document, starting with root = Stack(...).") openui: String,
         @McpDescription("A short one-line title of the frame, shown above it; optional.") title: String? = null,
+        @McpDescription("Whether to return a PNG of the frame as shown (about a second longer); default false.") snapshot: Boolean = false,
     ): String {
         val shown = withCanvas(folder) { service, id ->
             val frame = checkNotNull(service.update(id) { addFrame(it, title, openui, Instant.now()) }.newest)
             startCheck(id, frame, null)
         }
-        return finishCheck(shown)
+        return finishCheck(shown, snapshot)
     }
 
     @McpTool
@@ -70,20 +84,21 @@ class CanvasMcpToolset : McpToolset {
             "element from its parent's list removes it). expect is the frame's rev from my_air_canvas_show, my_air_canvas_get or the last " +
             "patch; when the frame changed since, the patch is refused and the error gives the current rev and document. The patched " +
             "frame keeps its id, title and form state, and is checked like a shown one. Returns what my_air_canvas_show returns, " +
-            "with the new rev, plus set (the statements the patch set) and removed (the statements gone).",
+            "with the new rev, plus set (the statements the patch set) and removed (the statements gone); snapshot as for my_air_canvas_show.",
     )
     suspend fun my_air_canvas_patch(
         @McpDescription("The canvas folder's id or path, as for my_air_canvas_show.") folder: String,
         @McpDescription("The frame's id, such as C3.") frame: String,
         @McpDescription("OpenUI Lang statements, one per line: name = expression.") patch: String,
         @McpDescription("The frame's rev the patch is based on.") expect: String,
+        @McpDescription("Whether to return a PNG of the frame as shown, as for my_air_canvas_show; default false.") snapshot: Boolean = false,
     ): String {
         val shown = withCanvas(folder) { service, id ->
             var merge: OpenUiMerge? = null
             val canvas = service.update(id) { c -> patchFrame(c, frame, patch, expect).let { (patched, m) -> merge = m; patched } }
             startCheck(id, canvas.frame(frame), merge)
         }
-        return finishCheck(shown)
+        return finishCheck(shown, snapshot)
     }
 
     /** Has a canvas page of this IDE start checking [frame]'s document; call on the EDT. */
@@ -93,8 +108,8 @@ class CanvasMcpToolset : McpToolset {
         return Shown(id, ClaudeSessionsService.getInstance().folders.pathOf(id), frame, merge, browser?.let { it to validation }, browser?.validate(validation, frame.openui))
     }
 
-    /** Waits for the check [startCheck] started, at most [VALIDATION_MS], and returns the tool's answer. */
-    private suspend fun finishCheck(shown: Shown): String {
+    /** Waits for the check [startCheck] started, at most [VALIDATION_MS], and returns the tool's answer, with a snapshot when [snapshot]. */
+    private suspend fun finishCheck(shown: Shown, snapshot: Boolean): String {
         val check = shown.answer?.let { answer ->
             try {
                 withTimeoutOrNull(VALIDATION_MS) { answer.await() }?.let(CanvasCheck::of) ?: CanvasCheck.unchecked(CanvasCheck.TIMEOUT)
@@ -106,18 +121,56 @@ class CanvasMcpToolset : McpToolset {
                 shown.browser?.let { (b, v) -> withContext(NonCancellable + Dispatchers.EDT) { b.forget(v) } }
             }
         } ?: CanvasCheck.unchecked(CanvasCheck.NO_PAGE)
-        return canvasShowJson(shown.id, shown.path, shown.frame, check, shown.merge)
+        return canvasShowJson(shown.id, shown.path, shown.frame, check, shown.merge, if (snapshot) takeSnapshot(shown.id, shown.frame) else null)
+    }
+
+    /**
+     * A PNG of [frame] as a canvas tab of [id] shows it, written to `snapshots/<frame>.png` beside `canvas.json`: waits up
+     * to [SNAPSHOT_WAIT_MS] for a visible tab to have rendered exactly this document for [SNAPSHOT_SETTLE_MS].
+     */
+    private suspend fun takeSnapshot(id: String, frame: Frame): CanvasSnapshot {
+        val deadline = System.currentTimeMillis() + SNAPSHOT_WAIT_MS
+        var page: CanvasBrowser
+        while (true) {
+            val (found, why) = withContext(Dispatchers.EDT) {
+                val pages = CanvasRenderers.getInstance().pages(id).filter { it.shows(frame.id, frame.openui) }
+                val visible = pages.firstOrNull { it.isShowing }
+                val rendered = visible?.rendered
+                when {
+                    pages.isEmpty() -> null to CanvasSnapshot.NOT_SHOWN
+                    visible == null -> null to CanvasSnapshot.HIDDEN
+                    rendered == null || System.currentTimeMillis() - rendered < SNAPSHOT_SETTLE_MS -> null to CanvasSnapshot.NOT_RENDERED
+                    else -> visible to null
+                }
+            }
+            if (found != null) {
+                page = found
+                break
+            }
+            if (System.currentTimeMillis() > deadline) return CanvasSnapshot(null, why)
+            delay(100)
+        }
+        val png = withContext(Dispatchers.EDT) { page.screenshot() }
+        val bytes = runCatching { withTimeoutOrNull(SNAPSHOT_TAKE_MS) { png.await() } }.getOrNull() ?: return CanvasSnapshot(null, CanvasSnapshot.FAILED)
+        val file = withContext(Dispatchers.EDT) { CanvasService.getInstance().file(id) }.resolveSibling("snapshots").resolve("${frame.id}.png")
+        withContext(Dispatchers.IO) {
+            file.parent.createDirectories()
+            file.writeBytes(bytes)
+        }
+        return CanvasSnapshot(file.toString(), null)
     }
 
     @McpTool
     @McpDescription(
         "The frames of a My Air canvas folder as JSON: folder (id), path, manager (session, cwd, project, profile; or null), frames, " +
             "oldest first (id, title, created, author: the session that showed it once My Air learned it from its transcript, else null), " +
-            "and newest (the newest frame's id, title, openui (its document) and state (the form and \$variable state the user left in it, or null); null without frames).",
+            "newest (the newest frame's id, rev, title, openui (its document) and state (the form and \$variable state the user left in it, or null); null without frames) " +
+            "and, when frame names one, frame: that frame the same way, to patch a frame older than the newest.",
     )
     suspend fun my_air_canvas_get(
         @McpDescription("The canvas folder's id or path, as for my_air_canvas_show.") folder: String,
-    ): String = withCanvas(folder) { service, id -> canvasGetJson(id, ClaudeSessionsService.getInstance().folders.pathOf(id), service.canvas(id)) }
+        @McpDescription("A frame's id, such as C3, to get its document too; optional.") frame: String? = null,
+    ): String = withCanvas(folder) { service, id -> canvasGetJson(id, ClaudeSessionsService.getInstance().folders.pathOf(id), service.canvas(id), frame) }
 
     @McpTool
     @McpDescription(

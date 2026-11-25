@@ -37,6 +37,12 @@ class CanvasRenderers {
         return chooseValidator(browsers.map { (b, folder) -> RendererSlot(b, folder, b.isLoaded) }, folderId)
     }
 
+    /** The pages showing canvas [folderId], one per open tab of it. */
+    fun pages(folderId: String): List<CanvasBrowser> {
+        ThreadingAssertions.assertEventDispatchThread()
+        return browsers.filterValues { it == folderId }.keys.toList()
+    }
+
     companion object {
         fun getInstance(): CanvasRenderers = ApplicationManager.getApplication().getService(CanvasRenderers::class.java)
     }

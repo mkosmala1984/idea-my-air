@@ -23,12 +23,12 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - `my_air_review_apply(folder, changes)`
   - `my_air_review_report(folder, run, commit, findings, questions)`
 - `CanvasMcpToolset.kt`, `class CanvasMcpToolset : McpToolset`, each tool but the last naming the canvas folder by its id, else its path (`withCanvas`):
-  - `my_air_canvas_show(folder, openui, title)`
-  - `my_air_canvas_patch(folder, frame, patch, expect)`
-  - `my_air_canvas_get(folder)`
+  - `my_air_canvas_show(folder, openui, title, snapshot)`
+  - `my_air_canvas_patch(folder, frame, patch, expect, snapshot)`
+  - `my_air_canvas_get(folder, frame)`
   - `my_air_canvas_apply(folder, changes)`
   - `my_air_canvas_language()`
-- `CanvasJson.kt`: `resolveCanvasFolder(structure, canvases, folder)`, `data class CanvasCheck(validated, ok, errors, unresolved, orphaned, note, boards)` with `CanvasCheck.of(validated)`, `CanvasCheck.unchecked(note)` and the notes `NO_PAGE`, `TIMEOUT`, `CLOSED`, `INVALID`, `WARNINGS`; `canvasShowJson(folderId, path, frame, check, merge)`, `canvasGetJson(folderId, path, canvas)`.
+- `CanvasJson.kt`: `resolveCanvasFolder(structure, canvases, folder)`, `data class CanvasCheck(validated, ok, errors, unresolved, orphaned, note, boards)` with `CanvasCheck.of(validated)`, `CanvasCheck.unchecked(note)` and the notes `NO_PAGE`, `TIMEOUT`, `CLOSED`, `INVALID`, `WARNINGS`; `data class CanvasSnapshot(file, note)` with the notes `NOT_SHOWN`, `HIDDEN`, `NOT_RENDERED`, `FAILED`; `canvasShowJson(folderId, path, frame, check, merge, snapshot)`, `canvasGetJson(folderId, path, canvas, frameId)`.
 - `SessionSearch.kt`:
   - `data class SessionPage(total, offset, sessions, snippets)`
   - `fun findSessions(...)`: a `query` also matches a session found in `content`, the conversation index's answer for it (`SessionIndex.search`, run by the tool off the EDT); `snippets` (and `match` in the JSON) give the text around the hit of each session on the page

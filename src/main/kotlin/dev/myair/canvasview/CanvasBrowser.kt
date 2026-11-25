@@ -1,6 +1,7 @@
 package dev.myair.canvasview
 
 import com.intellij.ide.ui.LafManagerListener
+import com.google.gson.JsonParser
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.thisLogger
@@ -16,6 +17,10 @@ import org.cef.browser.CefFrame
 import org.cef.handler.CefLoadHandlerAdapter
 import org.cef.handler.CefRequestHandlerAdapter
 import org.cef.network.CefRequest
+import java.io.ByteArrayOutputStream
+import java.util.Base64
+import java.util.concurrent.CompletableFuture
+import javax.imageio.ImageIO
 import javax.swing.JComponent
 import javax.swing.Timer
 
@@ -30,6 +35,8 @@ class CanvasBrowser(parent: Disposable, private val onMessage: (CanvasMessage) -
     private val query = JBCefJSQuery.create(browser as JBCefBrowserBase)
     private var loaded = false
     private var current: CanvasFrame? = null
+    /** When the page reported parsing [current] (`parsed`), in ms; 0 until it has. EDT only. */
+    private var renderedAt = 0L
 
     /** The [validate] calls waiting for their answer, by id; the scripts of those made before the page loaded. EDT only. */
     private val pending = HashMap<String, CompletableDeferred<CanvasMessage.Validated>>()
@@ -49,6 +56,7 @@ class CanvasBrowser(parent: Disposable, private val onMessage: (CanvasMessage) -
             if (message != null) UIUtil.invokeLaterIfNeeded {
                 if (browser.isDisposed) return@invokeLaterIfNeeded
                 if (message is CanvasMessage.Validated) pending.remove(message.id)?.complete(message)
+                if (message is CanvasMessage.Parsed && message.frame == current?.frame) renderedAt = System.currentTimeMillis()
                 onMessage(message)
             }
             null
@@ -101,7 +109,32 @@ class CanvasBrowser(parent: Disposable, private val onMessage: (CanvasMessage) -
     /** Shows [frame] now, or once the page has loaded. */
     fun show(frame: CanvasFrame) {
         current = frame
+        renderedAt = 0
         if (loaded) send(frame)
+    }
+
+    /** Whether the page was last given frame [id] with the document [openui]. EDT only. */
+    fun shows(id: String, openui: String): Boolean = current?.let { it.frame == id && it.openui == openui } == true
+
+    /** When the page reported rendering what it was last given, in ms since the epoch; null until it has. EDT only. */
+    val rendered: Long? get() = renderedAt.takeIf { it > 0 }
+
+    /** Whether the page is on screen, so a picture of it shows what the user sees. */
+    val isShowing: Boolean get() = !browser.isDisposed && browser.component.isShowing
+
+    /**
+     * A PNG of what the page shows now: the off-screen browser's picture, else (a windowed browser) DevTools'
+     * `Page.captureScreenshot` of the viewport. Fails when neither can take one.
+     */
+    fun screenshot(): CompletableFuture<ByteArray> {
+        val cef = browser.cefBrowser
+        val picture = runCatching { cef.createScreenshot(false) }.getOrNull()
+            ?.thenApply { image -> ByteArrayOutputStream().also { ImageIO.write(image, "png", it) }.toByteArray() }
+            ?: CompletableFuture.failedFuture(IllegalStateException("not an off-screen browser"))
+        return picture.exceptionallyCompose {
+            cef.devToolsClient.executeDevToolsMethod("Page.captureScreenshot", "{\"format\":\"png\"}")
+                .thenApply { json -> Base64.getDecoder().decode(JsonParser.parseString(json).asJsonObject.get("data").asString) }
+        }
     }
 
     private fun send(frame: CanvasFrame) {

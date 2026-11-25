@@ -33,7 +33,10 @@ fun canvasRules(): String = """
       replaces it, a new name is added, name = null deletes it, and statements root no longer reaches are dropped. expect is the
       frame's rev from the last show, get or patch; a stale rev is refused with the current document. Patch a board you are
       building instead of showing it again, so it keeps its frame and what the user did on it, and read its answer as a show's.
-    - my_air_canvas_get(folder) lists the frames and gives the newest frame's document and its form state; my_air_canvas_apply(folder, changes)
+    - Pass snapshot: true to show or patch when the look matters (a board, a dense layout): the answer's snapshot is the path of a
+      PNG of the frame as the canvas tab shows it; Read it to see what the user sees, and fix what looks wrong.
+    - my_air_canvas_get(folder, frame?) lists the frames and gives the newest frame's document and its form state, and the named
+      frame's too: get an older frame this way before you patch it. my_air_canvas_apply(folder, changes)
       removes frames, retitles them or clears the canvas. my_air_canvas_language() returns these rules and the OpenUI reference again.
     - The OpenUI reference below describes the language of the openui argument only. Your replies in the terminal stay ordinary text;
       write OpenUI only inside my_air_canvas_show, never in a reply.

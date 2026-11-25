@@ -104,10 +104,24 @@ private fun errorJson(e: CanvasError) = JsonObject().apply {
 }
 
 /**
- * What `my_air_canvas_show` returns: the folder (id and path), the new [frame]'s id and revision, and [check]; for
- * `my_air_canvas_patch` also the statements the [merge] set and removed.
+ * The picture of a shown frame: the PNG [file] the canvas tab showed, or null with the reason in [note].
  */
-fun canvasShowJson(folderId: String, path: String, frame: Frame, check: CanvasCheck, merge: OpenUiMerge? = null): String = gson.toJson(
+data class CanvasSnapshot(val file: String?, val note: String?) {
+    companion object {
+        const val NOT_SHOWN = "the canvas tab does not show this frame (it shows another frame, or no canvas tab is open)"
+        const val HIDDEN = "the canvas tab is not visible, so there is nothing to take a picture of"
+        const val NOT_RENDERED = "the canvas page did not finish rendering the frame in time"
+        const val FAILED = "the canvas page could not take a picture"
+    }
+}
+
+/**
+ * What `my_air_canvas_show` returns: the folder (id and path), the new [frame]'s id and revision, and [check]; for
+ * `my_air_canvas_patch` also the statements the [merge] set and removed; the [snapshot] when one was asked for.
+ */
+fun canvasShowJson(
+    folderId: String, path: String, frame: Frame, check: CanvasCheck, merge: OpenUiMerge? = null, snapshot: CanvasSnapshot? = null,
+): String = gson.toJson(
     JsonObject().apply {
         addProperty("folder", folderId)
         addProperty("path", path)
@@ -125,11 +139,18 @@ fun canvasShowJson(folderId: String, path: String, frame: Frame, check: CanvasCh
         add("orphaned", strings(check.orphaned))
         add("boards", JsonArray().also { a -> check.boards.forEach { a.add(boardJson(it)) } })
         addProperty("note", check.note)
+        if (snapshot != null) {
+            addProperty("snapshot", snapshot.file)
+            addProperty("snapshotNote", snapshot.note)
+        }
     },
 )
 
-/** What `my_air_canvas_get` and `my_air_canvas_apply` return: the frames without their documents, and the newest frame whole. */
-fun canvasGetJson(folderId: String, path: String, canvas: Canvas): String = gson.toJson(
+/**
+ * What `my_air_canvas_get` and `my_air_canvas_apply` return: the frames without their documents, the newest frame whole
+ * and, when [frameId] names one, that frame whole too (`frame`); an unknown [frameId] throws naming the frames there are.
+ */
+fun canvasGetJson(folderId: String, path: String, canvas: Canvas, frameId: String? = null): String = gson.toJson(
     JsonObject().apply {
         addProperty("folder", folderId)
         addProperty("path", path)
@@ -152,14 +173,21 @@ fun canvasGetJson(folderId: String, path: String, canvas: Canvas): String = gson
                 })
             }
         })
-        add("newest", canvas.newest?.let { f ->
-            JsonObject().apply {
-                addProperty("id", f.id)
-                addProperty("rev", openUiRev(f.openui))
-                addProperty("title", f.title)
-                addProperty("openui", f.openui)
-                add("state", f.state ?: JsonNull.INSTANCE)
+        add("newest", canvas.newest?.let(::frameJson) ?: JsonNull.INSTANCE)
+        if (frameId != null) {
+            val frame = requireNotNull(canvas.frames.firstOrNull { it.id == frameId }) {
+                "the canvas has no frame $frameId; its frames are ${canvas.frames.joinToString { it.id }.ifEmpty { "none" }}"
             }
-        } ?: JsonNull.INSTANCE)
+            add("frame", frameJson(frame))
+        }
     },
 )
+
+/** A frame whole: id, rev, title, its document and the form state the user left in it. */
+private fun frameJson(f: Frame) = JsonObject().apply {
+    addProperty("id", f.id)
+    addProperty("rev", openUiRev(f.openui))
+    addProperty("title", f.title)
+    addProperty("openui", f.openui)
+    add("state", f.state ?: JsonNull.INSTANCE)
+}

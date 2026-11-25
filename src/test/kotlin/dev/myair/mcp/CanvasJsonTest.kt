@@ -89,6 +89,30 @@ class CanvasJsonTest {
     }
 
     @Test
+    fun `get gives a named frame whole too, and refuses an unknown one naming the frames`() {
+        val canvas = Canvas(null, 5, listOf(frame.copy(id = "C1", openui = "root = Stack([old])"), frame.copy(id = "C4")))
+        val o = json(canvasGetJson("c1", "p", canvas, "C1"))
+        assertEquals("C4", o["newest"].asJsonObject["id"].asString)
+        assertEquals("root = Stack([old])", o["frame"].asJsonObject["openui"].asString)
+        assertEquals(setOf("id", "rev", "title", "openui", "state"), o["frame"].asJsonObject.keySet())
+        assertTrue("frame" !in json(canvasGetJson("c1", "p", canvas)).keySet())
+        val e = assertThrows<IllegalArgumentException> { canvasGetJson("c1", "p", canvas, "C9") }
+        assertEquals("the canvas has no frame C9; its frames are C1, C4", e.message)
+    }
+
+    @Test
+    fun `the show result carries the snapshot only when one was asked for`() {
+        val check = CanvasCheck.unchecked(CanvasCheck.NO_PAGE)
+        assertTrue("snapshot" !in json(canvasShowJson("c1", "p", frame, check)).keySet())
+        val taken = json(canvasShowJson("c1", "p", frame, check, snapshot = CanvasSnapshot("/s/C3.png", null)))
+        assertEquals("/s/C3.png", taken["snapshot"].asString)
+        assertTrue(taken["snapshotNote"].isJsonNull)
+        val missed = json(canvasShowJson("c1", "p", frame, check, snapshot = CanvasSnapshot(null, CanvasSnapshot.HIDDEN)))
+        assertTrue(missed["snapshot"].isJsonNull)
+        assertEquals(CanvasSnapshot.HIDDEN, missed["snapshotNote"].asString)
+    }
+
+    @Test
     fun `get lists frames without documents and gives the newest whole`() {
         val state = JsonObject().apply { addProperty("x", 1) }
         val canvas = Canvas(PlanManager("m", Path.of("/w"), Path.of("/w")), 5, listOf(frame.copy(id = "C1"), frame.copy(id = "C4", author = "s2", state = state, openui = "root = Stack([a])")))
