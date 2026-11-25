@@ -1,8 +1,9 @@
-// The page's side of the protocol (protocol.ts): window.myAir, the queue until connect, validation without rendering,
+// The page's side of the protocol (protocol.ts): window.myAir, the queue until connect, validation (rendering out of sight only to measure boards),
 // and the trimming and debouncing of what the renderer reports. No React here, so tests drive it directly.
 import { createParser, type ActionEvent, type OpenUIError, type ParseResult } from "@openuidev/react-lang";
 import { canvasLibrary } from "./library";
 import { checkBoards } from "./board/spec";
+import type { BoardReport } from "./board/layout";
 import type { PageMessage, ShowCall, ValidateCall, WireAction, WireError } from "./protocol";
 
 declare global {
@@ -48,17 +49,55 @@ export function parseSummary(result: ParseResult | null) {
   };
 }
 
+type Validated = Extract<PageMessage, { type: "validated" }>;
+
+/** A document's check from the parse alone: the `parsed` fields and every Board's report, nothing measured. */
+type Checked = { summary: ReturnType<typeof parseSummary>; boards: BoardReport[] };
+
+function checkDocument(openui: string): Checked {
+  const result = parserOf().parse(openui);
+  return { summary: parseSummary(result), boards: checkBoards(result.root) };
+}
+
+/** The `validated` answer: [ok] when there is a root, no error and no board problem that is an error. */
+function answer(id: string, { summary, boards }: Checked): Validated {
+  const clean = summary.errors.every((e) => e.severity === "warning") && boards.every((b) => b.problems.every((p) => p.severity === "warning"));
+  return { type: "validated", id, ...summary, ok: summary.ok && clean, boards };
+}
+
+const failed = (id: string, e: unknown): Validated =>
+  ({ type: "validated", id, ok: false, errors: [{ code: "parse-exception", message: String(e) }], unresolved: [], orphaned: [], boards: [] });
+
 /** Parses [openui] against canvasLibrary without rendering it: the `validated` answer to `validate` [id]. */
-export function validateDocument(id: string, openui: string): Extract<PageMessage, { type: "validated" }> {
+export function validateDocument(id: string, openui: string): Validated {
   try {
-    const result = parserOf().parse(openui);
-    const summary = parseSummary(result);
-    const boards = checkBoards(result.root);
-    const clean = summary.errors.every((e) => e.severity === "warning") && boards.every((b) => b.problems.every((p) => p.severity === "warning"));
-    return { type: "validated", id, ...summary, ok: summary.ok && clean, boards };
+    return answer(id, checkDocument(openui));
   } catch (e) {
-    return { type: "validated", id, ok: false, errors: [{ code: "parse-exception", message: String(e) }], unresolved: [], orphaned: [], boards: [] };
+    return failed(id, e);
   }
+}
+
+/**
+ * Renders a document out of sight and resolves with every Board's report once the measured heights settle, or null
+ * when nothing could be measured in time (main.tsx `measureBoards`).
+ */
+export type BoardMeasurer = (openui: string) => Promise<BoardReport[] | null>;
+
+/**
+ * The `validated` answer with the heights the page measured: a board [measure] reported replaces its parse-only
+ * report (estimated heights and the problems that follow from them), the others stay as parsed. Synchronous when
+ * there is nothing to measure.
+ */
+export function validateMeasured(id: string, openui: string, measure: BoardMeasurer | undefined): Validated | Promise<Validated> {
+  let checked: Checked;
+  try {
+    checked = checkDocument(openui);
+  } catch (e) {
+    return failed(id, e);
+  }
+  if (!measure || !checked.summary.ok || checked.boards.length === 0) return answer(id, checked);
+  return measure(openui).catch(() => null).then((measured) =>
+    answer(id, measured ? { ...checked, boards: checked.boards.map((b) => measured.find((m) => m.board === b.board) ?? b) } : checked));
 }
 
 /**
@@ -114,6 +153,8 @@ export type Bridge = {
   /** Receives every `show`; one that came before the handler was set is handed over at once. */
   onShow(handler: (call: ShowCall) => void): void;
   readonly states: StatePoster;
+  /** Has `validate` measure the boards of a document by rendering it ([validateMeasured]); without it, nothing is measured. */
+  setMeasurer(measure: BoardMeasurer): void;
 };
 
 /** Installs window.myAir on [win]; messages wait in a queue until the plugin calls connect(). */
@@ -128,6 +169,7 @@ export function installBridge(win: Window, timers: Timers = realTimers): Bridge 
   let showHandler: ((call: ShowCall) => void) | undefined;
   let early: ShowCall | undefined;
   const states = new StatePoster(post, STATE_DEBOUNCE_MS, timers);
+  let measurer: BoardMeasurer | undefined;
   win.myAir = {
     show(json) {
       const call = JSON.parse(json) as ShowCall;
@@ -137,7 +179,9 @@ export function installBridge(win: Window, timers: Timers = realTimers): Bridge 
     },
     validate(json) {
       const call = JSON.parse(json) as ValidateCall;
-      post(validateDocument(call.id, call.openui));
+      const validated = validateMeasured(call.id, call.openui, measurer);
+      if (validated instanceof Promise) void validated.then(post);
+      else post(validated);
     },
     connect() {
       connected = true;
@@ -149,6 +193,9 @@ export function installBridge(win: Window, timers: Timers = realTimers): Bridge 
   return {
     post,
     states,
+    setMeasurer(measure) {
+      measurer = measure;
+    },
     onShow(handler) {
       showHandler = handler;
       if (early) {

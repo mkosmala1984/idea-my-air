@@ -36,10 +36,14 @@ export interface ElementSpec {
   children: ElementSpec[];
 }
 
+export type Route = "orthogonal" | "straight" | "curved";
+
 export interface EdgeSpec {
   id: string;
   from: string;
   to: string;
+  /** How the edge is drawn, default orthogonal; the check follows the same path ([routeEdge]). */
+  route?: Route;
 }
 
 export interface Rect {
@@ -269,20 +273,86 @@ function checkEdges(edges: EdgeSpec[], out: Solved, problem: (s: Problem["severi
       problem("warning", "edge-self", [e.id], `Edge ${e.id} connects ${e.from} to itself.`);
       continue;
     }
-    const a = center(out.absolute.get(e.from)!);
-    const b = center(out.absolute.get(e.to)!);
+    const path = routeEdge(out.absolute.get(e.from)!, out.absolute.get(e.to)!, e.route);
     const skip = new Set([e.from, e.to, ...ancestors(e.from, out.parent), ...ancestors(e.to, out.parent)]);
     for (const [id, r] of out.absolute) {
       if (skip.has(id)) continue;
       // An element inside an endpoint is covered by that endpoint.
       if (ancestors(id, out.parent).has(e.from) || ancestors(id, out.parent).has(e.to)) continue;
-      if (segmentCrosses(a, b, r))
+      if (path.some((p, i) => i > 0 && segmentCrosses(path[i - 1], p, r)))
         problem("warning", "edge-crosses", [e.id, id], `Edge ${e.id} (${e.from} → ${e.to}) passes through ${id}.`);
     }
   }
 }
 
-const center = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export type Side = "top" | "right" | "bottom" | "left";
+
+const center = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+
+/** The sides an edge from rectangle [a] to [b] leaves and enters by: the ones facing each other. */
+export function facingSides(a: Rect, b: Rect): [Side, Side] {
+  const dx = center(b).x - center(a).x;
+  const dy = center(b).y - center(a).y;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? ["right", "left"] : ["left", "right"];
+  return dy >= 0 ? ["bottom", "top"] : ["top", "bottom"];
+}
+
+const OUTWARD: Record<Side, Point> = { top: { x: 0, y: -1 }, right: { x: 1, y: 0 }, bottom: { x: 0, y: 1 }, left: { x: -1, y: 0 } };
+
+const sideMiddle = (r: Rect, side: Side): Point =>
+  side === "top" ? { x: r.x + r.w / 2, y: r.y } : side === "bottom" ? { x: r.x + r.w / 2, y: r.y + r.h }
+    : side === "left" ? { x: r.x, y: r.y + r.h / 2 } : { x: r.x + r.w, y: r.y + r.h / 2 };
+
+/** Points a curved edge is drawn and checked with. */
+const CURVE_STEPS = 24;
+
+/**
+ * The path of an edge from [a] to [b], in the rectangles' units: from the middle of [a]'s facing side to the middle of
+ * [b]'s. orthogonal turns twice, halfway between the sides; curved is a cubic curve leaving and entering square to the
+ * sides, as a polyline. The board draws exactly these points, so the edge-crosses check sees what the user sees.
+ */
+export function routeEdge(a: Rect, b: Rect, route: Route = "orthogonal"): Point[] {
+  const [from, to] = facingSides(a, b);
+  const p = sideMiddle(a, from);
+  const q = sideMiddle(b, to);
+  if (route === "straight") return [p, q];
+  if (route === "curved") {
+    const pull = Math.max(Math.abs(q.x - p.x), Math.abs(q.y - p.y)) / 2;
+    const c1 = { x: p.x + OUTWARD[from].x * pull, y: p.y + OUTWARD[from].y * pull };
+    const c2 = { x: q.x + OUTWARD[to].x * pull, y: q.y + OUTWARD[to].y * pull };
+    return Array.from({ length: CURVE_STEPS + 1 }, (_, i) => {
+      const t = i / CURVE_STEPS;
+      const u = 1 - t;
+      const at = (k: "x" | "y") => u * u * u * p[k] + 3 * u * u * t * c1[k] + 3 * u * t * t * c2[k] + t * t * t * q[k];
+      return { x: at("x"), y: at("y") };
+    });
+  }
+  if (from === "left" || from === "right") {
+    const mx = (p.x + q.x) / 2;
+    return [p, { x: mx, y: p.y }, { x: mx, y: q.y }, q];
+  }
+  const my = (p.y + q.y) / 2;
+  return [p, { x: p.x, y: my }, { x: q.x, y: my }, q];
+}
+
+/** The point halfway along [path], where an edge's label goes. */
+export function midpoint(path: Point[]): Point {
+  const lengths = path.slice(1).map((p, i) => Math.hypot(p.x - path[i].x, p.y - path[i].y));
+  let left = lengths.reduce((a, l) => a + l, 0) / 2;
+  for (let i = 0; i < lengths.length; i++) {
+    if (left <= lengths[i] && lengths[i] > 0) {
+      const t = left / lengths[i];
+      return { x: path[i].x + (path[i + 1].x - path[i].x) * t, y: path[i].y + (path[i + 1].y - path[i].y) * t };
+    }
+    left -= lengths[i];
+  }
+  return path[path.length - 1];
+}
 
 /** Whether the segment a-b passes through the inside of [r] (Liang-Barsky clipping; touching an edge does not count). */
 export function segmentCrosses(a: { x: number; y: number }, b: { x: number; y: number }, r: Rect): boolean {
@@ -311,9 +381,9 @@ export interface BoardReport {
   /** The Board's statement name. */
   board: string;
   unit: number;
-  /** estimated: the height is a default, not the content's (no h given and nothing measured). */
+  /** estimated: the height is a default, not the content's (no h given and nothing measured, as in a parse-only check). */
   elements: { id: string; kind: ElementKind; parent: string | null; x: number; y: number; w: number; h: number; estimated: boolean }[];
-  edges: EdgeSpec[];
+  edges: { id: string; from: string; to: string }[];
   problems: Problem[];
 }
 
@@ -327,7 +397,7 @@ export function report(board: string, elements: ElementSpec[], edges: EdgeSpec[]
     }
   };
   walk(elements);
-  return { board, unit, elements: list, edges, problems: [...extra, ...solved.problems] };
+  return { board, unit, elements: list, edges: edges.map(({ id, from, to }) => ({ id, from, to })), problems: [...extra, ...solved.problems] };
 }
 
 /** The reports of every Board in a parsed document, from the parse alone: nothing is measured, see `estimated`. */

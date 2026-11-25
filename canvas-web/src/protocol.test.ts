@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BuiltinActionType } from "@openuidev/react-lang";
 import contract from "./protocol.json";
-import { installBridge, StatePoster, validateDocument, wireAction } from "./bridge";
+import { installBridge, StatePoster, validateDocument, validateMeasured, wireAction } from "./bridge";
 import { canvasLibrary } from "./library";
 import { MESSAGE_TYPES, PAGE_CALLS, type PageMessage } from "./protocol";
 
@@ -99,6 +99,43 @@ n = Note("n", {x: 0, y: 0})
 m = Note("m", {x: 2, y: 2})`);
     expect(overlapping.ok).toBe(true);
     expect(overlapping.boards[0].problems.map((p) => p.code)).toEqual(["overlap"]);
+  });
+});
+
+describe("validate with measured heights", () => {
+  const doc = `root = Stack([b])
+b = Board([n, m])
+n = Note("tall text", {x: 0, y: 0, w: 4})
+m = Note("below", {below: "n"})`;
+
+  it("replaces a board's parse-only report with the measured one and judges it again", async () => {
+    const parsed = validateDocument("p", doc);
+    expect(parsed.boards[0].elements.map((e) => e.estimated)).toEqual([true, true]);
+    const measured = { ...parsed.boards[0], elements: parsed.boards[0].elements.map((e) => ({ ...e, estimated: false })),
+      problems: [{ severity: "error" as const, code: "x", ids: ["n"], message: "m" }] };
+    const answer = await validateMeasured("v", doc, async () => [measured]);
+    expect(answer).toMatchObject({ id: "v", ok: false, boards: [measured] });
+  });
+
+  it("keeps the parse-only reports when nothing was measured, and does not measure without boards", async () => {
+    let calls = 0;
+    const none = async () => (calls++, null);
+    expect(await validateMeasured("v", doc, none)).toEqual(validateDocument("v", doc));
+    expect(await validateMeasured("v", doc, () => Promise.reject(new Error("gone")))).toEqual(validateDocument("v", doc));
+    expect(validateMeasured("w", "root = Stack([])", none)).toEqual(validateDocument("w", "root = Stack([])"));
+    expect(calls).toBe(1);
+  });
+
+  it("posts the measured answer once the measurer resolves", async () => {
+    const { win, posted, bridge } = page();
+    win.myAir.connect();
+    let release!: (r: null) => void;
+    bridge.setMeasurer(() => new Promise((r) => (release = r)));
+    win.myAir.validate(JSON.stringify({ id: "v", openui: doc }));
+    expect(posted).toEqual([]);
+    release(null);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(posted.map((m) => m.type)).toEqual(["validated"]);
   });
 });
 

@@ -29,3 +29,13 @@ html, body { margin: 0; }
 .myair-board-report button { font: inherit; cursor: pointer; }
 .myair-board-report pre { max-height: 320px; overflow: auto; margin: 4px 0 0; padding: 6px; background: var(--openui-background); border: 1px solid var(--openui-border-default, #8886); }
 .myair-board-outside { color: var(--openui-text-danger-primary, #c33); font-size: 12px; }
+
+/* The render check's hidden render (main.tsx measureBoards): laid out, so heights can be measured, but never seen. */
+.canvas-measure {
+  position: fixed;
+  left: -20000px;
+  top: 0;
+  width: 1200px;
+  visibility: hidden;
+  pointer-events: none;
+}

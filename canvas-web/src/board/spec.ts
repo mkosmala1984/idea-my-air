@@ -1,7 +1,7 @@
 // A Board's parsed items (OpenUI element nodes) as the solver's specs. Pure, so a parse result is enough: the report
 // can be computed without rendering.
 import type { ElementNode } from "@openuidev/react-lang";
-import { boardReports, type BoardReport, type Box, type ContainerLayout, type EdgeSpec, type ElementKind, type ElementSpec, type Problem } from "./layout";
+import { boardReports, type BoardReport, type Box, type ContainerLayout, type EdgeSpec, type ElementKind, type ElementSpec, type Problem, type Route } from "./layout";
 
 const KINDS: Record<string, ElementKind> = { Shape: "shape", Note: "note", Frame: "frame" };
 
@@ -36,7 +36,9 @@ export function boardSpec(items: unknown[]): BoardSpec {
       if (!isElement(item)) continue;
       const p = item.props;
       if (item.typeName === "Edge") {
-        out.edges.push({ id: idOf(item), from: String(p.from), to: String(p.to) });
+        const edge: EdgeSpec = { id: idOf(item), from: String(p.from), to: String(p.to) };
+        if (p.route) edge.route = p.route as Route;
+        out.edges.push(edge);
         continue;
       }
       const kind = KINDS[item.typeName];

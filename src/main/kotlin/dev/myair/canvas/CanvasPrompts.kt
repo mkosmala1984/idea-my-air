@@ -27,7 +27,8 @@ fun canvasRules(): String = """
       When validated is false, no canvas tab is open in this IDE and the frame was stored unchecked: write it carefully, nothing will tell you about mistakes.
     - A Board's answer is in boards: every element's rectangle in grid units, as the boxes resolved, and its problems
       (overlap, overflow, anchors that do not resolve, edges through other elements...). Check the rectangles against what you meant
-      and fix every problem; a height marked estimated is a default, since nothing is measured, so give h where the size matters.
+      and fix every problem. Heights without h are measured from the rendered content; one marked estimated is a default, since
+      the page could not render in time, so give h where the size matters. An edge is checked along the path it is drawn with.
     - my_air_canvas_patch(folder, frame, patch, expect) changes a frame in place by statements: a statement of an existing name
       replaces it, a new name is added, name = null deletes it, and statements root no longer reaches are dropped. expect is the
       frame's rev from the last show, get or patch; a stale rev is refused with the current document. Patch a board you are

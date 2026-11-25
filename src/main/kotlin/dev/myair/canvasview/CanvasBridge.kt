@@ -16,7 +16,8 @@ data class CanvasFrame(val frame: String, val openui: String, val dark: Boolean,
 fun showScript(frame: CanvasFrame): String = call("show", Gson().toJson(frame))
 
 /**
- * The script that has the page parse [openui] against its library without rendering it (`window.myAir.validate`);
+ * The script that has the page check [openui] against its library without showing it (`window.myAir.validate`; a
+ * document with boards is rendered out of sight to measure them);
  * the page answers with [CanvasMessage.Validated] carrying [id].
  */
 fun validateScript(id: String, openui: String): String = call("validate", Gson().toJson(mapOf("id" to id, "openui" to openui)))

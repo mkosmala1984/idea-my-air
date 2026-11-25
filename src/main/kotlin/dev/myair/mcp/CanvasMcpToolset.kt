@@ -47,7 +47,7 @@ class CanvasMcpToolset : McpToolset {
             "ok (true when the document has a root and no error, null when not validated), errors (code, message, statementId, component, " +
             "path, hint, severity error or warning), unresolved (references never defined), orphaned (statements root does not reach, " +
             "which do not show), boards (each Board's geometry: board, unit, elements with id, kind, parent and x, y, w, h in grid units " +
-            "and estimated when the height is a default rather than the content's; edges; problems with severity, code, ids and message) " +
+            "and estimated when the height is a default because the page could not measure the content; edges; problems with severity, code, ids and message) " +
             "and note. When ok is false, errors are listed or a board has problems, fix the document and show it again.",
     )
     suspend fun my_air_canvas_show(

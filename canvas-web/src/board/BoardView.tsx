@@ -4,6 +4,7 @@ import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffec
 import {
   Background,
   BackgroundVariant,
+  BaseEdge,
   Controls,
   Handle,
   MarkerType,
@@ -11,12 +12,15 @@ import {
   Position,
   ReactFlow,
   type Edge,
+  type EdgeProps,
+  type InternalNode,
   type Node,
   type NodeChange,
   type NodeProps,
+  useInternalNode,
 } from "@xyflow/react";
 import type { ElementNode } from "@openuidev/react-lang";
-import { DEFAULT_UNIT, movedBox, report, solve, type BoardReport, type ElementSpec, type Rect } from "./layout";
+import { DEFAULT_UNIT, facingSides, midpoint, movedBox, report, routeEdge, solve, type BoardReport, type ElementSpec, type Route } from "./layout";
 import { boardSpec } from "./spec";
 
 /** Whether the page shows the dark theme; main.tsx provides it from the plugin's frame. */
@@ -34,6 +38,14 @@ declare global {
     myAirBoards?: Record<string, BoardReport>;
   }
 }
+
+/**
+ * Receives every board's geometry report whenever it changes (heights measured included). By default it is kept in
+ * window.myAirBoards; the render check (main.tsx `measureBoards`) collects them from its hidden render instead.
+ */
+export const BoardReportContext = createContext<(report: BoardReport) => void>((r) => {
+  window.myAirBoards = { ...window.myAirBoards, [r.board]: r };
+});
 
 export const DEFAULT_HEIGHT = 560;
 
@@ -140,15 +152,32 @@ const ShapeNode = memo(({ data, width, height }: NodeProps<Node<ElementData>>) =
 
 const nodeTypes = { note: NoteNode, frame: FrameNode, shape: ShapeNode };
 
-/** The handle sides of an edge from rectangle [a] to [b]: the sides facing each other. */
-export function facingSides(a: Rect, b: Rect): [Position, Position] {
-  const dx = b.x + b.w / 2 - (a.x + a.w / 2);
-  const dy = b.y + b.h / 2 - (a.y + a.h / 2);
-  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? [Position.Right, Position.Left] : [Position.Left, Position.Right];
-  return dy >= 0 ? [Position.Bottom, Position.Top] : [Position.Top, Position.Bottom];
+interface EdgeData extends Record<string, unknown> {
+  route: Route;
+  unit: number;
 }
 
-const ROUTES: Record<string, string> = { orthogonal: "smoothstep", straight: "straight", curved: "default" };
+/** A node's rectangle in grid units, where it is now (while dragged too). */
+const rectOf = (n: InternalNode, unit: number) => ({
+  x: n.internals.positionAbsolute.x / unit,
+  y: n.internals.positionAbsolute.y / unit,
+  w: (n.width ?? n.measured.width ?? 0) / unit,
+  h: (n.height ?? n.measured.height ?? 0) / unit,
+});
+
+/** Draws the path [routeEdge] gives, the one the edge-crosses check follows, from the nodes' current rectangles. */
+const BoardEdge = memo(({ id, source, target, data, label, markerEnd, markerStart }: EdgeProps<Edge<EdgeData>>) => {
+  const from = useInternalNode(source);
+  const to = useInternalNode(target);
+  if (!from || !to || !data) return null;
+  const { unit } = data;
+  const path = routeEdge(rectOf(from, unit), rectOf(to, unit), data.route);
+  const mid = midpoint(path);
+  const d = path.map((p, i) => `${i === 0 ? "M" : "L"}${p.x * unit},${p.y * unit}`).join(" ");
+  return <BaseEdge id={id} path={d} label={label} labelX={mid.x * unit} labelY={mid.y * unit} markerEnd={markerEnd} markerStart={markerStart} />;
+});
+
+const edgeTypes = { board: BoardEdge };
 
 export interface BoardProps {
   items: unknown[];
@@ -159,6 +188,7 @@ export interface BoardProps {
 export function BoardView({ props, renderNode, statementId }: { props: BoardProps; renderNode: (v: unknown) => ReactNode; statementId?: string }) {
   const dark = useContext(DarkContext);
   const onMove = useContext(BoardMoveContext);
+  const onReport = useContext(BoardReportContext);
   const unit = props.unit ?? DEFAULT_UNIT;
   const spec = useMemo(() => boardSpec(props.items ?? []), [props.items]);
 
@@ -226,6 +256,7 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
         .filter((e) => solved.absolute.has(e.from) && solved.absolute.has(e.to))
         .map((e) => {
           const node = edgeNode(props.items ?? [], e.id);
+          // React Flow wants handles to draw an edge at all; BoardEdge draws its own path.
           const [sourceHandle, targetHandle] = facingSides(solved.absolute.get(e.from)!, solved.absolute.get(e.to)!);
           const arrow = (node?.props.arrow as string | undefined) ?? "end";
           return {
@@ -234,19 +265,18 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
             target: e.to,
             sourceHandle,
             targetHandle,
-            type: ROUTES[(node?.props.route as string | undefined) ?? "orthogonal"],
+            type: "board",
+            data: { route: e.route ?? "orthogonal", unit },
             label: (node?.props.label as string | undefined) || undefined,
             markerEnd: arrow === "none" ? undefined : { type: MarkerType.ArrowClosed },
             markerStart: arrow === "both" ? { type: MarkerType.ArrowClosed } : undefined,
             zIndex: 1000,
           };
         }),
-    [spec, solved, props.items],
+    [spec, solved, props.items, unit],
   );
 
-  useEffect(() => {
-    window.myAirBoards = { ...window.myAirBoards, [statementId ?? "board"]: geometry };
-  }, [geometry, statementId]);
+  useEffect(() => onReport(geometry), [geometry, onReport]);
 
   const [showReport, setShowReport] = useState(false);
   const errors = geometry.problems.filter((p) => p.severity === "error").length;
@@ -258,6 +288,7 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onNodeDragStop={onNodeDragStop}
         colorMode={dark ? "dark" : "light"}

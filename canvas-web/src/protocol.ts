@@ -4,8 +4,9 @@
 //
 // Plugin -> page, through executeJavaScript, each with one JSON string argument (or none):
 //   window.myAir.show(ShowCall)         renders a frame, replacing the one shown
-//   window.myAir.validate(ValidateCall) parses a document WITHOUT rendering it and posts `validated`, with the
-//                                       geometry of every Board in it (board/layout.ts, nothing measured)
+//   window.myAir.validate(ValidateCall) parses a document WITHOUT showing it and posts `validated`, with the
+//                                       geometry of every Board in it (board/layout.ts); a document with boards is
+//                                       rendered out of sight first so their heights are measured (main.tsx)
 //   window.myAir.connect()              the plugin has injected window.myAirPost; queued messages go out now
 //
 // Page -> plugin, through window.myAirPost(json) (a JBCefJSQuery), one PageMessage each. Messages posted before

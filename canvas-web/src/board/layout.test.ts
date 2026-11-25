@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { movedBox, segmentCrosses, solve, type Box, type ElementSpec } from "./layout";
+import { midpoint, movedBox, routeEdge, segmentCrosses, solve, type Box, type ElementSpec } from "./layout";
 
 const note = (id: string, box: Box): ElementSpec => ({ id, kind: "note", box, children: [] });
 const shape = (id: string, box: Box, children: ElementSpec[] = [], extra: Partial<ElementSpec> = {}): ElementSpec => ({
@@ -136,6 +136,30 @@ describe("edges", () => {
       { id: "e3", from: "a", to: "in" },
     ]);
     expect(codes(s)).toEqual(["edge-crosses:e1,wall", "edge-unknown:e2,ghost"]);
+  });
+
+  it("follows the drawn path: an orthogonal edge around an element is fine, a straight one through it is not", () => {
+    // From n's left side to agent's right side, turning at x 12.5: clear of the wall at 14..25, which the straight line
+    // between the centres would cross.
+    const els = [note("agent", { x: 2, y: 4, w: 8, h: 3 }), note("wall", { x: 14, y: 4, w: 11, h: 9 }), note("n", { x: 15, y: 15, w: 8, h: 4 })];
+    expect(codes(solve(els, [{ id: "e", from: "n", to: "agent" }]))).toEqual([]);
+    expect(codes(solve(els, [{ id: "e", from: "n", to: "agent", route: "straight" }]))).toEqual([]);
+    const blocked = [note("a", { x: 0, y: 0, w: 2, h: 2 }), note("wall", { x: 4, y: 3, w: 2, h: 2 }), note("b", { x: 8, y: 6, w: 2, h: 2 })];
+    expect(codes(solve(blocked, [{ id: "e", from: "a", to: "b", route: "straight" }]))).toEqual(["edge-crosses:e,wall"]);
+    expect(codes(solve(blocked, [{ id: "e", from: "a", to: "b" }]))).toEqual(["edge-crosses:e,wall"]);
+    expect(codes(solve(blocked, [{ id: "e", from: "a", to: "b", route: "curved" }]))).toEqual(["edge-crosses:e,wall"]);
+  });
+
+  it("routes between the facing sides' middles", () => {
+    const a = { x: 0, y: 0, w: 4, h: 2 };
+    expect(routeEdge(a, { x: 10, y: 6, w: 2, h: 2 })).toEqual([{ x: 4, y: 1 }, { x: 7, y: 1 }, { x: 7, y: 7 }, { x: 10, y: 7 }]);
+    expect(routeEdge(a, { x: 1, y: 10, w: 2, h: 2 })).toEqual([{ x: 2, y: 2 }, { x: 2, y: 6 }, { x: 2, y: 6 }, { x: 2, y: 10 }]);
+    expect(routeEdge(a, { x: -9, y: 0, w: 2, h: 2 }, "straight")).toEqual([{ x: 0, y: 1 }, { x: -7, y: 1 }]);
+    const curve = routeEdge(a, { x: 10, y: 6, w: 2, h: 2 }, "curved");
+    expect(curve[0]).toEqual({ x: 4, y: 1 });
+    expect(curve.at(-1)).toEqual({ x: 10, y: 7 });
+    expect(midpoint([{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 4 }])).toEqual({ x: 4, y: 0 });
+    expect(midpoint([{ x: 0, y: 0 }, { x: 0, y: 6 }])).toEqual({ x: 0, y: 3 });
   });
 
   it("segmentCrosses counts the inside only", () => {
