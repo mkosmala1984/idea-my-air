@@ -13,6 +13,7 @@ import {
   Position,
   ReactFlow,
   type Edge,
+  type EdgeChange,
   type EdgeProps,
   type InternalNode,
   type Node,
@@ -20,9 +21,10 @@ import {
   type NodeProps,
   useInternalNode,
 } from "@xyflow/react";
-import type { ElementNode } from "@openuidev/react-lang";
+import { useTriggerAction, type ElementNode } from "@openuidev/react-lang";
 import { DEFAULT_UNIT, facingSides, midpoint, movedBox, report, routeEdge, solve, type BoardReport, type ElementSpec, type Route } from "./layout";
 import { boardSpec } from "./spec";
+import { selectionContext, selectionMessage } from "./selection";
 
 /** Whether the page shows the dark theme; main.tsx provides it from the plugin's frame. */
 export const DarkContext = createContext(false);
@@ -176,6 +178,9 @@ const ShapeNode = memo(({ data, width, height }: NodeProps<Node<ElementData>>) =
 
 const nodeTypes = { note: NoteNode, frame: FrameNode, shape: ShapeNode };
 
+/** Held while clicking, adds to the selection (Shift + drag draws a selection box). */
+const MULTI_SELECT_KEYS = ["Control", "Meta", "Shift"];
+
 interface EdgeData extends Record<string, unknown> {
   route: Route;
   unit: number;
@@ -226,10 +231,15 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
 
   // Positions the user dragged to, in pixels relative to the parent; the spike keeps them on the page only.
   const [dragged, setDragged] = useState<Record<string, { x: number; y: number }>>({});
+  // What the user selected (click, Ctrl/Shift+click, Shift+drag a box): sent to the manager from the selection bar.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [selectedEdges, setSelectedEdges] = useState<ReadonlySet<string>>(new Set());
   const onNodesChange = useCallback((changes: NodeChange<Node<ElementData>>[]) => {
     const moves = changes.flatMap((c) => (c.type === "position" && c.position ? [[c.id, c.position] as const] : []));
     if (moves.length > 0) setDragged((d) => ({ ...d, ...Object.fromEntries(moves) }));
+    setSelected((s) => applySelect(s, changes));
   }, []);
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => setSelectedEdges((s) => applySelect(s, changes)), []);
   // A changed layout places everything itself, the moves the user made included once the plugin wrote them. Keyed on
   // the specs' text, not their identity: the renderer may hand over new item objects for an unchanged document.
   const layoutKey = useMemo(() => JSON.stringify(spec.elements), [spec]);
@@ -265,6 +275,7 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
           // A row, column or grid places its children itself; only free placement can be dragged.
           draggable: !parent || (parent.layout ?? "free") === "free",
           dragHandle: el.kind === "frame" ? ".myair-board-drag" : undefined,
+          selected: selected.has(el.id),
           data: { spec: el, node: spec.nodes.get(el.id)!, renderNode, measure, autoHeight },
         });
         walk(el.children, el);
@@ -272,7 +283,7 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
     };
     walk(spec.elements);
     return list;
-  }, [spec, solved, unit, dragged, renderNode, measure]);
+  }, [spec, solved, unit, dragged, renderNode, measure, selected]);
 
   const edges = useMemo<Edge[]>(
     () =>
@@ -295,9 +306,10 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
             markerEnd: arrow === "none" ? undefined : { type: MarkerType.ArrowClosed },
             markerStart: arrow === "both" ? { type: MarkerType.ArrowClosed } : undefined,
             zIndex: 1000,
+            selected: selectedEdges.has(e.id),
           };
         }),
-    [spec, solved, props.items, unit],
+    [spec, solved, props.items, unit, selectedEdges],
   );
 
   useEffect(() => onReport(geometry), [geometry, onReport]);
@@ -318,6 +330,8 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        multiSelectionKeyCode={MULTI_SELECT_KEYS}
         onNodeDragStop={onNodeDragStop}
         colorMode={dark ? "dark" : "light"}
         snapToGrid
@@ -335,12 +349,56 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
           </ControlButton>
         </Controls>
       </ReactFlow>
+      {selected.size + selectedEdges.size > 0 ? (
+        <SelectionBar
+          count={selected.size + selectedEdges.size}
+          context={() => selectionContext(geometry, spec.nodes, (id) => (edgeNode(props.items ?? [], id)?.props.label as string | undefined) || undefined, selected, selectedEdges)}
+          onClear={() => (setSelected(new Set()), setSelectedEdges(new Set()))}
+        />
+      ) : null}
       <div className="myair-board-report nodrag">
         <button type="button" onClick={() => setShowReport((s) => !s)}>
           {geometry.problems.length === 0 ? "Geometry: OK" : `Geometry: ${errors} errors, ${warnings} warnings`}
         </button>
         {showReport ? <pre>{JSON.stringify(geometry, null, 1)}</pre> : null}
       </div>
+    </div>
+  );
+}
+
+/** [current] with React Flow's `select` changes applied. */
+function applySelect(current: ReadonlySet<string>, changes: ReadonlyArray<{ type: string; id?: string; selected?: boolean }>): ReadonlySet<string> {
+  const selects = changes.filter((c) => c.type === "select" && c.id != null);
+  if (selects.length === 0) return current;
+  const next = new Set(current);
+  for (const c of selects) {
+    if (c.selected) next.add(c.id!);
+    else next.delete(c.id!);
+  }
+  return next;
+}
+
+/** The bar over a board while something is selected: a question for the manager about the selection, sent with it. */
+function SelectionBar({ count, context, onClear }: { count: number; context: () => ReturnType<typeof selectionContext>; onClear: () => void }) {
+  const trigger = useTriggerAction();
+  const [text, setText] = useState("");
+  const send = () => {
+    const ctx = context();
+    const message = selectionMessage(ctx, text);
+    trigger(message, undefined, { steps: [{ type: "continue_conversation", message, context: { selection: ctx } }] });
+    setText("");
+  };
+  return (
+    <div className="myair-board-selection nodrag nowheel nopan">
+      <span>{count} selected</span>
+      <input value={text} placeholder="Ask about the selection (Enter sends)" aria-label="Question about the selection"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") send();
+          if (e.key === "Escape") onClear();
+        }} />
+      <button type="button" className="myair-board-selection-send" onClick={send}>Send to agent</button>
+      <button type="button" onClick={onClear} title="Clear the selection" aria-label="Clear the selection">×</button>
     </div>
   );
 }

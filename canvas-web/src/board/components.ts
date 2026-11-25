@@ -90,6 +90,8 @@ export const Board = defineComponent({
     "'sibling name', gap?, align?: start|center|end}, plus optional w and h. Anchors name sibling statements only. " +
     "Give every element its own statement: its name is its id for anchors and edges. The board reaches down to the bottom of the canvas view; " +
     "height is its least height in px (default 320). " +
-    "When the user drags an element, its box becomes {x, y, w?, h?, pinned: true}; leave a pinned element where it is unless the user asks.",
+    "When the user drags an element, its box becomes {x, y, w?, h?, pinned: true}; leave a pinned element where it is unless the user asks. " +
+    "The user can select elements and edges and send you a question about them: its context is {selection: {board, elements: " +
+    "[{id, kind, parent, x, y, w, h, text}], edges: [{id, from, to, label?}]}}; patch those statements when asked to change them.",
   component: ({ props, renderNode, statementId }) => createElement(BoardView, { props, renderNode, statementId }),
 });
