@@ -39,3 +39,46 @@ html, body { margin: 0; }
   visibility: hidden;
   pointer-events: none;
 }
+
+/* Diff (src/diff): files of a unified diff, line numbers that open the file, line comments for the agent. */
+.myair-diff { font-family: var(--openui-font-body, system-ui, sans-serif); font-size: 12.5px; border: 1px solid var(--openui-border-default, #8884); border-radius: 6px; overflow: hidden; }
+.myair-diff-bar { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--openui-border-default, #8884); }
+.myair-diff-spacer { flex: 1; }
+.myair-diff-add { color: #1a7f37; font-variant-numeric: tabular-nums; }
+.myair-diff-del { color: #cf222e; font-variant-numeric: tabular-nums; }
+.myair-diff-toggle { display: inline-flex; border: 1px solid var(--openui-border-default, #8886); border-radius: 4px; overflow: hidden; }
+.myair-diff-toggle button { all: unset; cursor: pointer; padding: 2px 10px; font-size: 12px; }
+.myair-diff-toggle button[aria-pressed="true"] { background: var(--openui-interactive-accent-default, #3574f0); color: #fff; }
+.myair-diff-file { border-top: 1px solid var(--openui-border-default, #8884); }
+.myair-diff-file:first-of-type { border-top: 0; }
+.myair-diff-file > summary { display: flex; align-items: center; gap: 10px; padding: 6px 10px; cursor: pointer; background: color-mix(in srgb, var(--openui-text-neutral-primary, #000) 4%, transparent); }
+.myair-diff-status { font-size: 11px; padding: 0 6px; border-radius: 8px; border: 1px solid currentColor; }
+.myair-diff-status-added { color: #1a7f37; }
+.myair-diff-status-deleted { color: #cf222e; }
+.myair-diff-status-renamed { color: #9a6700; }
+.myair-diff-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-family: var(--openui-font-code, ui-monospace, monospace); }
+.myair-diff-col-num { width: 52px; }
+.myair-diff-num { position: relative; text-align: right; padding: 0 6px 0 0; color: var(--openui-text-neutral-secondary, #888); user-select: none; vertical-align: top; }
+.myair-diff-num-btn { all: unset; cursor: pointer; font-variant-numeric: tabular-nums; }
+.myair-diff-num-btn:hover:not(:disabled) { text-decoration: underline; color: var(--openui-interactive-accent-default, #3574f0); }
+.myair-diff-comment-btn { all: unset; position: absolute; left: 2px; top: 1px; width: 15px; height: 15px; line-height: 15px; text-align: center; border-radius: 3px; cursor: pointer; font-weight: 700; color: #fff; background: var(--openui-interactive-accent-default, #3574f0); opacity: 0; }
+.myair-diff-num-new .myair-diff-comment-btn, .myair-diff-split .myair-diff-num-old .myair-diff-comment-btn { display: block; }
+.myair-diff-unified .myair-diff-num-old .myair-diff-comment-btn { display: none; }
+tr:hover > .myair-diff-num .myair-diff-comment-btn, .myair-diff-comment-btn:focus-visible { opacity: 1; }
+.myair-diff-code { padding: 0 8px; white-space: pre-wrap; word-break: break-all; vertical-align: top; }
+.myair-diff-mark { display: inline-block; width: 1.2em; color: var(--openui-text-neutral-secondary, #888); user-select: none; }
+.myair-diff-add.myair-diff-code, td.myair-diff-add { background: rgba(46, 160, 67, 0.15); color: inherit; }
+td.myair-diff-del { background: rgba(248, 81, 73, 0.15); color: inherit; }
+td.myair-diff-note { color: var(--openui-text-neutral-secondary, #888); font-style: italic; }
+td.myair-diff-blank { background: color-mix(in srgb, var(--openui-text-neutral-primary, #000) 3%, transparent); }
+.myair-diff-split .myair-diff-code + .myair-diff-num { border-left: 1px solid var(--openui-border-default, #8884); }
+.myair-diff-hunk td { padding: 3px 10px; color: var(--openui-text-neutral-secondary, #888); background: rgba(84, 174, 255, 0.1); font-size: 12px; }
+.myair-diff-comment-row td { padding: 6px 10px; background: color-mix(in srgb, var(--openui-text-neutral-primary, #000) 4%, transparent); }
+.myair-diff-comment { display: flex; flex-direction: column; gap: 6px; font-family: var(--openui-font-body, system-ui, sans-serif); }
+.myair-diff-comment-where { font-size: 12px; color: var(--openui-text-neutral-secondary, #888); }
+.myair-diff-comment textarea { font: inherit; padding: 6px; border-radius: 4px; border: 1px solid var(--openui-border-default, #8886); background: var(--openui-background); color: inherit; resize: vertical; }
+.myair-diff-comment-buttons { display: flex; gap: 8px; }
+.myair-diff-comment-buttons button { font: inherit; cursor: pointer; padding: 3px 10px; border-radius: 4px; border: 1px solid var(--openui-border-default, #8886); background: transparent; color: inherit; }
+.myair-diff-comment-buttons .myair-diff-send { background: var(--openui-interactive-accent-default, #3574f0); border-color: transparent; color: #fff; }
+.myair-diff-comment-buttons button:disabled { opacity: 0.5; cursor: default; }
+.myair-diff-empty { padding: 8px 10px; color: var(--openui-text-neutral-secondary, #888); font-size: 12px; }

@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 import { defineAction, defineComponent, useTriggerAction } from "@openuidev/react-lang";
 import { openuiLibrary, openuiPromptOptions } from "@openuidev/react-ui/genui-lib";
 import { Board, Edge, Frame, Note, Shape } from "./board/components";
+import { Diff } from "./diff/component";
 
 /** `@OpenFile(path, line?)`: the plugin opens the file in the IDE's editor (`CanvasCommand.OpenFile`). */
 export const OpenFile = defineAction({
@@ -63,8 +64,8 @@ export const FileRef = defineComponent({
 
 /** The library the canvas renders with; created at module scope, as parsers memoize by library identity. */
 export const canvasLibrary = openuiLibrary.extend({
-  // Stack's children take any component; Card's children are a union, which FileRef joins.
-  components: { add: [{ component: FileRef, slots: ["Card.children"] }, Board, Shape, Note, Frame, Edge] },
+  // Stack's children take any component; Card's children are a union, which FileRef joins, and Diff joins tabs and accordions too.
+  components: { add: [{ component: FileRef, slots: ["Card.children"] }, { component: Diff, slots: ["Card.children", "TabItem.content", "AccordionItem.content"] }, Board, Shape, Note, Frame, Edge] },
   actions: { add: [OpenFile, CopyToClipboard] },
 });
 

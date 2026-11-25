@@ -101,6 +101,10 @@ A click on a frame goes through `commandOf` with the frame's author:
 - `@CopyToClipboard(text)` copies the text.
 - Any other action gives a balloon naming it.
 
+## Diff
+
+`canvas-web/src/diff/` adds `Diff(patch, view?, collapseAfter?)`: the patch is unified diff text as `git diff` or `git show` prints it. `parse.ts` (`parseDiff`, pure and lenient) reads git headers or plain `---`/`+++` pairs, new, deleted, renamed and binary files, and numbers the lines itself from each `@@` header, so a hand-written diff with wrong counts still reads; `splitRows` pairs a run of deletions with the additions after it for the side-by-side view, and `openLine` maps a deleted line to the next line of the new file. `DiffView.tsx` shows each file in a `<details>` (files after `collapseAfter` start closed) with a Unified/Split toggle. A path or line number sends `OpenFile`, and the `+` beside a line opens a comment box whose text goes out as `@ToAssistant`: the message is `path:line comment`, the context `{file, line, side, kind, code, comment}` (`commentAction`). It joins `Card`, `TabItem` and `AccordionItem` content. OpenUI's `Tabs` never settle under jsdom, so `diff.test.tsx` renders the Diff in a Stack and only parses the tab case.
+
 ## Board (spike)
 
 `canvas-web/src/board/` adds a whiteboard to the canvas library: `Board(items, unit?, height?)` with `Shape`, `Note`, `Frame` and `Edge` items, drawn with React Flow (`@xyflow/react`).
