@@ -10,6 +10,7 @@ import {
   Handle,
   MarkerType,
   MiniMap,
+  NodeResizer,
   Position,
   ReactFlow,
   type Edge,
@@ -23,7 +24,7 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import { useTriggerAction, type ElementNode } from "@openuidev/react-lang";
-import { DEFAULT_UNIT, facingSides, midpoint, movedBox, report, routeEdge, solve, type BoardReport, type ElementSpec, type Route } from "./layout";
+import { DEFAULT_UNIT, facingSides, midpoint, movedBox, report, resizedBox, routeEdge, solve, type BoardReport, type ElementSpec, type Route } from "./layout";
 import { boardSpec } from "./spec";
 import { selectionContext, selectionMessage } from "./selection";
 
@@ -85,6 +86,11 @@ interface ElementData extends Record<string, unknown> {
   measure: Measure;
   /** Whether the height comes from the content (no h in the box): then the content's height is measured. */
   autoHeight: boolean;
+  /** Whether the user may move and resize it: not inside a row, column or grid, which places and sizes it. */
+  free: boolean;
+  unit: number;
+  /** A resize ended at these pixels (relative to the parent): the board posts it as a move with w and h. */
+  onResized: (id: string, px: { x: number; y: number; width: number; height: number }) => void;
 }
 
 const SIDES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
@@ -101,6 +107,13 @@ const Handles = () => (
   </>
 );
 
+/** Handles on a selected element's corners and sides; the end of a resize goes to the plugin as the box's new x, y, w and h. */
+const Resizer = ({ data, selected }: { data: ElementData; selected: boolean }) =>
+  data.free ? (
+    <NodeResizer isVisible={selected} minWidth={data.unit} minHeight={data.unit} color="var(--openui-interactive-accent-default, #3574f0)"
+      onResizeEnd={(_, p) => data.onResized(data.spec.id, p)} />
+  ) : null;
+
 /** Reports the natural height of [ref]'s element whenever it changes. */
 function useMeasured(ref: React.RefObject<HTMLDivElement | null>, data: ElementData) {
   const { measure, spec, autoHeight } = data;
@@ -115,30 +128,36 @@ function useMeasured(ref: React.RefObject<HTMLDivElement | null>, data: ElementD
   }, [ref, measure, spec.id, autoHeight]);
 }
 
-const NoteNode = memo(({ data }: NodeProps<Node<ElementData>>) => {
+const NoteNode = memo(({ data, selected }: NodeProps<Node<ElementData>>) => {
   const ref = useRef<HTMLDivElement>(null);
   useMeasured(ref, data);
   const color = (data.node.props.color as string | undefined) ?? "yellow";
   return (
-    <div className={`myair-board-note myair-board-note-${color}`}>
-      <Handles />
-      <div ref={ref} className="myair-board-note-text">{String(data.node.props.text ?? "")}</div>
-    </div>
+    <>
+      <Resizer data={data} selected={selected} />
+      <div className={`myair-board-note myair-board-note-${color}`}>
+        <Handles />
+        <div ref={ref} className="myair-board-note-text">{String(data.node.props.text ?? "")}</div>
+      </div>
+    </>
   );
 });
 
-const FrameNode = memo(({ data }: NodeProps<Node<ElementData>>) => {
+const FrameNode = memo(({ data, selected }: NodeProps<Node<ElementData>>) => {
   const ref = useRef<HTMLDivElement>(null);
   useMeasured(ref, data);
   return (
-    <div className="myair-board-frame">
-      <Handles />
-      <div ref={ref}>
-        <div className="myair-board-frame-title myair-board-drag">{String(data.node.props.title ?? "")}</div>
-        {/* nodrag/nowheel/nopan: the content keeps the mouse, so forms, tabs and scrolling work inside. */}
-        <div className="myair-board-frame-body nodrag nowheel nopan">{data.renderNode(data.node.props.content)}</div>
+    <>
+      <Resizer data={data} selected={selected} />
+      <div className="myair-board-frame">
+        <Handles />
+        <div ref={ref}>
+          <div className="myair-board-frame-title myair-board-drag">{String(data.node.props.title ?? "")}</div>
+          {/* nodrag/nowheel/nopan: the content keeps the mouse, so forms, tabs and scrolling work inside. */}
+          <div className="myair-board-frame-body nodrag nowheel nopan">{data.renderNode(data.node.props.content)}</div>
+        </div>
       </div>
-    </div>
+    </>
   );
 });
 
@@ -163,17 +182,20 @@ function shapePath(kind: string, w: number, h: number): ReactNode {
   }
 }
 
-const ShapeNode = memo(({ data, width, height }: NodeProps<Node<ElementData>>) => {
+const ShapeNode = memo(({ data, width, height, selected }: NodeProps<Node<ElementData>>) => {
   const kind = String(data.node.props.kind ?? "rect");
   const container = data.spec.children.length > 0;
   const w = width ?? 0;
   const h = height ?? 0;
   return (
-    <div className={`myair-board-shape myair-board-shape-${kind}${container ? " myair-board-container" : ""}`}>
-      <Handles />
-      <svg className="myair-board-shape-svg" width={w} height={h}>{shapePath(kind, w, h)}</svg>
-      {data.spec.label ? <div className="myair-board-shape-label">{data.spec.label}</div> : null}
-    </div>
+    <>
+      <Resizer data={data} selected={selected} />
+      <div className={`myair-board-shape myair-board-shape-${kind}${container ? " myair-board-container" : ""}`}>
+        <Handles />
+        <svg className="myair-board-shape-svg" width={w} height={h}>{shapePath(kind, w, h)}</svg>
+        {data.spec.label ? <div className="myair-board-shape-label">{data.spec.label}</div> : null}
+      </div>
+    </>
   );
 });
 
@@ -254,16 +276,24 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
   // What the user selected (click, Ctrl/Shift+click, Shift+drag a box): sent to the manager from the selection bar.
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [selectedEdges, setSelectedEdges] = useState<ReadonlySet<string>>(new Set());
+  // Sizes the user resized to, in pixels, until the plugin's document arrives with them.
+  const [resized, setResized] = useState<Record<string, { width: number; height: number }>>({});
   const onNodesChange = useCallback((changes: NodeChange<Node<ElementData>>[]) => {
     const moves = changes.flatMap((c) => (c.type === "position" && c.position ? [[c.id, c.position] as const] : []));
     if (moves.length > 0) setDragged((d) => ({ ...d, ...Object.fromEntries(moves) }));
+    // Only a resize sets the attributes; React Flow's own measuring reports dimensions too.
+    const sizes = changes.flatMap((c) => (c.type === "dimensions" && c.setAttributes && c.dimensions ? [[c.id, c.dimensions] as const] : []));
+    if (sizes.length > 0) setResized((r) => ({ ...r, ...Object.fromEntries(sizes) }));
     setSelected((s) => applySelect(s, changes));
   }, []);
   const onEdgesChange = useCallback((changes: EdgeChange[]) => setSelectedEdges((s) => applySelect(s, changes)), []);
   // A changed layout places everything itself, the moves the user made included once the plugin wrote them. Keyed on
   // the specs' text, not their identity: the renderer may hand over new item objects for an unchanged document.
   const layoutKey = useMemo(() => JSON.stringify(spec.elements), [spec]);
-  useEffect(() => setDragged({}), [layoutKey]);
+  useEffect(() => {
+    setDragged({});
+    setResized({});
+  }, [layoutKey]);
 
   const parents = useMemo(() => {
     const map = new Map<string, { el: ElementSpec; parent: ElementSpec | null }>();
@@ -277,6 +307,10 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
       if (found) onMove({ element: n.id, ...movedBox(n.position, unit, found.el, found.parent) });
     }
   }, [parents, unit, onMove]);
+  const onResized = useCallback((id: string, px: { x: number; y: number; width: number; height: number }) => {
+    const found = parents.get(id);
+    if (found) onMove({ element: id, ...resizedBox(px, unit, found.parent) });
+  }, [parents, unit, onMove]);
 
   const nodes = useMemo(() => {
     const list: Node<ElementData>[] = [];
@@ -284,26 +318,27 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
       for (const el of els) {
         const r = solved.local.get(el.id)!;
         const autoHeight = el.children.length === 0 && el.box.h == null && el.kind !== "shape";
+        // A row, column or grid places and sizes its children itself; only free placement can be dragged and resized.
+        const free = !parent || (parent.layout ?? "free") === "free";
         list.push({
           id: el.id,
           type: el.kind,
           position: dragged[el.id] ?? { x: r.x * unit, y: r.y * unit },
-          width: r.w * unit,
-          height: r.h * unit,
+          width: resized[el.id]?.width ?? r.w * unit,
+          height: resized[el.id]?.height ?? r.h * unit,
           parentId: parent?.id,
           extent: parent ? "parent" : undefined,
-          // A row, column or grid places its children itself; only free placement can be dragged.
-          draggable: !parent || (parent.layout ?? "free") === "free",
+          draggable: free,
           dragHandle: el.kind === "frame" ? ".myair-board-drag" : undefined,
           selected: selected.has(el.id),
-          data: { spec: el, node: spec.nodes.get(el.id)!, renderNode, measure, autoHeight },
+          data: { spec: el, node: spec.nodes.get(el.id)!, renderNode, measure, autoHeight, free, unit, onResized },
         });
         walk(el.children, el);
       }
     };
     walk(spec.elements);
     return list;
-  }, [spec, solved, unit, dragged, renderNode, measure, selected]);
+  }, [spec, solved, unit, dragged, resized, renderNode, measure, selected, onResized]);
 
   const edges = useMemo<Edge[]>(
     () =>

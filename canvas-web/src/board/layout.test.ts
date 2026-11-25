@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { midpoint, movedBox, routeEdge, segmentCrosses, solve, type Box, type ElementSpec } from "./layout";
+import { midpoint, movedBox, resizedBox, routeEdge, segmentCrosses, solve, type Box, type ElementSpec } from "./layout";
 
 const note = (id: string, box: Box): ElementSpec => ({ id, kind: "note", box, children: [] });
 const shape = (id: string, box: Box, children: ElementSpec[] = [], extra: Partial<ElementSpec> = {}): ElementSpec => ({
@@ -185,5 +185,13 @@ describe("movedBox", () => {
     const parent = shape("g", { x: 0, y: 0 }, [plain], { label: "G" });
     expect(movedBox({ x: 72, y: 72 }, 24, plain, parent)).toEqual({ x: 2, y: 1, w: 5, h: null });
     expect(movedBox({ x: 72, y: 72 }, 24, plain, { ...parent, label: undefined })).toEqual({ x: 2, y: 2, w: 5, h: null });
+  });
+});
+
+describe("resizedBox", () => {
+  it("turns a resize into grid units, the parent's padding and header row off, never smaller than one unit", () => {
+    expect(resizedBox({ x: 96, y: 48, width: 170, height: 10 }, 24, null)).toEqual({ x: 4, y: 2, w: 7, h: 1 });
+    const parent = shape("g", { x: 0, y: 0 }, [], { label: "G" });
+    expect(resizedBox({ x: 72, y: 72, width: 48, height: 72 }, 24, parent)).toEqual({ x: 2, y: 1, w: 2, h: 3 });
   });
 });

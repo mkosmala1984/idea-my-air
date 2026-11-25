@@ -94,6 +94,20 @@ export function movedBox(px: { x: number; y: number }, unit: number, el: Element
   return { x: Math.round(px.x / unit) - offset.x, y: Math.round(px.y / unit) - offset.y, w: el.box.w ?? null, h: el.box.h ?? null };
 }
 
+/**
+ * Where a resized element lands and how big it is, as its box's x, y, w and h: [px] is its top-left relative to its
+ * parent's top-left and its size, in pixels; the parent's padding and header row come off as for [movedBox].
+ */
+export function resizedBox(px: { x: number; y: number; width: number; height: number }, unit: number, parent: ElementSpec | null) {
+  const offset = parent ? { x: PADDING, y: PADDING + (parent.label ? HEADER : 0) } : { x: 0, y: 0 };
+  return {
+    x: Math.round(px.x / unit) - offset.x,
+    y: Math.round(px.y / unit) - offset.y,
+    w: Math.max(1, Math.round(px.width / unit)),
+    h: Math.max(1, Math.round(px.height / unit)),
+  };
+}
+
 /** Elements that size themselves to their content: the height a leaf needs, in grid units, as the page measured it. */
 export type Measured = ReadonlyMap<string, number>;
 
