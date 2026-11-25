@@ -48,7 +48,30 @@ export const BoardReportContext = createContext<(report: BoardReport) => void>((
   window.myAirBoards = { ...window.myAirBoards, [r.board]: r };
 });
 
-export const DEFAULT_HEIGHT = 560;
+/** The least height of a board, in px, when it gives none; it otherwise reaches down to the bottom of the view. */
+export const MIN_HEIGHT = 320;
+/** The canvas's bottom padding (canvas.css `.canvas`), kept below a board that fills the view. */
+const BOTTOM_GAP = 12;
+
+/**
+ * The height of the board in [ref]: from where it starts on the page down to the bottom of the view, so a board fills
+ * the canvas tab, and never less than [least] (the Board's height, else [MIN_HEIGHT]). Follows the window's size.
+ */
+function useFillHeight(ref: React.RefObject<HTMLDivElement | null>, least: number) {
+  const [height, setHeight] = useState(least);
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = ref.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      setHeight(Math.max(least, Math.floor(window.innerHeight - top - BOTTOM_GAP)));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [ref, least]);
+  return height;
+}
 
 type Measure = (id: string, px: number) => void;
 
@@ -279,6 +302,8 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
 
   useEffect(() => onReport(geometry), [geometry, onReport]);
 
+  const boardRef = useRef<HTMLDivElement>(null);
+  const height = useFillHeight(boardRef, props.height ?? MIN_HEIGHT);
   const [showReport, setShowReport] = useState(false);
   // Off by default: in its corner it covers the board's content, a frame's table or buttons included.
   const [showMap, setShowMap] = useState(false);
@@ -286,7 +311,7 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
   const warnings = geometry.problems.length - errors;
 
   return (
-    <div className="myair-board" style={{ height: props.height ?? DEFAULT_HEIGHT }}>
+    <div ref={boardRef} className="myair-board" style={{ height }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

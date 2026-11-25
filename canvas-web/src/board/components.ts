@@ -88,7 +88,8 @@ export const Board = defineComponent({
     "A whiteboard: zoomable, pannable, elements draggable. Positions and sizes are whole grid units (unit px each, default 24). " +
     "Every element's box is {x, y} (absolute, in its container's content area) or one anchor {rightOf | leftOf | below | above: " +
     "'sibling name', gap?, align?: start|center|end}, plus optional w and h. Anchors name sibling statements only. " +
-    "Give every element its own statement: its name is its id for anchors and edges. height is the board's height in px (default 560). " +
+    "Give every element its own statement: its name is its id for anchors and edges. The board reaches down to the bottom of the canvas view; " +
+    "height is its least height in px (default 320). " +
     "When the user drags an element, its box becomes {x, y, w?, h?, pinned: true}; leave a pinned element where it is unless the user asks.",
   component: ({ props, renderNode, statementId }) => createElement(BoardView, { props, renderNode, statementId }),
 });

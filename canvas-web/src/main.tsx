@@ -62,9 +62,27 @@ function measureBoards(openui: string): Promise<BoardReport[] | null> {
 
 bridge.setMeasurer(measureBoards);
 
+/**
+ * Has Chromium repaint the whole page: an opacity change on the body damages every layer. The IDE's off-screen JCEF
+ * browser can keep parts of the previous frame on screen after a switch (a board's composited layers in particular)
+ * when only the changed regions are sent to it.
+ */
+function repaintAll() {
+  requestAnimationFrame(() => {
+    document.body.style.opacity = "0.999";
+    requestAnimationFrame(() => (document.body.style.opacity = ""));
+  });
+}
+
 function Canvas() {
   // Until the plugin shows a frame (and in a plain browser), the spike's sample.
   const [frame, setFrame] = useState<ShowCall>({ frame: "sample", openui: location.hash === "#board" ? BOARD_SAMPLE : SAMPLE, dark: matchMedia("(prefers-color-scheme: dark)").matches });
+  // After every frame switch, and again once a board has fitted its view and measured its notes.
+  useEffect(() => {
+    repaintAll();
+    const later = setTimeout(repaintAll, 400);
+    return () => clearTimeout(later);
+  }, [frame.frame, frame.openui]);
   useEffect(() => {
     bridge.onShow(setFrame);
     bridge.post({ type: "ready", ms: elapsed() });

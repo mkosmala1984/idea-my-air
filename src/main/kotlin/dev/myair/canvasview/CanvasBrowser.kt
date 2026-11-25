@@ -17,6 +17,7 @@ import org.cef.handler.CefLoadHandlerAdapter
 import org.cef.handler.CefRequestHandlerAdapter
 import org.cef.network.CefRequest
 import javax.swing.JComponent
+import javax.swing.Timer
 
 /**
  * The canvas page (`canvas/index.html`, built from `canvas-web/`) in a JCEF browser. [show] sends a frame and [validate]
@@ -103,10 +104,15 @@ class CanvasBrowser(parent: Disposable, private val onMessage: (CanvasMessage) -
         if (loaded) send(frame)
     }
 
-    private fun send(frame: CanvasFrame) = run(showScript(frame))
+    private fun send(frame: CanvasFrame) {
+        run(showScript(frame))
+        // The off-screen browser can leave parts of the previous frame painted; the page forces a full repaint too.
+        for (delay in REPAINT_DELAYS_MS) Timer(delay) { if (!browser.isDisposed) browser.component.repaint() }.apply { isRepeats = false; start() }
+    }
 
     companion object {
         private const val PAGE_URL = "https://myair.canvas/"
+        private val REPAINT_DELAYS_MS = intArrayOf(150, 600)
 
         /** The page, read once: 4 MB of inlined script and styles. */
         private val page: String by lazy {
