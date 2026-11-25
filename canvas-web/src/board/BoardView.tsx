@@ -5,6 +5,7 @@ import {
   Background,
   BackgroundVariant,
   BaseEdge,
+  ControlButton,
   Controls,
   Handle,
   MarkerType,
@@ -279,6 +280,8 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
   useEffect(() => onReport(geometry), [geometry, onReport]);
 
   const [showReport, setShowReport] = useState(false);
+  // Off by default: in its corner it covers the board's content, a frame's table or buttons included.
+  const [showMap, setShowMap] = useState(false);
   const errors = geometry.problems.filter((p) => p.severity === "error").length;
   const warnings = geometry.problems.length - errors;
 
@@ -300,8 +303,12 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={unit} />
-        <MiniMap pannable zoomable />
-        <Controls showInteractive={false} />
+        {showMap ? <MiniMap pannable zoomable /> : null}
+        <Controls showInteractive={false}>
+          <ControlButton onClick={() => setShowMap((s) => !s)} title={showMap ? "Hide minimap" : "Show minimap"} aria-label="Toggle minimap">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 3l4.5-1.5 5 1.5L15 1.5v11.5l-4.5 1.5-5-1.5L1 14.5z M5.5 1.5v11.5 M10.5 3v11.5" fill="none" stroke="currentColor" strokeWidth="1.3" /></svg>
+          </ControlButton>
+        </Controls>
       </ReactFlow>
       <div className="myair-board-report nodrag">
         <button type="button" onClick={() => setShowReport((s) => !s)}>

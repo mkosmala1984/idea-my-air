@@ -150,6 +150,11 @@ describe("edges", () => {
     expect(codes(solve(blocked, [{ id: "e", from: "a", to: "b", route: "curved" }]))).toEqual(["edge-crosses:e,wall"]);
   });
 
+  it("reports a pass through a container and its children once, as the container", () => {
+    const els = [note("a", { x: 0, y: 0, w: 2, h: 2 }), shape("g", { x: 5, y: 0, w: 4, h: 4 }, [note("in", { x: 0, y: 0, w: 2, h: 2 })]), note("b", { x: 12, y: 0, w: 2, h: 2 })];
+    expect(codes(solve(els, [{ id: "e", from: "a", to: "b", route: "straight" }]))).toEqual(["edge-crosses:e,g"]);
+  });
+
   it("routes between the facing sides' middles", () => {
     const a = { x: 0, y: 0, w: 4, h: 2 };
     expect(routeEdge(a, { x: 10, y: 6, w: 2, h: 2 })).toEqual([{ x: 4, y: 1 }, { x: 7, y: 1 }, { x: 7, y: 7 }, { x: 10, y: 7 }]);

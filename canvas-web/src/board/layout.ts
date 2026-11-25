@@ -275,12 +275,17 @@ function checkEdges(edges: EdgeSpec[], out: Solved, problem: (s: Problem["severi
     }
     const path = routeEdge(out.absolute.get(e.from)!, out.absolute.get(e.to)!, e.route);
     const skip = new Set([e.from, e.to, ...ancestors(e.from, out.parent), ...ancestors(e.to, out.parent)]);
+    const crossed = new Set<string>();
     for (const [id, r] of out.absolute) {
       if (skip.has(id)) continue;
       // An element inside an endpoint is covered by that endpoint.
       if (ancestors(id, out.parent).has(e.from) || ancestors(id, out.parent).has(e.to)) continue;
-      if (path.some((p, i) => i > 0 && segmentCrosses(path[i - 1], p, r)))
-        problem("warning", "edge-crosses", [e.id, id], `Edge ${e.id} (${e.from} → ${e.to}) passes through ${id}.`);
+      if (path.some((p, i) => i > 0 && segmentCrosses(path[i - 1], p, r))) crossed.add(id);
+    }
+    // One pass through a container and its children is reported once, as the outermost element crossed.
+    for (const id of crossed) {
+      if ([...ancestors(id, out.parent)].some((a) => crossed.has(a))) continue;
+      problem("warning", "edge-crosses", [e.id, id], `Edge ${e.id} (${e.from} → ${e.to}) passes through ${id}.`);
     }
   }
 }
