@@ -28,7 +28,7 @@ Claude Sessions panel:
 - Pin and settle (`PinMarks.kt`): `Mark`, `PIN`, `SETTLE`, `pinAction`, `settleAction`, `PinsToggle`, `TrailerList`.
 - Drag and drop: `DropLineTree` and `insertLine` (`DropLineTree.kt`), `FolderDrop` (`FolderDrop.kt`, a `TransferHandler`).
 - Folder and plan editing (`FolderEditing.kt`): `FolderEditing` (new folder or plan, rename, delete, add or remove a plan, bind or unbind a directory, set or clear the working directory, milestones, tasks, status, next step, description), `deleteMilestone`, `deleteTask` (also used by `planview`), `askFolderName` (the folder-name dialog), `FolderAction`.
-- `TurnIntoPlanAction` (`TurnIntoPlan.kt`): Turn into Plan... on the tree's and the pinned list's session menus; a new plan folder where the session shows, the session stored as its manager in its own profile (`PlanFiles.adopt`).
+- `TurnIntoPlanAction` (`TurnIntoPlan.kt`): Turn into Plan... on the tree's and the pinned list's session menus; a new plan folder where the session shows, the session stored as its manager in its own profile (`PlanFiles.adopt`). `AddCanvasAction` (`canvasview/NewCanvas.kt`) next to it: Add Canvas..., a new canvas managed by the session.
 - Persisted UI state: `treeStateXml`/`treeStateOf` (`TreeStates.kt`), `sectionExpanded`/`withSection` (`SectionStates.kt`).
 
 Session Context panel:
@@ -91,7 +91,7 @@ Session Context panel:
   - Browser and external tools: Plannotator (`reviewInPlannotator`), artifact and skill origin URLs (`BrowserUtil.browse`).
   - Other tools: Open in IDEA, Open in Terminal (a Terminal tab).
   - Sessions: `continueSession` starts a new session continuing the shown one, `newSessionHere` one in the folder it works in, filed where it is; `SessionPane.type` types `/<skill> ` into a tab's prompt without sending it.
-  - Menus: `NewSessionInDirAction` (plain and in a worktree), `NewReviewAction`, `SameSettingsAction`, `SaveAsPresetAction`, `ShowChangesVsBaseAction`, `TurnIntoPlanAction`; the pinned list's Remove from List (`updatePins { it.remove(...) }`); Refresh (`ClaudeSessionsService.refresh`).
+  - Menus: `NewSessionInDirAction` (plain and in a worktree), `NewReviewAction`, `SameSettingsAction`, `SaveAsPresetAction`, `ShowChangesVsBaseAction`, `TurnIntoPlanAction`, `AddCanvasAction`; the pinned list's Remove from List (`updatePins { it.remove(...) }`); Refresh (`ClaudeSessionsService.refresh`).
 - Dialogs: modal input, confirm, error and choose dialogs, and file choosers (`FolderEditing`, `askFolderName`); `CommandDialog`, whose Copy button writes to the clipboard; `SessionContextPanel`'s messages when the repository has no other branch to pick as base, the session's tab runs no claude, or a file to open is gone.
 - A 60 s Swing `Timer` refreshes the ages. Subscriptions to `ClaudeSessionsService`, `ActiveSession`, `PaneFont` and `ReviewService` (repaints the tree's blocker counts) are tied to the tool window's disposable.
 - Registered actions used: `dev.myair.NewSessionWithPrompt`, `dev.myair.NewClaudeSession`, `dev.myair.NewClaudeSessionInWorktree`, `dev.myair.OpenSessionsDashboard`, `dev.myair.OpenScheduledTasks`; `PresetsGroup` on the toolbar. Popup places: `ClaudeSessionsPopup`, `ClaudePinnedPopup`.

@@ -2,6 +2,7 @@ package dev.myair.planview
 
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileEditor.FileEditor
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
 import com.intellij.openapi.project.Project
@@ -20,12 +21,33 @@ import dev.myair.service.ActiveSession
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.service.LatestRead
 import dev.myair.store.ProfileStore
+import dev.myair.tabs.SessionHosts
+import dev.myair.tabs.SessionTab
 import com.intellij.util.concurrency.AppExecutorUtil
 import java.awt.BorderLayout
 import java.awt.GridBagLayout
 import java.beans.PropertyChangeListener
 import javax.swing.JComponent
 import javax.swing.JPanel
+
+/**
+ * The tab of session [sessionId] here (a session tab, or the file of a process running on detached, [SessionHosts.findTab]),
+ * and its file when its process runs here: what a session made a folder's manager brings along.
+ */
+fun sessionTabAndProcess(sessionId: String): Pair<SessionTab?, ClaudeSessionVirtualFile?> {
+    val tab = SessionHosts.findTab(sessionId)?.takeIf { it.file is ClaudeSessionVirtualFile }
+    return tab to (tab?.file as? ClaudeSessionVirtualFile)?.takeIf(SessionTerminals.getInstance()::runs)
+}
+
+/**
+ * After the session of [tab] became the manager of this folder tab: sends [message] to its [running] process, which the
+ * tab's pane holds now, then closes the session's tab, leaving the process running; a tab not started yet would start a
+ * second one when selected. A detached process has no tab to close.
+ */
+fun ManagerTabEditor.takeOver(tab: SessionTab?, running: ClaudeSessionVirtualFile?, message: String) {
+    if (running != null) check(pane?.send(message) == true) { "the folder's tab shows no process of session ${running.sessionId}" }
+    tab?.let { FileEditorManager.getInstance(it.project).closeFile(it.file) }
+}
 
 /**
  * A folder's tab (a plan's, a review's): its content beside the terminal of its manager session. The manager starts once

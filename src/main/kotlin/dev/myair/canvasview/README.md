@@ -6,8 +6,8 @@ The canvas tab and New Canvas: a canvas folder opens as an editor tab, `myair-ca
 
 ## Interface
 
-- `CanvasFiles.kt`: `class CanvasVirtualFile(folderId)`, `class CanvasFileSystem` (`PROTOCOL = "myair-canvas"`), `canvasStartDir(structure, folderId)`, `canvasManagerStart(canvas, newId, cwd, hasTranscript)` and `@Service(APP) class CanvasTabs` with `tabs`, `startManager(folderId, ideProject)`, `profileToCheck(folderId)`, `canvasOf(file)` and `managerPrompt(file)`.
-- `NewCanvas.kt`: `canvasParent(structure, reviews, canvases, place)`, `canvasFolderName(structure, parent, name)`, `startCanvas(project, name, place, profile)` and `class NewCanvasAction(place, visible, enabled)` (New Canvas... on the tree's menu).
+- `CanvasFiles.kt`: `class CanvasVirtualFile(folderId)`, `class CanvasFileSystem` (`PROTOCOL = "myair-canvas"`), `canvasStartDir(structure, folderId)`, `canvasManagerStart(canvas, newId, cwd, firstArgs, hasTranscript)` and `@Service(APP) class CanvasTabs` with `tabs`, `startManager(folderId, ideProject)`, `adopt(project, folderId, manager, running, firstArgs)` (a handed-over manager: stored, filed, bound, tab opened), `profileToCheck(folderId)`, `canvasOf(file)` and `managerPrompt(file)`.
+- `NewCanvas.kt`: `canvasParent(structure, reviews, canvases, place)`, `canvasFolderName(structure, parent, name)`, `startCanvas(project, name, place, profile)`, `class NewCanvasAction(place, visible, enabled)` (New Canvas... on the tree's menu) and `class AddCanvasAction(selected)` (Add Canvas... on a session's menu: a new canvas managed by that session); both create through the private `createCanvas`.
 - `CanvasEditor.kt`: `class CanvasEditorProvider` (type id `myair-canvas`, hides the default editor) and `class CanvasEditor(project, file) : ManagerTabEditor`.
 - `CanvasPanel.kt`: `class CanvasPanel(project, folderId, parent, send, roots)` with `show(result)`; `EMPTY_FRAME_ID`.
 - `CanvasView.kt`, pure: `selectedFrame(previousSelection, previousNewest, canvas)`, `canvasFileTarget(path, roots)`, `data class CanvasProblems(summary, lines)` and `canvasProblems(parsed, rendered, script)`.

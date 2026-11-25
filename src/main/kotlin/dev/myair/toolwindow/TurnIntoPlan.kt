@@ -6,8 +6,6 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.DumbAwareAction
 import dev.myair.claude.ClaudeSession
-import dev.myair.editor.ClaudeSessionVirtualFile
-import dev.myair.editor.SessionTerminals
 import dev.myair.folders.ChangeSource
 import dev.myair.folders.Plan
 import dev.myair.folders.SessionFolders
@@ -24,7 +22,7 @@ import dev.myair.canvas.CanvasService
 import dev.myair.canvas.managedCanvasFolder
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.store.PlanManager
-import dev.myair.tabs.SessionHosts
+import dev.myair.planview.sessionTabAndProcess
 import java.util.UUID
 
 /**
@@ -62,8 +60,7 @@ class TurnIntoPlanAction(private val selected: () -> List<ClaudeSession>) :
         check(canTurn(service.folders, session)) { "session ${session.id} lies in a plan, review or canvas, or manages a review or canvas" }
         val parentId = service.folders.placeOf(session)
         val name = askFolderName(project, "Turn into Plan", session.title, parentId, null) ?: return
-        val tab = SessionHosts.findTab(session.id)?.takeIf { it.file is ClaudeSessionVirtualFile }
-        val running = (tab?.file as? ClaudeSessionVirtualFile)?.takeIf(SessionTerminals.getInstance()::runs)
+        val (tab, running) = sessionTabAndProcess(session.id)
         val folderId = UUID.randomUUID().toString()
         service.updateFolders(ChangeSource.UI) { it.createFolder(parentId, folderId, name, plan = Plan()).assign(session.id, folderId) }
         // A running process keeps the system prompt it started with, and a resumed one keeps the recorded one until it

@@ -21,15 +21,18 @@ private fun misplaced(s: SessionFolders, reviews: Set<String>, canvases: Set<Str
  * Why [after] places a folder against the kind rules where [before] did not, else null: a review folder holds no plan,
  * whether a change adds one, creates one inside or moves one in, and lies in no review folder nor plan folder; a canvas
  * folder holds no plan, review or canvas folder and lies in no review folder (it may lie in a plan folder). Only
- * placements new in [after] count, so a structure made before a rule existed does not block unrelated writes.
+ * placements new in [after] count, so a structure made before a rule existed does not block unrelated writes. [added]
+ * are folders [after] makes canvas folders, counted in [after] only, so a folder made one that holds a plan is a new placement.
  */
-fun placementProblem(before: SessionFolders, after: SessionFolders, reviews: Set<String>, canvases: Set<String> = emptySet()): String? {
+fun placementProblem(
+    before: SessionFolders, after: SessionFolders, reviews: Set<String>, canvases: Set<String> = emptySet(), added: Set<String> = emptySet(),
+): String? {
     val old = misplaced(before, reviews, canvases).toSet()
-    val m = misplaced(after, reviews, canvases).firstOrNull { it !in old } ?: return null
+    val m = misplaced(after, reviews, canvases + added).firstOrNull { it !in old } ?: return null
     val (folder, holder) = after.pathOf(m.folder) to after.pathOf(m.holder)
     val holderKind = when {
         m.holder in reviews -> "review"
-        m.holder in canvases -> "canvas"
+        m.holder in canvases || m.holder in added -> "canvas"
         else -> "plan"
     }
     return when {
@@ -40,8 +43,10 @@ fun placementProblem(before: SessionFolders, after: SessionFolders, reviews: Set
 }
 
 /** Throws with [placementProblem]'s message; every structure write runs it (`ClaudeSessionsService.updateFolders`). */
-fun refuseKindPlacement(before: SessionFolders, after: SessionFolders, reviews: Set<String>, canvases: Set<String> = emptySet()) {
-    placementProblem(before, after, reviews, canvases)?.let { throw IllegalArgumentException(it) }
+fun refuseKindPlacement(
+    before: SessionFolders, after: SessionFolders, reviews: Set<String>, canvases: Set<String> = emptySet(), added: Set<String> = emptySet(),
+) {
+    placementProblem(before, after, reviews, canvases, added)?.let { throw IllegalArgumentException(it) }
 }
 
 /**

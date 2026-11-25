@@ -7,7 +7,6 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.util.concurrency.ThreadingAssertions
 import dev.myair.editor.ClaudeSessionVirtualFile
 import dev.myair.editor.PlanStart
-import dev.myair.editor.SessionTerminals
 import dev.myair.editor.hasTranscript
 import dev.myair.editor.projectBase
 import dev.myair.folders.Folder
@@ -21,7 +20,6 @@ import dev.myair.store.PlanManagers
 import dev.myair.claude.LiveSession
 import java.nio.file.Path
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 /** The tab of the plan of folder [folderId], `myair-plan://<folderId>`. */
 class PlanVirtualFile(folderId: String) : FolderTabFile(folderId, "Plan") {
@@ -75,11 +73,6 @@ fun managerRefusal(
 class PlanFiles {
     val store = PlanManagerStore(Homes.myAir.resolve("plan-managers.json"))
     val tabs = FolderTabs(::PlanVirtualFile)
-    /**
-     * Arguments for a plan's manager, by folder id, added after `--session-id`/`--resume` when [startManager] next builds
-     * its file: the first prompt after `--`, and for a new session the flags it starts with.
-     */
-    private val pendingArgs = ConcurrentHashMap<String, List<String>>()
 
     fun file(folderId: String): PlanVirtualFile = tabs.file(folderId)
 
@@ -104,7 +97,7 @@ class PlanFiles {
         lateinit var args: List<String>
         val manager = store.update { stored ->
             val (manager, start) = managerStart(stored.byFolder[folder.id], newId, cwd, cwd, DEFAULT_PROFILE, ::hasManagerTranscript)
-            args = start + pendingArgs.remove(folder.id).orEmpty()
+            args = start + tabs.takeFirstArgs(folder.id).orEmpty()
             stored.prune(structure.all().map { it.id }.toSet()).set(folder.id, manager)
         }.byFolder.getValue(folder.id)
         return tabs.managerFile(folder.id, manager, newId, args, PlanStart(folder.id, null))
@@ -125,14 +118,7 @@ class PlanFiles {
             previous = stored.byFolder[folderId]?.session
             stored.set(folderId, manager)
         }
-        tabs.forgetManager(folderId)?.let(SessionTerminals.getInstance()::detach)
-        if (running == null) pendingArgs[folderId] = firstArgs
-        else {
-            check(running.sessionId == manager.session && SessionTerminals.getInstance().runs(running)) { "no process of session ${manager.session} in ${running.sessionId}'s file" }
-            check(running.profile.name == manager.profile) { "session ${manager.session} runs in profile ${running.profile.name}, not ${manager.profile}" }
-            pendingArgs.remove(folderId)
-            tabs.setManager(folderId, running)
-        }
+        tabs.adopt(folderId, manager, running, firstArgs)
         return previous
     }
 

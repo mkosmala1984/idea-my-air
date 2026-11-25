@@ -52,6 +52,17 @@ const val CANVAS_MANAGER_FIRST_MESSAGE =
     "Read the canvas with my_air_canvas_get. Then tell me in one line that the canvas is ready, and wait for my request."
 
 /**
+ * What `my_air_canvas_set_manager` sends the session it makes the manager of the canvas of folder [folderId], named [name]:
+ * a session already running keeps its system prompt until its process starts again, so this says what
+ * [canvasManagerPrompt] would and points to the rules.
+ */
+fun canvasHandoverMessage(folderId: String, name: String): String =
+    "This session now manages the My Air canvas \"$name\" (folder $folderId), shown in its tab beside this terminal. Before you " +
+        "show a frame, read my_air_canvas_language and follow it; pass folder '$folderId' to the canvas tools. A message that starts " +
+        "with [canvas <folder> · <frame>] is a click on frame <frame> of the canvas, not typed by the user. Tell me in one line " +
+        "that the canvas is ready."
+
+/**
  * The canvas manager's system prompt (`--append-system-prompt-file`, so it may span lines): the canvas it manages, named
  * by id, which a rename keeps, how clicks from the canvas arrive, then [canvasRules] and the OpenUI reference.
  */

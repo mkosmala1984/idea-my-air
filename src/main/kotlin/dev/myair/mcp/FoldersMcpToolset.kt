@@ -26,6 +26,12 @@ import dev.myair.review.ReviewService
 import dev.myair.review.managedReviewFolder
 import dev.myair.canvas.CanvasService
 import dev.myair.canvas.managedCanvasFolder
+import dev.myair.canvas.canvasHandoverMessage
+import dev.myair.canvasview.CanvasTabs
+import dev.myair.planview.sessionTabAndProcess
+import dev.myair.planview.takeOver
+import dev.myair.store.Canvas
+import dev.myair.tabs.SessionTab
 import dev.myair.service.ClaudeSessionsService
 import dev.myair.planview.PlanEditor
 import dev.myair.planview.PlanFiles
@@ -35,7 +41,6 @@ import dev.myair.store.ProfileStore
 import dev.myair.store.Profile
 import dev.myair.store.DEFAULT_PROFILE
 import dev.myair.store.PlanManager
-import dev.myair.tabs.SessionHosts
 import dev.myair.MyAirSettings
 import com.intellij.openapi.fileEditor.FileEditorManager
 import dev.myair.store.Preset
@@ -117,21 +122,33 @@ class FoldersMcpToolset : McpToolset {
         @McpDescription("The name of a session configuration of the user; the other arguments replace its fields.") preset: String? = null,
         @McpDescription(
             "A folder path such as rtm/fixes: the session is filed there and, without dir, runs in the working directory or " +
-                "bound directory of that folder or the nearest folder above it having either.",
+                "bound directory of that folder or the nearest folder above it having either. A canvas folder whose canvas has no " +
+                "manager yet (one my_air_folders_apply just made) gets the session as its manager instead: it runs in the canvas's " +
+                "tab beside the canvas, its system prompt holds the canvas rules and the OpenUI reference, prompt is its first " +
+                "message, and without dir or such a directory it runs in the IDE project's directory; plan_task is refused then. " +
+                "In a canvas folder that has a manager, the session is only filed there.",
         )
         folder: String? = null,
         @McpDescription("Profile name, a Claude Code config directory listed in My Air's settings; default: default.") profile: String? = null,
     ): String {
         val project = currentCoroutineContext().project
-        val (start, plan, folderId, running, sessionProfile) = onEdt { service ->
+        val (start, plan, folderId, running, sessionProfile, canvas) = onEdt { service ->
             val saved = if (preset == null) emptyList()
             else PresetStore.INSTANCE.read().getOrElse { throw IllegalArgumentException("Cannot read ${PresetStore.INSTANCE.file}: ${it.message}") }
             val filed = folder?.let { requireNotNull(service.folders.findByPath(it)) { "no folder '$it'" } }
-            val folderDir = filed?.let { requireNotNull(service.folders.startFolder(it.id)?.startDir) { "no folder at or above '$folder' has a working or bound directory" } }
+            // A canvas folder with no manager yet: the session becomes it, starting where New Canvas starts one.
+            val canvas = filed?.id?.takeIf { id ->
+                CanvasService.getInstance().canvases[id]?.let { read ->
+                    requireNotNull(read.getOrNull()) { "cannot read the canvas of '$folder': ${read.exceptionOrNull()?.message}" }.manager == null
+                } == true
+            }
+            require(canvas == null || plan_task == null) { "'$folder' is a canvas folder without a manager, whose manager the session becomes; a manager takes no plan_task" }
+            val folderDir = filed?.let { service.folders.startFolder(it.id)?.startDir }
+            require(filed == null || canvas != null || folderDir != null) { "no folder at or above '$folder' has a working or bound directory" }
             val start = sessionStartPreset(saved, preset, dir ?: folderDir, model, effort, add_dirs, worktree, base, profile)
             require(branch == null || start.worktree) { "branch without worktree" }
             val plan = plan_task?.let { service.folders.requireTask(it) }?.let { (folder, task) -> PlanStart(folder.id, task.id) }
-            Started(start, plan, filed?.id ?: plan?.folderId, runningDirs(), ProfileStore.getInstance().byName(start.profile ?: DEFAULT_PROFILE))
+            Started(start, plan, filed?.id ?: plan?.folderId, runningDirs(), ProfileStore.getInstance().byName(start.profile ?: DEFAULT_PROFILE), canvas)
         }
         val sessionProject = start.dir(projectBase(project))
         val args = expected {
@@ -144,7 +161,12 @@ class FoldersMcpToolset : McpToolset {
         val cwd = if (repo == null) sessionProject else withContext(Dispatchers.IO) { expected { createWorktree(repo, checkNotNull(start.base), branch, id, running) } }
         withContext(Dispatchers.EDT) {
             repo?.let { rememberBase(it, checkNotNull(start.base)) }
-            ClaudeSessionOpener.startNew(project, sessionProject, cwd, id, args, plan, folderId, sessionProfile)
+            if (canvas == null) ClaudeSessionOpener.startNew(project, sessionProject, cwd, id, args, plan, folderId, sessionProfile)
+            else expected {
+                // Checked again: the worktree may have taken a while.
+                require(CanvasService.getInstance().canvas(canvas).manager == null) { "the canvas of '$folder' got a manager meanwhile" }
+                CanvasTabs.getInstance().adopt(project, canvas, PlanManager(id, cwd, sessionProject, sessionProfile.name), null, args)
+            }
         }
         return startedJson(id, cwd, sessionProject)
     }
@@ -176,6 +198,14 @@ class FoldersMcpToolset : McpToolset {
         "my_air_plan_get; no plan folder lies in another, so a project with several plans has them as plan folders inside " +
         "its bound folder), " +
         "{\"op\":\"add_plan\",\"path\":\"rtm/my-air\"} (makes an existing folder a plan folder), " +
+        "{\"op\":\"create\",\"path\":\"rtm/Canvas: flaky tests\",\"canvas\":true} (canvas optional: a canvas folder, whose tab " +
+        "shows the frames my_air_canvas_show adds beside its manager's terminal; the folder's name does not make it one. It may lie in a " +
+        "plan folder, never in a review or canvas folder, and holds no plan, review or canvas folder), " +
+        "{\"op\":\"add_canvas\",\"path\":\"rtm/fixes\"} (makes an existing folder a canvas folder, under the same rules). " +
+        "A new canvas has no manager and no tab open: start its manager with my_air_session_start (folder: its path), which opens " +
+        "the tab, or make a running session its manager with my_air_canvas_set_manager; the user opening it from the tree starts one too. " +
+        "The snapshot does not cover canvas.json: my_air_history_restore removes a created canvas folder, but cannot make a folder " +
+        "turned into a canvas plain again. " +
         "{\"op\":\"bind\",\"path\":\"rtm/my-air\",\"dir\":\"E:\\\\dev\\\\my-air-web\"}, {\"op\":\"unbind\",\"dir\":\"E:\\\\dev\\\\my-air-web\"}, " +
         "{\"op\":\"set_workdir\",\"path\":\"rtm/fixes\",\"dir\":\"E:\\\\dev\\\\rtm\"} (an existing directory new sessions started from " +
         "the folder or below run in, holding no sessions; any number of folders may share one; dir null clears it), " +
@@ -188,7 +218,13 @@ class FoldersMcpToolset : McpToolset {
     suspend fun my_air_folders_apply(@McpDescription("The JSON array of changes.") changes: String): String = withFolders { service, _ ->
         val scanned = service.sessions.map { it.id }.toSet()
         val projects = service.sessions.map { it.cwd.toString() }.toSet()
-        service.updateFolders(ChangeSource.MCP) { FolderChanges.apply(it, changes, scanned, projects) }
+        val canvases = CanvasService.getInstance()
+        lateinit var applied: FolderChanges.Applied
+        service.updateFolders(ChangeSource.MCP) {
+            FolderChanges.apply(it, changes, scanned, projects, ReviewService.getInstance().onDiskIds, canvases.onDiskIds).also { a -> applied = a }.folders
+        }
+        // After the structure, unlike New Canvas: a refused change list then leaves no canvas.json that add_canvas made for an existing folder.
+        applied.canvases.forEach { canvases.create(it, Canvas(null, 1, emptyList())) }
         treeJson(service.folders)
     }
 
@@ -265,30 +301,57 @@ class FoldersMcpToolset : McpToolset {
         return withFolders { service, folders ->
             val folder = requireNotNull(folders.findByPath(plan)?.takeIf { it.plan != null }) { "no plan folder at '$plan'" }
             val files = PlanFiles.getInstance()
-            val terminals = SessionTerminals.getInstance()
-            // A session tab here, or the file of a process running on detached ([SessionHosts.findTab]).
-            val tab = SessionHosts.findTab(session)?.takeIf { it.file is ClaudeSessionVirtualFile }
-            val running = (tab?.file as? ClaudeSessionVirtualFile)?.takeIf(terminals::runs)
-            val scanned = service.sessions.firstOrNull { it.id == session }
-            val refusal = managerRefusal(
-                files.store.read(), folder.id, session, scanned != null || running != null, service.live[session],
-                running != null, running != null && terminals.starting(running), managedReviewFolder(ReviewService.getInstance().reviews, session)?.let(folders::pathOf),
-                managedCanvasFolder(CanvasService.getInstance().canvases, session)?.let(folders::pathOf), folders::pathOf,
-            )
-            require(refusal == null) { refusal!! }
-            val manager = PlanManager(session, running?.cwd ?: scanned!!.cwd, running?.project ?: scanned!!.project, running?.profile?.name ?: scanned!!.profile)
+            val (tab, running, manager) = handover(service, folders, folder.id, session)
             service.updateFolders(ChangeSource.MCP) { it.assign(session, folder.id) }
             val filed = service.folders
             val message = planPrompt(filed, checkNotNull(filed.find(folder.id)), null, MyAirSettings.getInstance().briefs, manager = true)
             val previous = files.adopt(folder.id, manager, running, listOf("--", message))
             PlanOpener.editors(folder.id).forEach(PlanEditor::showManager)
             val editor = PlanOpener.openHere(project, folder.id)
-            if (running != null) check(editor.pane?.send(message) == true) { "the plan tab of '$plan' shows no process of session $session" }
-            // The plan tab's pane holds the process now, so closing the session's tab leaves it running; a tab not started
-            // yet would start a second one when selected. A detached process has no tab to close.
-            tab?.let { FileEditorManager.getInstance(it.project).closeFile(it.file) }
+            editor.takeOver(tab, running, message)
             managerSetJson(filed.pathOf(folder.id), checkNotNull(filed.find(folder.id)), manager, previous)
         }
+    }
+
+    @McpTool
+    @McpDescription(
+        "Makes a session the manager of a canvas folder: the session the canvas's tab shows beside the canvas, the one clicks on " +
+            "the canvas are sent to. Use it to give an existing session, such as this one, a canvas: create the folder with " +
+            "my_air_folders_apply (create with canvas true), then pass the session's id here. Call it only when the user asked for " +
+            "it in this conversation. The session must manage no plan, review or canvas already, nor run outside this IDE or as a " +
+            "background job. It is filed in the canvas folder and shows in the canvas's tab, opened here, its own tab closing while " +
+            "its process runs on there; it is told it manages the canvas and to read my_air_canvas_language, and gets the canvas " +
+            "rules in its system prompt from its next start. A previous manager's process runs on without a tab until it is idle. " +
+            "my_air_history_restore does not undo it. Returns canvas (the folder's path), manager (id, cwd, project) and previous " +
+            "(the previous manager's id, null when the canvas had none).",
+    )
+    suspend fun my_air_canvas_set_manager(
+        @McpDescription("The canvas folder's path, as my_air_folders_get gives it.") folder: String,
+        @McpDescription("The id of the session to manage the canvas.") session: String,
+    ): String {
+        val project = currentCoroutineContext().project
+        return withFolders { service, folders ->
+            val target = requireNotNull(folders.findByPath(folder)?.takeIf { it.id in CanvasService.getInstance().canvases }) { "no canvas folder at '$folder'" }
+            val (tab, running, manager) = handover(service, folders, target.id, session)
+            val message = canvasHandoverMessage(target.id, target.name)
+            val (editor, previous) = CanvasTabs.getInstance().adopt(project, target.id, manager, running, listOf("--", message))
+            editor.takeOver(tab, running, message)
+            canvasManagerSetJson(folders.pathOf(target.id), manager, previous)
+        }
+    }
+
+    /** Session [session] as the new manager of folder [folderId], refused as [managerRefusal] says: its tab and process here ([sessionTabAndProcess]), and the manager. */
+    private fun handover(service: ClaudeSessionsService, folders: SessionFolders, folderId: String, session: String): Handover {
+        val terminals = SessionTerminals.getInstance()
+        val (tab, running) = sessionTabAndProcess(session)
+        val scanned = service.sessions.firstOrNull { it.id == session }
+        val refusal = managerRefusal(
+            PlanFiles.getInstance().store.read(), folderId, session, scanned != null || running != null, service.live[session],
+            running != null, running != null && terminals.starting(running), managedReviewFolder(ReviewService.getInstance().reviews, session)?.let(folders::pathOf),
+            managedCanvasFolder(CanvasService.getInstance().canvases, session)?.let(folders::pathOf), folders::pathOf,
+        )
+        require(refusal == null) { refusal!! }
+        return Handover(tab, running, PlanManager(session, running?.cwd ?: scanned!!.cwd, running?.project ?: scanned!!.project, running?.profile?.name ?: scanned!!.profile))
     }
 
     @McpTool
@@ -351,4 +414,6 @@ class FoldersMcpToolset : McpToolset {
     }
 }
 
-private data class Started(val start: Preset, val plan: PlanStart?, val folderId: String?, val running: List<Path>, val profile: Profile)
+private data class Started(val start: Preset, val plan: PlanStart?, val folderId: String?, val running: List<Path>, val profile: Profile, val canvas: String?)
+
+private data class Handover(val tab: SessionTab?, val running: ClaudeSessionVirtualFile?, val manager: PlanManager)

@@ -12,7 +12,7 @@ Canvas folders: the application service that reads and writes `~/.my-air/canvase
   - Pure: `canvasesInStructure(all, structure)`, `shownFrames(sessions)`, `authorsDue(canvases, shows)`.
 - `CanvasChanges.kt`: `managedCanvasFolder(canvases, sessionId)`, `addFrame(canvas, title, openui, now)`, `setState(canvas, frame, state)`, `setAuthor(canvas, frame, session)`, `learnAuthors(canvas, folderId, shows)`, `patchFrame(canvas, frame, patch, expect)`, `moveInFrame(canvas, frame, element, x, y, w, h)`, `editInFrame(canvas, frame, edit)`, and `object CanvasChanges` with `apply(canvas, changes)` (ops `remove_frame`, `set_title`, `clear`).
 - `OpenUiMerge.kt`: `mergeOpenUi(existing, patch)` (a port of lang-core's `mergeStatements`) giving `data class OpenUiMerge(text, set, removed)`, `moveBoardElement(openui, element, x, y, w, h)`, `editBoard(openui, edit)` with `sealed interface BoardEdit` (`Add(board, kind, x, y)`, `Connect(board, from, to)`, `Remove(ids)`, `Text(element, text)`), `SHAPE_KINDS`, `openUiString(text)`, `openUiStatements(src)` with `data class OpenUiStatement(name, text)`, and `openUiRev(openui)`.
-- `CanvasPrompts.kt`: `openUiPrompt` (resource `/canvas/system-prompt.txt`), `canvasRules()`, `canvasManagerPrompt(folderId, canvas)`, `canvasLanguage()` (what `my_air_canvas_language` returns) and `CANVAS_MANAGER_FIRST_MESSAGE`.
+- `CanvasPrompts.kt`: `openUiPrompt` (resource `/canvas/system-prompt.txt`), `canvasRules()`, `canvasManagerPrompt(folderId, canvas)`, `canvasHandoverMessage(folderId, name)` (what `my_air_canvas_set_manager` sends), `canvasLanguage()` (what `my_air_canvas_language` returns) and `CANVAS_MANAGER_FIRST_MESSAGE`.
 
 ## Invariants
 

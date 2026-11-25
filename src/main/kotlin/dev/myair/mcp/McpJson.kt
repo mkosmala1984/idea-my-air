@@ -94,6 +94,15 @@ fun SessionFolders.plansJson(folders: List<Folder>, sessions: List<ClaudeSession
  * manager's id, and a hint when the manager runs outside both, where new task sessions would not start and from where
  * `my_air_plan_get` would not find the plan; null otherwise.
  */
+/** What `my_air_canvas_set_manager` returns. */
+fun canvasManagerSetJson(canvas: String, manager: PlanManager, previous: String?): String = gson.toJson(
+    linkedMapOf(
+        "canvas" to canvas,
+        "manager" to linkedMapOf("id" to manager.session, "cwd" to manager.cwd.toString(), "project" to manager.project.toString()),
+        "previous" to previous,
+    ),
+)
+
 fun managerSetJson(plan: String, folder: Folder, manager: PlanManager, previous: String?): String {
     val inPlan = (folder.dirs + listOfNotNull(folder.workdir)).any(manager.cwd::isAtOrUnder)
     return gson.toJson(

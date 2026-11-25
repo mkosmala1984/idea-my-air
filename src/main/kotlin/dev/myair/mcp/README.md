@@ -14,6 +14,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - `my_air_plan_get(dir)`
   - `my_air_plan_apply(plan, changes)`
   - `my_air_plan_set_manager(plan, session)`
+  - `my_air_canvas_set_manager(folder, session)`
   - `my_air_history_list()`
   - `my_air_history_restore(name)`
 - `BriefMcpToolset.kt`, `class BriefMcpToolset : McpToolset`:
@@ -43,7 +44,7 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
   - `SessionPage.toJson`, adding `profile` for a session of another profile than `default`
   - `SessionFolders.treeJson(reviews, canvases)`: `kind` `review` or `canvas` on those folders only
   - `StructureHistory.toJson`
-  - `managerSetJson`
+  - `managerSetJson`, `canvasManagerSetJson`
   - `SessionFolders.planJson`
   - `SessionFolders.plansJson`
 
@@ -87,6 +88,9 @@ The My Air tools offered to agents through the IDE's MCP server. They cover find
 - `my_air_plan_set_manager`:
   - files the session in the plan folder (`updateFolders(ChangeSource.MCP)`) and stores it in `~/.my-air/plan-managers.json` (`PlanFiles.adopt`), which the folder history does not cover;
   - detaches the previous manager's process (`SessionTerminals.detach`), rebinds every open plan tab of the plan in this IDE (`PlanEditor.showManager`), opens the plan tab in the calling project, sends a running session `planPrompt(manager = true)` (without a process, it goes after `--` as the first prompt of the manager's next start) and closes its own tab.
+- `my_air_folders_apply` writes `structure.json` first, then an empty `canvas.json` (no manager) for every canvas folder the list made (`CanvasService.create`).
+- `my_air_session_start` with `folder` a canvas folder whose canvas has no manager makes the new session its manager (`CanvasTabs.adopt`, the first message as the manager's first arguments) and opens the canvas tab instead of a session tab; without `dir` or a directory of the folder it runs in the IDE project's directory, and `plan_task` is refused.
+- `my_air_canvas_set_manager` refuses what `managerRefusal` names, as `my_air_plan_set_manager` does (shared `handover`), then `CanvasTabs.adopt`, sends a running session `canvasHandoverMessage` and closes its own tab (`finishHandover`).
 - The read tools have no side effects: `my_air_sessions_find`, `my_air_folders_get`, `my_air_plan_get`, `my_air_history_list`, `my_air_review_get`, `my_air_canvas_get` and `my_air_canvas_language`. `my_air_history_list` parses each snapshot file; `my_air_review_get` runs git.
 
 ## Verification

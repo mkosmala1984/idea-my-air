@@ -21,12 +21,12 @@ The user's folder tree of Folders mode and the plans of plan folders, as one imm
   - `Requirement` (`status` derived from its evidence: `RequirementStatus` `UNPROVEN`/`NOT_DONE`/`PROVEN`), `EvalKind`, `Decision`, `Review` with `ReviewStatus`, `Blocker`, `requireEvidence(item)` and `Plan.ENTRY_PREFIXES` (`R`, `D`, `B`).
   - `fun progress(tasks)`: `"done/not canceled"`.
 - `FolderChanges.kt`
-  - `object FolderChanges`, with `apply(structure, changes, scanned, projects, newId)`.
-  - Ops: `create`, `add_plan`, `bind`, `unbind`, `set_workdir`, `rename`, `move`, `delete`, `assign`.
+  - `object FolderChanges`, with `apply(structure, changes, scanned, projects, reviews, canvases, newId)` returning `Applied(folders, canvases)`: the folders and the ids of the folders the list made canvas folders (still in the structure); it runs `refuseKindPlacement` with those counted. Writing their `canvas.json` is the caller's.
+  - Ops: `create` (`plan`, `canvas` optional), `add_plan`, `add_canvas`, `bind`, `unbind`, `set_workdir`, `rename`, `move`, `delete`, `assign`.
 - `PlanChanges.kt`
   - `object PlanChanges`, with `apply(structure, folderId, changes, today)`.
   - Ops: `set_description`, `add_milestone`, `add_task`, `set_constraints`, `add_decision`, `add_requirement`, `add_evidence`, `set_review`, `add_blocker`, `update`, `move`, `delete`.
-- `KindPlacement.kt`: `placementProblem(before, after, reviews, canvases)`, `refuseKindPlacement(before, after, reviews, canvases)` and `inReviewOrCanvas(structure, reviews, canvases, id)` (what the tree's menus disable plan items with), the rules for review and canvas folders, whose ids `SessionFolders` does not know (see Invariants).
+- `KindPlacement.kt`: `placementProblem(before, after, reviews, canvases, added)`, `refuseKindPlacement(before, after, reviews, canvases, added)` (`added`: canvas folders the write makes, counted in `after` only) and `inReviewOrCanvas(structure, reviews, canvases, id)` (what the tree's menus disable plan items with), the rules for review and canvas folders, whose ids `SessionFolders` does not know (see Invariants).
 - `StructureStore.kt`
   - `enum ChangeSource`: `UI`, `AUTO`, `MCP`, `BRIEF`, `RESTORE`, written as a lowercase `label`.
   - `class StructureStore(file, history)`, with `read()` and `@Synchronized update(source, op)`.

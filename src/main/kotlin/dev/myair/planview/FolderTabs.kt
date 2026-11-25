@@ -78,6 +78,8 @@ fun managerProfileRefusal(name: String, profiles: ProfileStore): String? = try {
 class FolderTabs<F : FolderTabFile>(private val create: (String) -> F) {
     private val files = ConcurrentHashMap<String, F>()
     private val managers = ConcurrentHashMap<String, ClaudeSessionVirtualFile>()
+    /** Arguments for a manager by folder id, added after `--session-id`/`--resume` when its file is next built ([takeFirstArgs]). */
+    private val firstArgs = ConcurrentHashMap<String, List<String>>()
 
     fun file(folderId: String): F = files.computeIfAbsent(folderId, create)
 
@@ -95,6 +97,26 @@ class FolderTabs<F : FolderTabFile>(private val create: (String) -> F) {
 
     fun setManager(folderId: String, file: ClaudeSessionVirtualFile) {
         managers[folderId] = file
+    }
+
+    /** The arguments [adopt] left for the next start of the manager of [folderId], taken once; null when there are none. */
+    fun takeFirstArgs(folderId: String): List<String>? = firstArgs.remove(folderId)
+
+    /**
+     * Binds [manager], just stored as the manager of [folderId] in place of the one bound before. [running] is the file of its
+     * process in this IDE, kept as the manager's file so the tab binds that process rather than starting another; without one,
+     * the process the tab starts gets [args] (a first prompt after `--`, flags before it). The previous manager's process runs
+     * on detached, whatever the settings say: it may be the caller of the replacement, waiting for its answer.
+     */
+    fun adopt(folderId: String, manager: PlanManager, running: ClaudeSessionVirtualFile?, args: List<String>) {
+        forgetManager(folderId)?.let(SessionTerminals.getInstance()::detach)
+        if (running == null) firstArgs[folderId] = args
+        else {
+            check(running.sessionId == manager.session && SessionTerminals.getInstance().runs(running)) { "no process of session ${manager.session} in ${running.sessionId}'s file" }
+            check(running.profile.name == manager.profile) { "session ${manager.session} runs in profile ${running.profile.name}, not ${manager.profile}" }
+            firstArgs.remove(folderId)
+            setManager(folderId, running)
+        }
     }
 
     /**

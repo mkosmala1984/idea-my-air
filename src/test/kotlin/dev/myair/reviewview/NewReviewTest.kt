@@ -62,7 +62,7 @@ class NewReviewTest {
     @Test fun `a plan made, created or moved into a review folder by a change list is refused naming both, one there before is not`() {
         val base = SessionFolders().createFolder(null, "r", "Review: a").createFolder("r", "sub", "sub").createFolder(null, "p", "plan", plan = Plan())
         val reviews = setOf("r")
-        fun apply(changes: String) = FolderChanges.apply(base, changes, emptySet(), emptySet()).let { refuseKindPlacement(base, it, reviews) }
+        fun apply(changes: String) = FolderChanges.apply(base, changes, emptySet(), emptySet()).folders.let { refuseKindPlacement(base, it, reviews) }
         listOf(
             """[{"op":"add_plan","path":"Review: a"}]""",
             """[{"op":"add_plan","path":"Review: a/sub"}]""",

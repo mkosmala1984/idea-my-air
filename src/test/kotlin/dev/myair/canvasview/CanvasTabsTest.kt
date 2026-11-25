@@ -37,6 +37,13 @@ class CanvasTabsTest {
         assertEquals(m to listOf("--session-id", "s", "--", CANVAS_MANAGER_FIRST_MESSAGE), canvasManagerStart(canvas(m), "n", { error("unused") }) { _, _ -> false })
     }
 
+    @Test fun `a manager handed its first arguments starts with them instead of the canvas's own first message`() {
+        val m = PlanManager("s", dir, dir)
+        val first = listOf("--model", "opus", "--", "show the findings")
+        assertEquals(m to listOf("--session-id", "s") + first, canvasManagerStart(canvas(m), "n", { error("unused") }, first) { _, _ -> false })
+        assertEquals(m to listOf("--resume", "s", "--", "you manage it now"), canvasManagerStart(canvas(m), "n", { error("unused") }, listOf("--", "you manage it now")) { _, _ -> true })
+    }
+
     @Test fun `a canvas starts where its nearest folder with a directory says, else nowhere`() {
         val structure = SessionFolders().createFolder(null, "f1", "rtm", dirs = listOf("E:/dev/rtm")).createFolder("f1", "f2", "Canvas: x")
         assertEquals(Path.of("E:/dev/rtm"), canvasStartDir(structure, "f2"))

@@ -15,9 +15,13 @@ import kotlin.io.path.isDirectory
  * nothing is written until the whole list applied, no change lands.
  */
 object FolderChanges {
+    /** The folders after the change list, and the ids of the folders it made canvas folders, which still exist. */
+    data class Applied(val folders: SessionFolders, val canvases: Set<String>)
+
     private val FIELDS = mapOf(
-        "create" to setOf("path", "dirs", "plan"),
+        "create" to setOf("path", "dirs", "plan", "canvas"),
         "add_plan" to setOf("path"),
+        "add_canvas" to setOf("path"),
         "bind" to setOf("path", "dir"),
         "unbind" to setOf("dir"),
         "set_workdir" to setOf("path", "dir"),
@@ -27,26 +31,41 @@ object FolderChanges {
         "assign" to setOf("session", "path"),
     )
 
-    /** [scanned] holds the session ids and [projects] the directories sessions ran in, as `my_air_sessions_find` gives them. */
+    /**
+     * [scanned] holds the session ids and [projects] the directories sessions ran in, as `my_air_sessions_find` gives them;
+     * [reviews] and [canvases] the ids of the review and canvas folders on disk. The result is checked against the kind rules
+     * ([refuseKindPlacement]) with the canvases it makes counted, which the structure write's own check does not know yet.
+     */
     fun apply(
-        structure: SessionFolders, changes: String, scanned: Set<String>, projects: Set<String>, newId: () -> String = { UUID.randomUUID().toString() },
-    ): SessionFolders {
+        structure: SessionFolders, changes: String, scanned: Set<String>, projects: Set<String>,
+        reviews: Set<String> = emptySet(), canvases: Set<String> = emptySet(), newId: () -> String = { UUID.randomUUID().toString() },
+    ): Applied {
         val list = try {
             JsonParser.parseString(changes)
         } catch (e: JsonParseException) {
             throw IllegalArgumentException("changes are not JSON: ${e.message}", e)
         }
         require(list.isJsonArray) { "changes must be a JSON array, got $list" }
-        return list.asJsonArray.withIndex().fold(structure) { folders, (i, change) ->
+        val made = mutableSetOf<String>()
+        val after = list.asJsonArray.withIndex().fold(structure) { folders, (i, change) ->
             try {
-                applyOne(folders, change, scanned, projects, newId)
+                applyOne(folders, change, scanned, projects, newId) { id ->
+                    require(id !in reviews && id !in canvases && id !in made) { "'${folders.pathOf(id)}' is a review or canvas folder" }
+                    made += id
+                }
             } catch (e: IllegalArgumentException) {
                 throw IllegalArgumentException("change ${i + 1} $change: ${e.message}", e)
             }
         }
+        val added = made.filterTo(mutableSetOf()) { after.find(it) != null }
+        refuseKindPlacement(structure, after, reviews, canvases, added)
+        return Applied(after, added)
     }
 
-    private fun applyOne(folders: SessionFolders, element: JsonElement, scanned: Set<String>, projects: Set<String>, newId: () -> String): SessionFolders {
+    /** [makeCanvas] records a folder that becomes a canvas folder. */
+    private fun applyOne(
+        folders: SessionFolders, element: JsonElement, scanned: Set<String>, projects: Set<String>, newId: () -> String, makeCanvas: (String) -> Unit,
+    ): SessionFolders {
         require(element.isJsonObject) { "not an object" }
         val change = element.asJsonObject
         val op = change.string("op")
@@ -63,18 +82,18 @@ object FolderChanges {
                     it.asJsonArray.map { d -> d.asString }
                 }.orEmpty()
                 dirs.forEach { folders.checkBindable(it, projects) }
-                val plan = change.get("plan")?.let {
-                    require(it.isJsonPrimitive && it.asJsonPrimitive.isBoolean) { "'plan' must be true or false" }
-                    it.asBoolean
-                } == true
+                val plan = change.flag("plan")
                 require(!plan || parent == null || folders.planFolderAt(parent) == null) { "'${folders.pathOf(parent!!)}' lies in a plan folder" }
-                folders.createFolder(parent, newId(), name, dirs, if (plan) Plan() else null)
+                val canvas = change.flag("canvas")
+                val id = newId()
+                folders.createFolder(parent, id, name, dirs, if (plan) Plan() else null).also { if (canvas) makeCanvas(id) }
             }
             "add_plan" -> {
                 val folder = folders.at(change.string("path"))
                 require(folders.canAddPlan(folder.id)) { "'${change.string("path")}' has a plan, lies in a plan folder or holds one" }
                 folders.addPlan(folder.id)
             }
+            "add_canvas" -> folders.also { makeCanvas(it.at(change.string("path")).id) }
             "bind" -> {
                 val dir = change.string("dir")
                 folders.checkBindable(dir, projects)
@@ -125,6 +144,12 @@ object FolderChanges {
         require(value != null && value.isJsonPrimitive && value.asJsonPrimitive.isString) { "'$name' must be a string" }
         return value.asString
     }
+
+    /** An optional boolean field, false when absent. */
+    private fun JsonObject.flag(name: String): Boolean = get(name)?.let {
+        require(it.isJsonPrimitive && it.asJsonPrimitive.isBoolean) { "'$name' must be true or false" }
+        it.asBoolean
+    } == true
 
     /** A field that must be present, holding a string or null. */
     private fun JsonObject.nullableString(name: String): String? {

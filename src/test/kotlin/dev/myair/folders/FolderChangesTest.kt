@@ -1,6 +1,7 @@
 package dev.myair.folders
 
 import org.junit.jupiter.api.Test
+import dev.myair.mcp.treeJson
 import com.google.gson.Gson
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
@@ -19,8 +20,10 @@ class FolderChangesTest {
         .assign("s1", "fix")
 
     private var ids = 0
-    private fun apply(changes: String, structure: SessionFolders = tree) =
-        FolderChanges.apply(structure, changes, scanned = setOf("s1", "s2"), projects = setOf("/app", "/web"), newId = { "new${++ids}" })
+    private fun applied(changes: String, structure: SessionFolders = tree, reviews: Set<String> = emptySet(), canvases: Set<String> = emptySet()) =
+        FolderChanges.apply(structure, changes, scanned = setOf("s1", "s2"), projects = setOf("/app", "/web"), reviews, canvases, newId = { "new${++ids}" })
+
+    private fun apply(changes: String, structure: SessionFolders = tree) = applied(changes, structure).folders
 
     private fun SessionFolders.names(path: String? = null) = (path?.let { findByPath(it)!!.folders } ?: folders).map { it.name }
 
@@ -85,6 +88,42 @@ class FolderChangesTest {
             """[{"op":"move","path":"p","to":"rtm"}]""" to "holds another plan folder",
         ).forEach { (changes, message) ->
             val error = assertThrows<IllegalArgumentException>(changes) { apply(changes, planned) }
+            assertTrue(message in error.message!!, "'$message' not in '${error.message}'")
+        }
+    }
+
+    @Test
+    fun `a canvas folder is created or added, its id returned, while the plain folders stay plain`() {
+        val result = applied("""[{"op":"create","path":"rtm/board","canvas":true},{"op":"create","path":"rtm/plain"},{"op":"add_canvas","path":"testflo"}]""")
+        val board = result.folders.findByPath("rtm/board")!!.id
+        assertEquals(setOf(board, "tf"), result.canvases)
+        // What my_air_folders_get shows once their canvas.json is written: kind canvas on those two only.
+        val kinds = Regex(""""path": "([^"]+)",\s*"kind": "(\w+)"""").findAll(result.folders.treeJson(canvases = result.canvases)).associate { it.groupValues[1] to it.groupValues[2] }
+        assertEquals(mapOf("rtm/board" to "canvas", "testflo" to "canvas"), kinds)
+        assertEquals(emptySet(), applied("""[{"op":"create","path":"x","canvas":false}]""").canvases)
+        // A canvas created and deleted in the same list leaves no canvas behind.
+        assertEquals(emptySet(), applied("""[{"op":"create","path":"x","canvas":true},{"op":"delete","path":"x"}]""").canvases)
+    }
+
+    @Test
+    fun `a canvas folder goes where the tree's New Canvas may put one, in a plan folder but never in a review or canvas folder, holding no other kind`() {
+        val base = tree.createFolder(null, "p", "plan", plan = Plan()).createFolder(null, "r", "Review: a").createFolder(null, "c", "Canvas: a")
+            .createFolder("c", "cin", "inside").createFolder("rtm", "np", "nested plan", plan = Plan())
+        fun kinds(changes: String) = applied(changes, base, reviews = setOf("r"), canvases = setOf("c"))
+        assertEquals(1, kinds("""[{"op":"create","path":"plan/board","canvas":true}]""").canvases.size)
+        listOf(
+            """[{"op":"create","path":"Review: a/x","canvas":true}]""" to "would lie in review folder 'Review: a'",
+            """[{"op":"create","path":"Canvas: a/x","canvas":true}]""" to "would lie in canvas folder 'Canvas: a'",
+            """[{"op":"create","path":"x","canvas":true,"plan":true}]""" to "would be a plan in canvas folder 'x'",
+            """[{"op":"add_canvas","path":"plan"}]""" to "would be a plan in canvas folder 'plan'",
+            """[{"op":"add_canvas","path":"rtm"}]""" to "would be a plan in canvas folder 'rtm'",
+            """[{"op":"add_canvas","path":"Canvas: a/inside"}]""" to "would lie in canvas folder 'Canvas: a'",
+            """[{"op":"add_canvas","path":"Review: a"}]""" to "'Review: a' is a review or canvas folder",
+            """[{"op":"add_canvas","path":"Canvas: a"}]""" to "'Canvas: a' is a review or canvas folder",
+            """[{"op":"create","path":"x","canvas":true},{"op":"create","path":"x/y","canvas":true}]""" to "would lie in canvas folder 'x'",
+            """[{"op":"create","path":"x","canvas":"yes"}]""" to "'canvas' must be true or false",
+        ).forEach { (changes, message) ->
+            val error = assertThrows<IllegalArgumentException>(changes) { kinds(changes) }
             assertTrue(message in error.message!!, "'$message' not in '${error.message}'")
         }
     }

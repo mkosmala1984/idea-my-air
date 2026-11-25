@@ -42,6 +42,7 @@ import dev.myair.actions.Git
 import dev.myair.actions.NewSessionInDirAction
 import dev.myair.canvas.CanvasService
 import dev.myair.canvasview.CanvasOpener
+import dev.myair.canvasview.AddCanvasAction
 import dev.myair.canvasview.NewCanvasAction
 import dev.myair.editor.CANVAS_ICON
 import dev.myair.review.ReviewService
@@ -317,7 +318,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
                 NewReviewAction({ tree.selectionPaths?.singleOrNull()?.let { reviewStart(it, service.folders) { s -> service.heads[s.workDir]?.branch } } }) { service.foldersError == null },
                 NewCanvasAction({ tree.selectionPath?.let(::targetFolder) }, ::foldersMode, ::canEditFolders),
                 openInIdeaAction(selectedOpenDir), openInTerminalAction(selectedOpenDir), Separator.getInstance(),
-                pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree), TurnIntoPlanAction(inTree),
+                pinAction(service, inTree), settleAction(service, inTree), Separator.getInstance(), SameSettingsAction(inTree), SaveAsPresetAction(inTree), ShowChangesVsBaseAction(inTree), TurnIntoPlanAction(inTree), AddCanvasAction(inTree),
                 Separator.getInstance(), newFolder, rename, delete, Separator.getInstance(), *planActions.toTypedArray(),
             ),
             "ClaudeSessionsPopup",
@@ -336,7 +337,7 @@ class SessionsPanel(private val project: Project, toolWindow: ToolWindow) : Simp
         remove.registerCustomShortcutSet(CommonShortcuts.getDelete(), pinned)
         val inList = { pinned.selectedValuesList }
         val pinnedPopup = DefaultActionGroup(
-            pinAction(service, inList), settleAction(service, inList), remove, Separator.getInstance(), SameSettingsAction(inList), SaveAsPresetAction(inList), ShowChangesVsBaseAction(inList), TurnIntoPlanAction(inList),
+            pinAction(service, inList), settleAction(service, inList), remove, Separator.getInstance(), SameSettingsAction(inList), SaveAsPresetAction(inList), ShowChangesVsBaseAction(inList), TurnIntoPlanAction(inList), AddCanvasAction(inList),
         )
         pinned.addMouseListener(object : PopupHandler() {
             override fun invokePopup(comp: Component, x: Int, y: Int) {
