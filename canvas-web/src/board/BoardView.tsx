@@ -20,6 +20,7 @@ import {
   type NodeChange,
   type NodeProps,
   useInternalNode,
+  useReactFlow,
 } from "@xyflow/react";
 import { useTriggerAction, type ElementNode } from "@openuidev/react-lang";
 import { DEFAULT_UNIT, facingSides, midpoint, movedBox, report, routeEdge, solve, type BoardReport, type ElementSpec, type Route } from "./layout";
@@ -214,6 +215,25 @@ export interface BoardProps {
   height?: number;
 }
 
+/**
+ * Fits the view again when the board's height changes: fitView runs once, when the board first lays out, which is
+ * before useFillHeight has grown it to the bottom of the view (or after the window resized).
+ */
+function FitOnResize({ height }: { height: number }) {
+  const { fitView } = useReactFlow();
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    // After React Flow has taken the new size.
+    const frame = requestAnimationFrame(() => void fitView());
+    return () => cancelAnimationFrame(frame);
+  }, [height, fitView]);
+  return null;
+}
+
 export function BoardView({ props, renderNode, statementId }: { props: BoardProps; renderNode: (v: unknown) => ReactNode; statementId?: string }) {
   const dark = useContext(DarkContext);
   const onMove = useContext(BoardMoveContext);
@@ -341,6 +361,7 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
         nodesConnectable={false}
         proOptions={{ hideAttribution: true }}
       >
+        <FitOnResize height={height} />
         <Background variant={BackgroundVariant.Dots} gap={unit} />
         {showMap ? <MiniMap pannable zoomable /> : null}
         <Controls showInteractive={false}>
