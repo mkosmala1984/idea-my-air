@@ -60,8 +60,20 @@ export type PageMessage =
    * and [h] are its box's own sizes, kept (null when it had none). The plugin writes it into the document, pinned.
    */
   | { type: "move"; frame: string; element: string; x: number; y: number; w: number | null; h: number | null }
+  /**
+   * The user changed [board] of [frame] with the mouse; the plugin writes it into the document: `add` a note or a Shape
+   * kind at x, y (grid units, top level), `connect` two elements with an Edge, `remove` elements and edges (with what
+   * only they hold and the edges to them), `text` sets a note's text, a shape's label or a frame's title.
+   */
+  | ({ type: "edit"; frame: string; board: string } & BoardEditOp)
   /** An uncaught script error in the page. */
   | { type: "js-error"; message: string };
+
+export type BoardEditOp =
+  | { op: "add"; kind: string; x: number; y: number }
+  | { op: "connect"; from: string; to: string }
+  | { op: "remove"; ids: string[] }
+  | { op: "text"; element: string; text: string };
 
 /**
  * A Board's geometry as the solver computed it (board/layout.ts `BoardReport`): elements in grid units with their
@@ -75,4 +87,4 @@ export type MessageType = PageMessage["type"];
 export const PAGE_CALLS = ["show", "validate", "connect"] as const;
 
 /** Every PageMessage type; must equal protocol.json's `messages`. */
-export const MESSAGE_TYPES: readonly MessageType[] = ["ready", "parsed", "validated", "errors", "state", "action", "move", "js-error"];
+export const MESSAGE_TYPES: readonly MessageType[] = ["ready", "parsed", "validated", "errors", "state", "action", "move", "edit", "js-error"];

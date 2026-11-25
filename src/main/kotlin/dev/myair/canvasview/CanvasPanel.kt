@@ -29,6 +29,7 @@ import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.NamedColorUtil
 import com.intellij.util.ui.UIUtil
 import dev.myair.canvas.CanvasService
+import dev.myair.canvas.editInFrame
 import dev.myair.canvas.moveInFrame
 import dev.myair.canvas.setState
 import dev.myair.store.Canvas
@@ -176,6 +177,7 @@ class CanvasPanel(
             is CanvasMessage.State -> storeState(message)
             is CanvasMessage.Action -> act(message)
             is CanvasMessage.Move -> move(message)
+            is CanvasMessage.Edit -> editBoard(message)
         }
         showProblems()
     }
@@ -202,6 +204,20 @@ class CanvasPanel(
             notify("The move of ${message.element} was not saved: ${e.message}")
         } catch (e: Exception) {
             thisLogger().warn("Cannot store the move of ${message.element} in frame ${message.frame} of canvas $folderId", e)
+        }
+    }
+
+    /** Writes what the user changed on a board (added, connected, removed, retitled) into the frame's document. */
+    private fun editBoard(message: CanvasMessage.Edit) {
+        if (frames().none { it.id == message.frame }) return
+        try {
+            CanvasService.getInstance().update(folderId) { c ->
+                if (c.frames.any { it.id == message.frame }) editInFrame(c, message.frame, message.edit) else c
+            }
+        } catch (e: IllegalArgumentException) {
+            notify("The change on the board was not saved: ${e.message}")
+        } catch (e: Exception) {
+            thisLogger().warn("Cannot store a board change in frame ${message.frame} of canvas $folderId", e)
         }
     }
 

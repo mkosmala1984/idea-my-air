@@ -5,6 +5,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import dev.myair.canvas.BoardEdit
 
 // The plugin's side of the canvas page's protocol: `canvas-web/src/protocol.ts` documents it, and
 // `canvas-web/src/protocol.json` lists its names for the tests of both sides (CanvasProtocolTest).
@@ -103,6 +104,9 @@ sealed interface CanvasMessage {
      */
     data class Move(val frame: String, val element: String, val x: Long, val y: Long, val w: Long?, val h: Long?) : CanvasMessage
 
+    /** The user changed board [board] of [frame] with the mouse: an element added, an edge drawn, elements removed, a text. */
+    data class Edit(val frame: String, val board: String, val edit: BoardEdit) : CanvasMessage
+
     /** An uncaught script error in the page. */
     data class ScriptError(val message: String) : CanvasMessage
 
@@ -121,6 +125,15 @@ sealed interface CanvasMessage {
                     Action(r.str("frame"), e.str("type"), e.str("humanFriendlyMessage"), e.obj("params"), e.optStr("formName"), e.optObj("formState"))
                 }
                 "move" -> Move(r.str("frame"), r.str("element"), r.long("x"), r.long("y"), r.optLong("w"), r.optLong("h"))
+                "edit" -> Edit(
+                    r.str("frame"), r.str("board"),
+                    when (r.oneOf("op", "add", "connect", "remove", "text")) {
+                        "add" -> BoardEdit.Add(r.str("board"), r.str("kind"), r.long("x"), r.long("y"))
+                        "connect" -> BoardEdit.Connect(r.str("board"), r.str("from"), r.str("to"))
+                        "remove" -> BoardEdit.Remove(r.strings("ids"))
+                        else -> BoardEdit.Text(r.str("element"), r.str("text"))
+                    },
+                )
                 "js-error" -> ScriptError(r.str("message"))
                 else -> throw IllegalArgumentException("unknown canvas message type $type: $json")
             }
@@ -152,7 +165,7 @@ private class Fields(private val o: JsonObject, private val json: String) {
         Fields(it.asJsonObject, json)
     }
 
-    private fun oneOf(key: String, vararg values: String): String =
+    fun oneOf(key: String, vararg values: String): String =
         str(key).also { require(it in values) { "canvas message with $key '$it', not one of ${values.joinToString()}: $json" } }
 
     fun boards(key: String): List<CanvasBoard> = objects(key).map { b ->

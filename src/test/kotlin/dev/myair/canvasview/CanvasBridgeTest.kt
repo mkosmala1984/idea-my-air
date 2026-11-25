@@ -1,6 +1,7 @@
 package dev.myair.canvasview
 
 import com.google.gson.JsonParser
+import dev.myair.canvas.BoardEdit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -62,6 +63,20 @@ class CanvasBridgeTest {
             CanvasMessage.parse("""{"type":"move","frame":"C2","element":"n","x":3,"y":-1,"w":null,"h":4}"""),
         )
         assertFailsWith<IllegalArgumentException> { CanvasMessage.parse("""{"type":"move","frame":"C2","element":"n","x":3}""") }
+    }
+
+    @Test
+    fun `an edit carries its board and one of four operations`() {
+        assertEquals(CanvasMessage.Edit("C2", "b", BoardEdit.Add("b", "note", 3, -1)),
+            CanvasMessage.parse("""{"type":"edit","frame":"C2","board":"b","op":"add","kind":"note","x":3,"y":-1}"""))
+        assertEquals(CanvasMessage.Edit("C2", "b", BoardEdit.Connect("b", "a", "c")),
+            CanvasMessage.parse("""{"type":"edit","frame":"C2","board":"b","op":"connect","from":"a","to":"c"}"""))
+        assertEquals(CanvasMessage.Edit("C2", "b", BoardEdit.Remove(listOf("a", "e"))),
+            CanvasMessage.parse("""{"type":"edit","frame":"C2","board":"b","op":"remove","ids":["a","e"]}"""))
+        assertEquals(CanvasMessage.Edit("C2", "b", BoardEdit.Text("a", "hi")),
+            CanvasMessage.parse("""{"type":"edit","frame":"C2","board":"b","op":"text","element":"a","text":"hi"}"""))
+        assertFailsWith<IllegalArgumentException> { CanvasMessage.parse("""{"type":"edit","frame":"C2","board":"b","op":"paint"}""") }
+        assertFailsWith<IllegalArgumentException> { CanvasMessage.parse("""{"type":"edit","frame":"C2","board":"b","op":"add","kind":"note"}""") }
     }
 
     @Test

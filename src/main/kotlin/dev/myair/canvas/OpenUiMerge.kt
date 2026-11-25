@@ -196,45 +196,72 @@ private fun refsOf(expr: List<Token>): Set<String> {
 /** The positional argument that holds a board element's box, by component. */
 private val BOX_ARGUMENT = mapOf("Shape" to 2, "Note" to 1, "Frame" to 1)
 
+/** The positional argument that holds a board element's text: a note's text, a shape's label, a frame's title. */
+private val TEXT_ARGUMENT = mapOf("Note" to 0, "Shape" to 1, "Frame" to 0)
+
+/** A statement `name = Component(args)` taken apart: the component's name and the source span of each argument. */
+private class Call(val statement: OpenUiStatement, val component: String?, val args: List<IntRange>) {
+    val src get() = statement.text
+
+    /** The statement with argument [index] replaced by [text]. */
+    fun replace(index: Int, text: String): String {
+        val span = args[index]
+        val end = span.first + src.substring(span.first, span.last + 1).trimEnd().length
+        return src.substring(0, span.first) + text + src.substring(end)
+    }
+
+    /** Argument [index]'s source, trimmed; null when there is no such argument. */
+    fun arg(index: Int): String? = args.getOrNull(index)?.let { src.substring(it.first, it.last + 1).trim() }
+}
+
+private fun callOf(statement: OpenUiStatement): Call {
+    val src = statement.text
+    val tokens = tokenize(src)
+    // name = Component( ... ): the call starts at the third token.
+    val component = tokens.getOrNull(2)?.takeIf { it.t == T.IDENT && tokens.getOrNull(3)?.t == T.OPEN_PAREN }?.value
+    // The spans of the call's arguments: from their first token to the comma or parenthesis that ends them.
+    val spans = ArrayList<IntRange>()
+    if (component != null) {
+        var depth = 0
+        var argStart = -1
+        for (k in 4 until tokens.size) {
+            val tok = tokens[k]
+            when (tok.t) {
+                T.OPEN_PAREN, T.OPEN_BRACKET, T.OPEN_BRACE -> {
+                    if (depth == 0 && argStart < 0) argStart = tok.start
+                    depth++
+                }
+                T.CLOSE_PAREN, T.CLOSE_BRACKET, T.CLOSE_BRACE -> {
+                    if (depth == 0) {
+                        if (argStart >= 0) spans.add(argStart until tok.start)
+                        break
+                    }
+                    depth--
+                }
+                T.COMMA -> if (depth == 0) {
+                    if (argStart >= 0) spans.add(argStart until tok.start)
+                    argStart = -1
+                }
+                T.NEWLINE -> {}
+                else -> if (depth == 0 && argStart < 0) argStart = tok.start
+            }
+        }
+    }
+    return Call(statement, component, spans)
+}
+
+private fun statementCall(openui: String, name: String): Call =
+    callOf(requireNotNull(openUiStatements(openui).lastOrNull { it.name == name }) { "no statement '$name'" })
+
 /**
  * [openui] with board element [element] placed where the user dragged it: its box becomes `{x, y, w?, h?, pinned: true}`
  * in grid units of its container's content area (an anchor gives way to the position), and statements only the old box
  * used are dropped, as a patch would. Throws when [element] is no statement, or not a Shape, Note or Frame with a box.
  */
 fun moveBoardElement(openui: String, element: String, x: Long, y: Long, w: Long?, h: Long?): OpenUiMerge {
-    val statement = requireNotNull(openUiStatements(openui).lastOrNull { it.name == element }) { "no statement '$element'" }
-    val src = statement.text
-    val tokens = tokenize(src)
-    // name = Component( ... ): the call starts at the third token.
-    val call = tokens.getOrNull(2)?.takeIf { it.t == T.IDENT && tokens.getOrNull(3)?.t == T.OPEN_PAREN }?.value
-    val index = requireNotNull(BOX_ARGUMENT[call]) { "'$element' is ${call ?: "no component"}, not a Shape, Note or Frame" }
-    // The spans of the call's arguments: from their first token to the comma or parenthesis that ends them.
-    val spans = ArrayList<IntRange>()
-    var depth = 0
-    var argStart = -1
-    for (k in 4 until tokens.size) {
-        val tok = tokens[k]
-        when (tok.t) {
-            T.OPEN_PAREN, T.OPEN_BRACKET, T.OPEN_BRACE -> {
-                if (depth == 0 && argStart < 0) argStart = tok.start
-                depth++
-            }
-            T.CLOSE_PAREN, T.CLOSE_BRACKET, T.CLOSE_BRACE -> {
-                if (depth == 0) {
-                    if (argStart >= 0) spans.add(argStart until tok.start)
-                    break
-                }
-                depth--
-            }
-            T.COMMA -> if (depth == 0) {
-                if (argStart >= 0) spans.add(argStart until tok.start)
-                argStart = -1
-            }
-            T.NEWLINE -> {}
-            else -> if (depth == 0 && argStart < 0) argStart = tok.start
-        }
-    }
-    val span = requireNotNull(spans.getOrNull(index)) { "'$element' has no box argument" }
+    val call = statementCall(openui, element)
+    val index = requireNotNull(BOX_ARGUMENT[call.component]) { "'$element' is ${call.component ?: "no component"}, not a Shape, Note or Frame" }
+    require(index < call.args.size) { "'$element' has no box argument" }
     val box = buildList {
         add("x: $x")
         add("y: $y")
@@ -242,6 +269,153 @@ fun moveBoardElement(openui: String, element: String, x: Long, y: Long, w: Long?
         h?.let { add("h: $it") }
         add("pinned: true")
     }.joinToString(", ", "{", "}")
-    val end = span.first + src.substring(span.first, span.last + 1).trimEnd().length
-    return mergeOpenUi(openui, src.substring(0, span.first) + box + src.substring(end))
+    return mergeOpenUi(openui, call.replace(index, box))
+}
+
+/** A change the user made on a board with the mouse, which the plugin writes into the frame's document. */
+sealed interface BoardEdit {
+    /** A new note or shape ([kind] `note`, or a Shape kind such as `rect`) at [x], [y] at the top level of [board]. */
+    data class Add(val board: String, val kind: String, val x: Long, val y: Long) : BoardEdit
+
+    /** A new edge of [board] from [from] to [to]. */
+    data class Connect(val board: String, val from: String, val to: String) : BoardEdit
+
+    /** Elements and edges removed, with what only they held and the edges to anything removed. */
+    data class Remove(val ids: List<String>) : BoardEdit
+
+    /** [element]'s text: a note's text, a shape's label or a frame's title. */
+    data class Text(val element: String, val text: String) : BoardEdit
+}
+
+/** The Shape kinds a board may add. */
+val SHAPE_KINDS = setOf("rect", "rounded", "ellipse", "diamond", "cylinder", "group")
+
+/** [text] as an OpenUI string literal. */
+fun openUiString(text: String): String = buildString {
+    append('"')
+    for (c in text) when (c) {
+        '"' -> append("\\\"")
+        '\\' -> append("\\\\")
+        '\n' -> append("\\n")
+        '\r' -> {}
+        '\t' -> append("\\t")
+        else -> append(c)
+    }
+    append('"')
+}
+
+/** Applies [edit] to [openui]; throws naming what is missing or not a board element. */
+fun editBoard(openui: String, edit: BoardEdit): OpenUiMerge = when (edit) {
+    is BoardEdit.Add -> {
+        val (prefix, expression) = if (edit.kind == "note") {
+            "note" to "Note(\"New note\", {x: ${edit.x}, y: ${edit.y}, w: 8, pinned: true}, \"yellow\")"
+        } else {
+            require(edit.kind in SHAPE_KINDS) { "'${edit.kind}' is no note or Shape kind" }
+            "shape" to "Shape(\"${edit.kind}\", \"New ${edit.kind}\", {x: ${edit.x}, y: ${edit.y}, w: 6, h: 3, pinned: true})"
+        }
+        addToBoard(openui, edit.board, prefix, expression)
+    }
+    is BoardEdit.Connect -> {
+        val names = openUiStatements(openui).map { it.name }.toSet()
+        require(edit.from in names && edit.to in names) { "an edge needs two elements that exist, not ${edit.from} and ${edit.to}" }
+        addToBoard(openui, edit.board, "edge", "Edge(${openUiString(edit.from)}, ${openUiString(edit.to)})")
+    }
+    is BoardEdit.Remove -> removeFromBoard(openui, edit.ids)
+    is BoardEdit.Text -> {
+        val call = statementCall(openui, edit.element)
+        val index = requireNotNull(TEXT_ARGUMENT[call.component]) { "'${edit.element}' is ${call.component ?: "no component"}, not a Shape, Note or Frame" }
+        require(index < call.args.size) { "'${edit.element}' has no text argument" }
+        mergeOpenUi(openui, call.replace(index, openUiString(edit.text)))
+    }
+}
+
+/** [openui] with a statement `<prefix><n> = expression` (the first free n) added at the end of [board]'s items. */
+private fun addToBoard(openui: String, board: String, prefix: String, expression: String): OpenUiMerge {
+    val call = statementCall(openui, board)
+    require(call.component == "Board") { "'$board' is ${call.component ?: "no component"}, not a Board" }
+    val names = openUiStatements(openui).map { it.name }.toSet()
+    val name = generateSequence(1) { it + 1 }.map { "$prefix$it" }.first { it !in names }
+    val items = requireNotNull(call.arg(0)?.takeIf { it.startsWith("[") && it.endsWith("]") }) { "'$board' has no items list" }
+    val inner = items.removePrefix("[").removeSuffix("]").trim()
+    return mergeOpenUi(openui, call.replace(0, if (inner.isEmpty()) "[$name]" else "[$inner, $name]") + "\n$name = $expression")
+}
+
+/**
+ * [openui] without [ids], what only they held (a container's children, a frame's content) and the edges to any of
+ * those: each is deleted and taken out of every list that names it.
+ */
+private fun removeFromBoard(openui: String, ids: List<String>): OpenUiMerge {
+    val statements = openUiStatements(openui)
+    val byName = statements.associateBy { it.name }
+    require(ids.isNotEmpty() && ids.all { it in byName }) { "nothing to remove among ${ids.joinToString()}" }
+    // What the removed hold: everything their statements refer to, transitively.
+    val gone = HashSet<String>()
+    val queue = ArrayDeque(ids)
+    while (queue.isNotEmpty()) {
+        val name = queue.removeLast()
+        if (gone.add(name)) byName[name]?.refs?.forEach { if (it in byName) queue.add(it) }
+    }
+    // A statement something else still uses stays (a table shared by two frames); only what the removed alone held goes.
+    while (true) {
+        val used = statements.filter { it.name !in gone }.flatMap { it.refs }.toSet()
+        if (!gone.removeAll { it !in ids && it in used }) break
+    }
+    for (s in statements) {
+        val call = callOf(s)
+        if (call.component == "Edge" && listOf(call.arg(0), call.arg(1)).any { arg -> arg != null && gone.any { openUiString(it) == arg } }) gone += s.name
+    }
+    val patch = ArrayList<String>()
+    for (s in statements) {
+        when {
+            s.name in gone -> patch += "${s.name} = null"
+            s.refs.any { it in gone } -> patch += withoutListItems(s.text, gone)
+        }
+    }
+    return mergeOpenUi(openui, patch.joinToString("\n"))
+}
+
+/** [src] with every list item that is just a name in [names] taken out; a list with one gone is written anew. */
+private fun withoutListItems(src: String, names: Set<String>): String {
+    var out = src
+    // One list at a time, from the text as it is now, so lists inside lists stay right.
+    while (true) {
+        val tokens = tokenize(out)
+        val hit = tokens.indices.firstOrNull { k ->
+            val tok = tokens[k]
+            tok.t == T.IDENT && tok.value in names && k >= 3 &&
+                tokens.getOrNull(k - 1)?.t.let { it == T.OPEN_BRACKET || it == T.COMMA } &&
+                tokens.getOrNull(k + 1)?.t.let { it == T.COMMA || it == T.CLOSE_BRACKET }
+        } ?: return out
+        // The list around it: back to its [ and on to its ], at depth 0 relative to it.
+        var open = hit - 1
+        var depth = 0
+        while (open >= 0) {
+            when (tokens[open].t) {
+                T.CLOSE_PAREN, T.CLOSE_BRACKET, T.CLOSE_BRACE -> depth++
+                T.OPEN_PAREN, T.OPEN_BRACE -> depth--
+                T.OPEN_BRACKET -> if (depth == 0) break else depth--
+                else -> {}
+            }
+            open--
+        }
+        val items = ArrayList<String>()
+        var close = open + 1
+        var itemStart = tokens[open].start + 1
+        depth = 0
+        while (close < tokens.size) {
+            val t = tokens[close].t
+            if (depth == 0 && (t == T.COMMA || t == T.CLOSE_BRACKET)) {
+                items += out.substring(itemStart, tokens[close].start).trim()
+                itemStart = tokens[close].start + 1
+                if (t == T.CLOSE_BRACKET) break
+            } else when (t) {
+                T.OPEN_PAREN, T.OPEN_BRACKET, T.OPEN_BRACE -> depth++
+                T.CLOSE_PAREN, T.CLOSE_BRACKET, T.CLOSE_BRACE -> depth--
+                else -> {}
+            }
+            close++
+        }
+        val kept = items.filter { it.isNotEmpty() && it !in names }
+        out = out.substring(0, tokens[open].start) + kept.joinToString(", ", "[", "]") + out.substring(tokens[close].start + 1)
+    }
 }

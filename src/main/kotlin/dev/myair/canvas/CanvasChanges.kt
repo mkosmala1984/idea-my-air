@@ -108,3 +108,7 @@ fun patchFrame(canvas: Canvas, frame: String, patch: String, expect: String): Pa
  */
 fun moveInFrame(canvas: Canvas, frame: String, element: String, x: Long, y: Long, w: Long?, h: Long?): Canvas =
     canvas.edit(frame) { it.copy(openui = moveBoardElement(it.openui, element, x, y, w, h).text) }
+
+/** [canvas] with [edit] (an element added, edges connected, elements removed or a text changed) applied to [frame]'s board. */
+fun editInFrame(canvas: Canvas, frame: String, edit: BoardEdit): Canvas =
+    canvas.edit(frame) { it.copy(openui = editBoard(it.openui, edit).text) }

@@ -11,6 +11,7 @@ import {
   MarkerType,
   MiniMap,
   NodeResizer,
+  Panel,
   Position,
   ReactFlow,
   type Edge,
@@ -26,6 +27,7 @@ import {
 import { useTriggerAction, type ElementNode } from "@openuidev/react-lang";
 import { DEFAULT_UNIT, facingSides, midpoint, movedBox, report, resizedBox, routeEdge, solve, type BoardReport, type ElementSpec, type Route } from "./layout";
 import { boardSpec } from "./spec";
+import type { BoardEditOp } from "../protocol";
 import { selectionContext, selectionMessage } from "./selection";
 
 /** Whether the page shows the dark theme; main.tsx provides it from the plugin's frame. */
@@ -36,6 +38,9 @@ export type BoardMove = { element: string; x: number; y: number; w: number | nul
 
 /** Receives every drop of a dragged element; main.tsx posts it to the plugin, which writes it into the document. */
 export const BoardMoveContext = createContext<(move: BoardMove) => void>(() => {});
+
+/** Receives what the user adds, connects, removes or retitles on board [board]; main.tsx posts it as `edit`. */
+export const BoardEditContext = createContext<(board: string, edit: BoardEditOp) => void>(() => {});
 
 declare global {
   interface Window {
@@ -91,6 +96,8 @@ interface ElementData extends Record<string, unknown> {
   unit: number;
   /** A resize ended at these pixels (relative to the parent): the board posts it as a move with w and h. */
   onResized: (id: string, px: { x: number; y: number; width: number; height: number }) => void;
+  /** The user edited the element's text (a note's text, a shape's label, a frame's title). */
+  onText: (id: string, text: string) => void;
 }
 
 const SIDES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
@@ -113,6 +120,33 @@ const Resizer = ({ data, selected }: { data: ElementData; selected: boolean }) =
     <NodeResizer isVisible={selected} minWidth={data.unit} minHeight={data.unit} color="var(--openui-interactive-accent-default, #3574f0)"
       onResizeEnd={(_, p) => data.onResized(data.spec.id, p)} />
   ) : null;
+
+/**
+ * An element's text that a double click turns into a text box: Enter (Ctrl+Enter in a multi-line one) or leaving it
+ * saves through [onSave] when it changed, Escape gives up.
+ */
+function EditableText({ text, multiline, className, onSave }: { text: string; multiline?: boolean; className?: string; onSave: (text: string) => void }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  if (editing == null)
+    return <div className={className} onDoubleClick={() => setEditing(text)} title="Double-click to edit">{text}</div>;
+  const done = (save: boolean) => {
+    if (save && editing !== text) onSave(editing);
+    setEditing(null);
+  };
+  const common = {
+    autoFocus: true,
+    value: editing,
+    className: `myair-board-edit nodrag nowheel nopan ${className ?? ""}`,
+    onChange: (e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => setEditing(e.target.value),
+    onBlur: () => done(true),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      e.stopPropagation();
+      if (e.key === "Escape") done(false);
+      if (e.key === "Enter" && (!multiline || e.ctrlKey || e.metaKey)) done(true);
+    },
+  };
+  return multiline ? <textarea {...common} rows={4} /> : <input {...common} />;
+}
 
 /** Reports the natural height of [ref]'s element whenever it changes. */
 function useMeasured(ref: React.RefObject<HTMLDivElement | null>, data: ElementData) {
@@ -137,7 +171,9 @@ const NoteNode = memo(({ data, selected }: NodeProps<Node<ElementData>>) => {
       <Resizer data={data} selected={selected} />
       <div className={`myair-board-note myair-board-note-${color}`}>
         <Handles />
-        <div ref={ref} className="myair-board-note-text">{String(data.node.props.text ?? "")}</div>
+        <div ref={ref}>
+          <EditableText text={String(data.node.props.text ?? "")} multiline className="myair-board-note-text" onSave={(t) => data.onText(data.spec.id, t)} />
+        </div>
       </div>
     </>
   );
@@ -152,7 +188,7 @@ const FrameNode = memo(({ data, selected }: NodeProps<Node<ElementData>>) => {
       <div className="myair-board-frame">
         <Handles />
         <div ref={ref}>
-          <div className="myair-board-frame-title myair-board-drag">{String(data.node.props.title ?? "")}</div>
+          <EditableText text={String(data.node.props.title ?? "")} className="myair-board-frame-title myair-board-drag" onSave={(t) => data.onText(data.spec.id, t)} />
           {/* nodrag/nowheel/nopan: the content keeps the mouse, so forms, tabs and scrolling work inside. */}
           <div className="myair-board-frame-body nodrag nowheel nopan">{data.renderNode(data.node.props.content)}</div>
         </div>
@@ -193,7 +229,7 @@ const ShapeNode = memo(({ data, width, height, selected }: NodeProps<Node<Elemen
       <div className={`myair-board-shape myair-board-shape-${kind}${container ? " myair-board-container" : ""}`}>
         <Handles />
         <svg className="myair-board-shape-svg" width={w} height={h}>{shapePath(kind, w, h)}</svg>
-        {data.spec.label ? <div className="myair-board-shape-label">{data.spec.label}</div> : null}
+        <EditableText text={data.spec.label ?? ""} className="myair-board-shape-label" onSave={(t) => data.onText(data.spec.id, t)} />
       </div>
     </>
   );
@@ -260,6 +296,10 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
   const dark = useContext(DarkContext);
   const onMove = useContext(BoardMoveContext);
   const onReport = useContext(BoardReportContext);
+  const onEditBoard = useContext(BoardEditContext);
+  const boardName = statementId ?? "board";
+  const edit = useCallback((op: BoardEditOp) => onEditBoard(boardName, op), [onEditBoard, boardName]);
+  const onText = useCallback((id: string, text: string) => edit({ op: "text", element: id, text }), [edit]);
   const unit = props.unit ?? DEFAULT_UNIT;
   const spec = useMemo(() => boardSpec(props.items ?? []), [props.items]);
 
@@ -331,14 +371,14 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
           draggable: free,
           dragHandle: el.kind === "frame" ? ".myair-board-drag" : undefined,
           selected: selected.has(el.id),
-          data: { spec: el, node: spec.nodes.get(el.id)!, renderNode, measure, autoHeight, free, unit, onResized },
+          data: { spec: el, node: spec.nodes.get(el.id)!, renderNode, measure, autoHeight, free, unit, onResized, onText },
         });
         walk(el.children, el);
       }
     };
     walk(spec.elements);
     return list;
-  }, [spec, solved, unit, dragged, resized, renderNode, measure, selected, onResized]);
+  }, [spec, solved, unit, dragged, resized, renderNode, measure, selected, onResized, onText]);
 
   const edges = useMemo<Edge[]>(
     () =>
@@ -395,8 +435,14 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
         minZoom={0.2}
         nodesConnectable={false}
         proOptions={{ hideAttribution: true }}
+        deleteKeyCode={["Delete", "Backspace"]}
+        onDelete={({ nodes: n, edges: e }) => {
+          const ids = [...n.map((x) => x.id), ...e.map((x) => x.id)];
+          if (ids.length > 0) edit({ op: "remove", ids });
+        }}
       >
         <FitOnResize height={height} />
+        <Palette unit={unit} onAdd={(kind, x, y) => edit({ op: "add", kind, x, y })} />
         <Background variant={BackgroundVariant.Dots} gap={unit} />
         {showMap ? <MiniMap pannable zoomable /> : null}
         <Controls showInteractive={false}>
@@ -408,6 +454,11 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
       {selected.size + selectedEdges.size > 0 ? (
         <SelectionBar
           count={selected.size + selectedEdges.size}
+          onConnect={selected.size === 2 && selectedEdges.size === 0 ? () => {
+            const [from, to] = [...selected];
+            edit({ op: "connect", from, to });
+          } : undefined}
+          onDelete={() => edit({ op: "remove", ids: [...selected, ...selectedEdges] })}
           context={() => selectionContext(geometry, spec.nodes, (id) => (edgeNode(props.items ?? [], id)?.props.label as string | undefined) || undefined, selected, selectedEdges)}
           onClear={() => (setSelected(new Set()), setSelectedEdges(new Set()))}
         />
@@ -419,6 +470,34 @@ export function BoardView({ props, renderNode, statementId }: { props: BoardProp
         {showReport ? <pre>{JSON.stringify(geometry, null, 1)}</pre> : null}
       </div>
     </div>
+  );
+}
+
+/** What the palette adds: a note or a Shape kind, with its default size in grid units (as the plugin writes it). */
+const PALETTE: { kind: string; label: string; w: number; h: number }[] = [
+  { kind: "note", label: "Note", w: 8, h: 4 },
+  { kind: "rect", label: "Rect", w: 6, h: 3 },
+  { kind: "rounded", label: "Rounded", w: 6, h: 3 },
+  { kind: "ellipse", label: "Ellipse", w: 6, h: 3 },
+  { kind: "diamond", label: "Diamond", w: 6, h: 3 },
+  { kind: "cylinder", label: "Cylinder", w: 6, h: 3 },
+];
+
+/** Buttons that add a note or a shape in the middle of what the board shows; the plugin writes it into the document. */
+function Palette({ unit, onAdd }: { unit: number; onAdd: (kind: string, x: number, y: number) => void }) {
+  const { screenToFlowPosition } = useReactFlow();
+  const add = (item: (typeof PALETTE)[number], button: HTMLElement) => {
+    const board = button.closest(".react-flow")?.getBoundingClientRect();
+    if (!board) return;
+    const center = screenToFlowPosition({ x: board.left + board.width / 2, y: board.top + board.height / 2 });
+    onAdd(item.kind, Math.round(center.x / unit - item.w / 2), Math.round(center.y / unit - item.h / 2));
+  };
+  return (
+    <Panel position="center-left" className="myair-board-palette">
+      {PALETTE.map((item) => (
+        <button key={item.kind} type="button" title={`Add a ${item.label.toLowerCase()}`} onClick={(e) => add(item, e.currentTarget)}>{item.label}</button>
+      ))}
+    </Panel>
   );
 }
 
@@ -435,7 +514,9 @@ function applySelect(current: ReadonlySet<string>, changes: ReadonlyArray<{ type
 }
 
 /** The bar over a board while something is selected: a question for the manager about the selection, sent with it. */
-function SelectionBar({ count, context, onClear }: { count: number; context: () => ReturnType<typeof selectionContext>; onClear: () => void }) {
+function SelectionBar({ count, context, onClear, onConnect, onDelete }: {
+  count: number; context: () => ReturnType<typeof selectionContext>; onClear: () => void; onConnect?: () => void; onDelete: () => void;
+}) {
   const trigger = useTriggerAction();
   const [text, setText] = useState("");
   const send = () => {
@@ -454,6 +535,8 @@ function SelectionBar({ count, context, onClear }: { count: number; context: () 
           if (e.key === "Escape") onClear();
         }} />
       <button type="button" className="myair-board-selection-send" onClick={send}>Send to agent</button>
+      {onConnect ? <button type="button" onClick={onConnect} title="An edge from the first selected to the second">Connect</button> : null}
+      <button type="button" onClick={onDelete} title="Remove the selection from the board (Delete)">Delete</button>
       <button type="button" onClick={onClear} title="Clear the selection" aria-label="Clear the selection">×</button>
     </div>
   );

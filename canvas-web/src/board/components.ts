@@ -91,6 +91,8 @@ export const Board = defineComponent({
     "Give every element its own statement: its name is its id for anchors and edges. The board reaches down to the bottom of the canvas view; " +
     "height is its least height in px (default 320). " +
     "When the user drags or resizes an element, its box becomes {x, y, w?, h?, pinned: true} (a resize sets w and h); leave a pinned element where it is unless the user asks. " +
+    "The user can also add notes and shapes (named note1, shape1...), connect two elements (edge1...), delete elements and " +
+    "edges and edit texts with the mouse; my_air_canvas_get shows the result. " +
     "The user can select elements and edges and send you a question about them: its context is {selection: {board, elements: " +
     "[{id, kind, parent, x, y, w, h, text}], edges: [{id, from, to, label?}]}}; patch those statements when asked to change them.",
   component: ({ props, renderNode, statementId }) => createElement(BoardView, { props, renderNode, statementId }),

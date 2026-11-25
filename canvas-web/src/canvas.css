@@ -89,3 +89,9 @@ td.myair-diff-blank { background: color-mix(in srgb, var(--openui-text-neutral-p
 .myair-board-selection input { font: inherit; width: 260px; padding: 3px 6px; border-radius: 4px; border: 1px solid var(--openui-border-default, #8886); background: transparent; color: inherit; }
 .myair-board-selection button { font: inherit; cursor: pointer; padding: 3px 8px; border-radius: 4px; border: 1px solid var(--openui-border-default, #8886); background: transparent; color: inherit; }
 .myair-board-selection .myair-board-selection-send { background: var(--openui-interactive-accent-default, #3574f0); border-color: transparent; color: #fff; }
+
+/* The board's palette (adds notes and shapes) and the text box a double click opens on a note, a label or a title. */
+.myair-board-palette { display: flex; flex-direction: column; gap: 4px; padding: 4px; border-radius: 6px; background: var(--openui-background); border: 1px solid var(--openui-border-default, #8886); box-shadow: 0 2px 8px #0002; }
+.myair-board-palette button { font: 12px var(--openui-font-body, system-ui, sans-serif); cursor: pointer; padding: 3px 8px; border-radius: 4px; border: 1px solid transparent; background: transparent; color: var(--openui-text-neutral-primary, inherit); text-align: left; }
+.myair-board-palette button:hover { border-color: var(--openui-border-default, #8886); }
+.myair-board-edit { box-sizing: border-box; width: 100%; font: inherit; color: inherit; background: var(--openui-background); border: 1px solid var(--openui-interactive-accent-default, #3574f0); border-radius: 3px; resize: none; }

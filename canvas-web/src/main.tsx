@@ -9,7 +9,7 @@ import { installBridge, parseSummary, wireAction, wireErrors } from "./bridge";
 import { canvasLibrary } from "./library";
 import type { ShowCall } from "./protocol";
 import { BOARD_SAMPLE, SAMPLE } from "./sample";
-import { BoardMoveContext, BoardReportContext, DarkContext } from "./board/BoardView";
+import { BoardEditContext, BoardMoveContext, BoardReportContext, DarkContext } from "./board/BoardView";
 import type { BoardReport } from "./board/layout";
 
 const started = performance.now();
@@ -90,6 +90,7 @@ function Canvas() {
   return (
     <DarkContext.Provider value={frame.dark}>
     <BoardMoveContext.Provider value={(move) => bridge.post({ type: "move", frame: frame.frame, ...move })}>
+    <BoardEditContext.Provider value={(board, edit) => bridge.post({ type: "edit", frame: frame.frame, board, ...edit })}>
     <ThemeProvider mode={frame.dark ? "dark" : "light"}>
       <div className="canvas">
         <Renderer
@@ -105,6 +106,7 @@ function Canvas() {
         />
       </div>
     </ThemeProvider>
+    </BoardEditContext.Provider>
     </BoardMoveContext.Provider>
     </DarkContext.Provider>
   );
